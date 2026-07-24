@@ -5,15 +5,51 @@ self-contained, dependency-ordered, idempotent v12 schema for a **fresh** deploy
 and it also **repairs** older School Connect databases (missing tables, columns, unique
 keys, policies) without touching your data.
 
+> **Self-sufficiency contract (v12.5):** apart from the two optional demo packs
+> (`demo-users.sql`, `demo-seed.sql` — demo deployments only), `complete-schema.sql`
+> is the **ONLY** SQL a School Connect deployment ever needs. Every table,
+> constraint, index, policy, trigger, view and **every RPC the client code calls**
+> (all 16, machine-enumerated) is inside it. The standalone packs below exist
+> **only** to bring *already-live* older projects up to date without a full re-run.
+
 Files:
-- `complete-schema.sql` — **run this** (currently **v12.3**; ends with PostgREST cache reload).
-- `complete-schema-v12-clean.sql` — identical named copy (kept in sync with `complete-schema.sql`).
+- `complete-schema.sql` — **run this** (currently **v12.5**; ends with PostgREST cache reload).
+- `complete-schema-v12-clean.sql` — identical named copy (kept byte-in-sync with `complete-schema.sql`).
 - `complete-schema-v11-LEGACY-MERGED.sql` — historical reference only; do NOT run on new projects.
 - `*.csv` — import templates & sample question banks.
 
 - `demo-users.sql` / `demo-seed.sql` — demo-deployment guest accounts + simulated school (see DEMO-SETUP.md in a demo ZIP).
 - `cbt-1000-scale.sql` — **optional additive pack** for projects already on v12.x: idempotent CBT submissions (client_ref), the v2 exam-fetch/submit functions and hot-path indexes so **1000 students can write one exam simultaneously**. Included inside `complete-schema.sql` from v12.3 onward, so fresh installs already have it.
 - `punctuality-points.sql` — **optional additive pack** for projects already on v12.1–v12.3: the **Punctuality Points engine** (daily punctuality awards from student check-in/out data, plus the optional one-click push of term points into `results`). Included inside `complete-schema.sql` from v12.4 onward, so fresh installs already have it.
+- `runtime-helper-rpcs.sql` — **optional additive pack** for projects already on ≤v12.4: the nine runtime helper RPCs the client references (`sc_current_role`, `lookup_login_email`, `notif_mark_read`, `table_sizes`, `purge_old`, `submit_admission`, `extract_admission`, `generate_timetable`, `cbt_import_backup`) plus the `admissions` `photo_url/data/extracted` column-gap fix. Included inside `complete-schema.sql` from v12.5 onward, so fresh installs already have it. Safe to re-run any number of times (pure no-op on v12.5+).
+
+## v12.5 patch — runtime-RPC contract completion + self-sufficiency (2026-07-23)
+Section 18 ships every RPC the client code can call, so **no deployment ever needs a
+secondary SQL file or a hand-created dashboard function again**: `sc_current_role()`
+(one-call profile/role fetch), `lookup_login_email(identifier)` (sign in with email,
+phone, admission no or staff no), `notif_mark_read(id)` (idempotent per-user read
+receipts), `table_sizes()` (storage meter incl. `TOTAL_DATABASE_USED` row),
+`purge_old(table, days)` (whitelist-guarded admin cleanup), `submit_admission(jsonb)`
+(apply-form intake), `extract_admission(id)` (one click admission → student, with the
+auto `SCH-00001` admission-number trigger), `generate_timetable(class, session, term,
+periods/day)` (weekday round-robin from `timetable_requirements`, replace-clean
+regeneration — an infinite-loop flaw in the first draft was caught by the harness and
+fixed), and `cbt_import_backup(jsonb)` (teacher-side import of offline exam backups:
+same server-authoritative, shuffle-safe grading as `cbt_submit_v2`, minus the
+exam-window/attempt gates, idempotent on `client_ref`). Section 18.0 also force-adds
+the `admissions.photo_url / data / extracted` columns older schemas silently lacked.
+Also hardened this round: the question-source selector used by
+`cbt_get_public_exam`, `cbt_submit`, `cbt_get_public_exam_v2`, `cbt_submit_v2` and
+`cbt_import_backup` now picks the first **non-empty** bank
+(`csv_data` → `questions` → `[]`) instead of a bare `coalesce`, which could never
+reach the legacy `questions` column (it is `NOT NULL DEFAULT '[]'`). Legacy
+questions-only exams now render and grade correctly end-to-end. Grants are
+least-privilege (`revoke … from public, anon` / `grant … to authenticated`;
+`lookup_login_email` additionally granted to `anon` because login happens pre-auth).
+All client call sites keep their graceful fallbacks, so these functions are pure
+hardening on older client builds and instantly live on new ones. For live projects
+already on ≤v12.4, run `database/runtime-helper-rpcs.sql` once — same content,
+standalone, idempotent.
 
 ## v12.4 patch — Punctuality Points engine + results-columns fix (2026-07-23)
 Section 17 of the schema ships the punctuality engine: `punctuality_config`

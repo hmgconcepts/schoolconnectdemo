@@ -79,7 +79,7 @@ begin
   -- after client-side shuffle/select.
   select coalesce(jsonb_agg((q-'correct'-'correct_answer'-'answer'-'explanation')||jsonb_build_object('_orig_index',ord-1) order by ord),'[]'::jsonb)
     into qs
-    from jsonb_array_elements(coalesce(e.csv_data,e.questions,'[]'::jsonb)) with ordinality x(q,ord);
+    from jsonb_array_elements((case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)) with ordinality x(q,ord);
   return jsonb_build_object(
     'id',e.id,'code',e.code,'title',e.title,'subject',e.subject,'class',e.class,
     'term',e.term,'session',e.session,'assessment_type',e.assessment_type,
@@ -135,7 +135,7 @@ begin
   -- AUTHORITATIVE SERVER-SIDE GRADING (identical rule to v1): the browser's
   -- own score display is a courtesy; only this score is stored.
   for ans in select * from jsonb_array_elements(coalesce(p_payload->'answers_data','[]'::jsonb)) loop
-    q := coalesce(e.csv_data,e.questions,'[]'::jsonb)
+    q := (case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)
           -> (case when coalesce(ans->>'index','') ~ '^[0-9]+$' then (ans->>'index')::int else i end);
     mark := coalesce(nullif(q->>'mark','')::numeric,1); total := total + mark;
     a := coalesce(ans->>'answer', ans #>> '{}', '');
