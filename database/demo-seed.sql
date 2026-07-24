@@ -551,3 +551,105 @@ begin
 end $$;
 
 select 'School Connect DEMO data installed ✅ — students, staff, parents, fees, attendance, results, report cards, CBT, polls and more.' as status;
+
+-- 24) TASK 4: ENHANCED — populate ALL remaining pages with sample data ------
+do $$
+begin
+  -- E-Resources / Notes
+  if not exists (select 1 from public.module_records where module='eresources') then
+    insert into public.module_records (module, title, body, data) values
+      ('eresources','Mathematics — Simultaneous Equations Notes','Step-by-step guide to solving simultaneous equations by elimination and substitution methods.','{"subject":"Mathematics","class":"SS 2","uploaded_by":"Funke Alabi","file_type":"pdf"}'::jsonb),
+      ('eresources','English — Essay Writing Guide','Complete guide to writing argumentative, expository and narrative essays.','{"subject":"English Language","class":"SS 2","uploaded_by":"Chukwuemeka Nwachukwu","file_type":"pdf"}'::jsonb),
+      ('eresources','Biology — Cell Structure Revision Notes','Labelled diagrams of plant and animal cells with functions.','{"subject":"Biology","class":"SS 1","uploaded_by":"Olumide Ajayi","file_type":"pdf"}'::jsonb),
+      ('eresources','Physics — Newton Laws of Motion','Comprehensive notes with real-life examples and calculation practice.','{"subject":"Physics","class":"SS 2","uploaded_by":"Hauwa Suleiman","file_type":"pdf"}'::jsonb),
+      ('eresources','Chemistry — Periodic Table Trends','Study guide covering periodic table groups, periods, and trends.','{"subject":"Chemistry","class":"SS 2","uploaded_by":"Hauwa Suleiman","file_type":"pdf"}'::jsonb);
+  end if;
+
+  -- Complaints / Grievances
+  if (select count(*) from public.complaints) = 0 then
+    insert into public.complaints (submitted_by, category, subject, body, status, priority) values
+      (coalesce((select id from sc_demo_ids where role='parent'),'00000000-0000-0000-0000-000000000000'::uuid),'Academic','Concern about Mathematics performance','My child has been struggling with Mathematics this term. Could we arrange extra coaching?','in_progress','normal'),
+      (coalesce((select id from sc_demo_ids where role='parent'),'00000000-0000-0000-0000-000000000000'::uuid),'Facilities','Broken desk in JSS 1 classroom','The desk in row 3 has a broken leg and is unsafe.','open','low'),
+      (coalesce((select id from sc_demo_ids where role='student'),'00000000-0000-0000-0000-000000000000'::uuid),'General','Request for additional library books','We would appreciate more WAEC preparation materials.','resolved','normal');
+  end if;
+
+  -- Alumni
+  if (select count(*) from public.alumni) = 0 then
+    insert into public.alumni (full_name, graduation_year, last_class, occupation, email, phone) values
+      ('Adebayo Johnson',2020,'SS 3','Software Engineer at Google','adebayo.j@email.com','+234 801 234 5678'),
+      ('Chioma Eze',2019,'SS 3','Medical Doctor — LUTH','chioma.e@email.com','+234 802 345 6789'),
+      ('Ibrahim Musa',2021,'SS 3','Law Student — University of Lagos','ibrahim.m@email.com','+234 803 456 7890'),
+      ('Funmilayo Adeyemi',2018,'SS 3','Chartered Accountant — PwC','funmilayo.a@email.com','+234 804 567 8901');
+  end if;
+
+  -- Inventory / Assets
+  if (select count(*) from public.inventory) = 0 then
+    insert into public.inventory (item_name, category, quantity, condition, location, last_audit) values
+      ('Desktop Computer','ICT Equipment',25,'Good','Computer Lab 1',current_date - 30),
+      ('Projector','Teaching Aid',6,'Good','Various classrooms',current_date - 15),
+      ('Microscope','Science Equipment',10,'Good','Biology Lab',current_date - 20),
+      ('Fire Extinguisher','Safety Equipment',12,'Good','All floors',current_date - 10),
+      ('School Bus (Toyota Hiace)','Vehicle',2,'Good','School premises',current_date - 7);
+  end if;
+
+  -- Staff Appraisals
+  if (select count(*) from public.staff_appraisals) = 0 then
+    insert into public.staff_appraisals (staff_id, appraiser, period, punctuality, teaching_quality, student_results, teamwork, conduct) values
+      ((select id from public.staff where staff_no='SCD-STF-00001'),'Principal','2025/2026 Third Term',9,9,8,9,10),
+      ((select id from public.staff where staff_no='SCD-STF-00002'),'Principal','2025/2026 Third Term',8,7,7,8,8);
+  end if;
+
+  -- Certificates
+  if (select count(*) from public.certificates) = 0 then
+    insert into public.certificates (student_id, type, certificate_no, issued_date, details) values
+      ((select id from public.students where admission_no='SCD-00014'),'testimonial','CERT-2026-001',current_date - 10,'Certificate of good conduct and academic excellence.'),
+      ((select id from public.students where admission_no='SCD-00015'),'testimonial','CERT-2026-002',current_date - 5,'Academic testimonial for transfer purposes.');
+  end if;
+
+  -- Parent Meetings
+  if (select count(*) from public.parent_meetings) = 0 then
+    insert into public.parent_meetings (title, date, description, status) values
+      ('PTA General Meeting — Third Term','2026-07-18','End-of-term PTA meeting to discuss results and next term plans.','completed'),
+      ('Open Day — Prospective Parents','2026-08-15','School tour and meet-the-teachers event.','scheduled'),
+      ('Career Day','2026-09-20','Annual career guidance day with invited professionals.','scheduled');
+  end if;
+
+  -- Career Counseling
+  if (select count(*) from public.career_counseling) = 0 then
+    insert into public.career_counseling (student_id, session_date, notes, counsellor) values
+      ((select id from public.students where admission_no='SCD-00014'),'2026-07-10','Adanna is interested in Medicine. Advised to focus on Biology, Chemistry and Physics.','Mrs. Grace Obi'),
+      ((select id from public.students where admission_no='SCD-00015'),'2026-07-12','Emeka is strong in Mathematics and wants Engineering. Advised to take Further Mathematics.','Mrs. Grace Obi');
+  end if;
+
+  -- Donations
+  if (select count(*) from public.donations) = 0 then
+    insert into public.donations (donor_name, amount, purpose, date, acknowledged) values
+      ('Chief and Mrs. Adeyemi',500000,'Library renovation','2026-06-15',true),
+      ('Old Students Association (Class of 2015)',1000000,'Science lab equipment','2026-05-20',true),
+      ('Anonymous',200000,'Scholarship fund','2026-07-01',true);
+  end if;
+
+  -- Financial Aid
+  if (select count(*) from public.financial_aid) = 0 then
+    insert into public.financial_aid (student_id, type, amount, term, session, status) values
+      ((select id from public.students where admission_no='SCD-00016'),'scholarship',50000,'Third Term','2025/2026','approved'),
+      ((select id from public.students where admission_no='SCD-00017'),'bursary',30000,'Third Term','2025/2026','approved');
+  end if;
+
+  -- Gamification
+  if (select count(*) from public.gamification_points) = 0 then
+    insert into public.gamification_points (student_id, points, reason, date) values
+      ((select id from public.students where admission_no='SCD-00014'),50,'Won inter-class quiz',current_date - 5),
+      ((select id from public.students where admission_no='SCD-00015'),30,'Perfect attendance this month',current_date - 1),
+      ((select id from public.students where admission_no='SCD-00016'),20,'Submitted all assignments on time',current_date - 3);
+  end if;
+
+  -- Substitutions
+  if (select count(*) from public.substitutions) = 0 then
+    insert into public.substitutions (date, period, class, absent_teacher, substitute_teacher, reason) values
+      (current_date - 2,'3rd Period','SS 2','Funke Alabi','Chukwuemeka Nwachukwu','Medical appointment'),
+      (current_date - 1,'1st Period','JSS 1','Olumide Ajayi','Hauwa Suleiman','Personal leave');
+  end if;
+end $$;
+
+select 'School Connect DEMO ENHANCED data installed - all pages populated.' as status;
