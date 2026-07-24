@@ -37,6 +37,7 @@ create extension if not exists "pgcrypto";
 -- ============================================================================
 -- SECTION 1: UTILITY FUNCTION (updated_at trigger helper)
 -- ============================================================================
+DROP FUNCTION IF EXISTS public.sc_set_updated_at() CASCADE;
 create or replace function public.sc_set_updated_at()
 returns trigger language plpgsql security invoker as $$
 begin
@@ -1182,13 +1183,6 @@ alter table if exists public.school_settings add column if not exists checkin_de
 alter table if exists public.school_settings add column if not exists checkin_grace_minutes int default 0;
 alter table if exists public.school_settings add column if not exists role_access jsonb default '{}'::jsonb;
 alter table if exists public.school_settings add column if not exists role_write jsonb default '{}'::jsonb;
-alter table public.class_fee_structure add column if not exists department text default '';
-alter table public.class_fee_structure add column if not exists session text default '';
-alter table public.class_fee_structure add column if not exists other_fee numeric(12,2) default 0;
-alter table public.class_fee_structure add column if not exists next_term_begins date;
-alter table public.class_fee_structure add column if not exists note text default '';
-alter table public.class_fee_structure add column if not exists fee_items jsonb default '[]'::jsonb;
-alter table public.class_fee_structure add column if not exists active boolean default true;
 -- =====================================================================
 -- END SCHOOL CONNECT V1 FINAL CUMULATIVE PATCH
 -- =====================================================================
@@ -1197,12 +1191,6 @@ alter table public.class_fee_structure add column if not exists active boolean d
 -- ============================================================================
 -- V7 COMPATIBILITY BACKFILLS
 -- ============================================================================
-alter table public.school_settings add column if not exists school_id uuid references public.schools(id) on delete set null;
-alter table public.school_settings add column if not exists school_name text default 'My School';
-alter table public.school_settings add column if not exists short_name text default 'SCH';
-alter table public.school_settings add column if not exists admission_acronym text default 'SCH';
-alter table public.school_settings add column if not exists admission_prefix text default 'SCH';
-alter table public.school_settings add column if not exists staff_prefix text default 'SCH';
 alter table public.school_settings add column if not exists signature_url text default '';
 alter table public.school_settings add column if not exists class_teacher_signature_url text default '';
 alter table public.school_settings add column if not exists principal_name text default 'Principal';
@@ -1210,57 +1198,24 @@ alter table public.school_settings add column if not exists stamp_text text defa
 alter table public.school_settings add column if not exists stamp_color text default '#1e3a8a';
 alter table public.school_settings add column if not exists stamp_enabled boolean default true;
 alter table public.school_settings add column if not exists signature_enabled boolean default true;
-alter table public.school_settings add column if not exists checkin_deadline text default '08:00';
-alter table public.school_settings add column if not exists checkin_grace_minutes int default 15;
 alter table public.school_settings add column if not exists latitude numeric;
 alter table public.school_settings add column if not exists longitude numeric;
 alter table public.school_settings add column if not exists geo_radius_m int default 200;
 alter table public.school_settings add column if not exists enforce_geofence boolean default false;
 alter table public.school_settings add column if not exists geo_updated_at timestamptz;
-alter table public.school_settings add column if not exists next_term_fees numeric default 0;
-alter table public.school_settings add column if not exists next_term_fees_currency text default '₦';
-alter table public.school_settings add column if not exists next_term_fees_note text default 'Payable before resumption';
-alter table public.school_settings add column if not exists next_term_begins date;
 alter table public.school_settings add column if not exists role_access jsonb default '{}'::jsonb;
 alter table public.school_settings add column if not exists role_write jsonb default '{}'::jsonb;
 alter table public.school_settings add column if not exists hmg_link text default 'https://hmgconcepts.pages.dev/';
 alter table public.students add column if not exists admission_no text;
 alter table public.students add column if not exists arm text;
 alter table public.students add column if not exists department text default 'Other';
-alter table public.students add column if not exists user_id uuid references public.profiles(id) on delete set null;
 alter table public.staff add column if not exists staff_no text;
-alter table public.staff add column if not exists user_id uuid references public.profiles(id) on delete set null;
-alter table public.report_scores add column if not exists student_id uuid references public.students(id) on delete set null;
-alter table public.report_scores add column if not exists student_id_ref text default '';
-alter table public.report_scores add column if not exists student_name text default '';
-alter table public.report_scores add column if not exists class text default '';
-alter table public.report_scores add column if not exists subject text default '';
-alter table public.report_scores add column if not exists term text default '';
-alter table public.report_scores add column if not exists session text default '';
-alter table public.report_scores add column if not exists score numeric default 0;
-alter table public.report_scores add column if not exists source text default 'manual';
-alter table public.report_scores add column if not exists updated_by uuid references public.profiles(id) on delete set null;
-alter table public.report_scores add column if not exists updated_at timestamptz default now();
-alter table public.report_scores add column if not exists created_at timestamptz default now();
 alter table public.cbt_results add column if not exists student_id uuid references public.students(id) on delete set null;
 alter table public.cbt_results add column if not exists submitted_at timestamptz default now();
 alter table public.cbt_exams add column if not exists duration_min int default 45;
 alter table public.cbt_exams add column if not exists questions jsonb default '[]'::jsonb;
-alter table public.class_fee_structure add column if not exists school_id uuid references public.schools(id) on delete cascade;
-alter table public.class_fee_structure add column if not exists session text default '';
-alter table public.class_fee_structure add column if not exists other_fee numeric(12,2) default 0;
-alter table public.class_fee_structure add column if not exists amount numeric(12,2) default 0;
-alter table public.class_fee_structure add column if not exists next_term_begins date;
-alter table public.class_fee_structure add column if not exists note text default '';
-alter table public.class_fee_structure add column if not exists fee_items jsonb default '[]'::jsonb;
-alter table public.class_fee_structure add column if not exists active boolean default true;
-alter table public.school_products add column if not exists school_id uuid references public.schools(id) on delete cascade;
-alter table public.school_products add column if not exists description text default '';
-alter table public.school_products add column if not exists active boolean default true;
-alter table public.role_status_log add column if not exists person_id uuid references public.profiles(id) on delete set null;
 alter table public.role_status_log add column if not exists previous_role text default '';
 alter table public.role_status_log add column if not exists previous_status text default '';
-alter table public.role_status_log add column if not exists new_status text default '';
 alter table public.role_status_log add column if not exists person_email text default '';
 alter table public.role_status_log add column if not exists changed_by uuid references public.profiles(id) on delete set null;
 
@@ -1321,19 +1276,12 @@ do $$ begin
 exception when undefined_table then null; end $$;
 
 do $$ begin
-  alter table public.polls add column if not exists max_votes integer default 1;
-  alter table public.polls add column if not exists created_by uuid references public.profiles(id) on delete set null;
-  alter table public.poll_votes add column if not exists voter_id uuid references public.profiles(id) on delete cascade;
-  alter table public.poll_votes add column if not exists voted_at timestamptz default now();
 exception when undefined_table then null; end $$;
 
 -- Staff geofenced attendance settings, configured by admin in Settings.
 do $$ begin
-  alter table public.school_settings add column if not exists latitude numeric;
-  alter table public.school_settings add column if not exists longitude numeric;
   alter table public.school_settings add column if not exists geo_radius_m integer default 200;
   alter table public.school_settings add column if not exists enforce_geofence boolean default true;
-  alter table public.school_settings add column if not exists geo_updated_at timestamptz;
 exception when undefined_table then null; end $$;
 
 -- Ownership columns for teacher/staff-only editing.
@@ -1512,6 +1460,7 @@ create unique index if not exists staff_staff_no_uq_v7 on public.staff(staff_no)
 -- ============================================================================
 -- SECTION 7: BUSINESS FUNCTIONS (13)
 -- ============================================================================
+DROP FUNCTION IF EXISTS public.is_admin() CASCADE;
 create or replace function public.is_admin(uid uuid)
 returns boolean language sql security definer stable as $$
   select exists (
@@ -1522,6 +1471,7 @@ returns boolean language sql security definer stable as $$
   );
 $$;
 
+DROP FUNCTION IF EXISTS public.is_staff() CASCADE;
 create or replace function public.is_staff(uid uuid)
 returns boolean language sql security definer stable as $$
   select exists (
@@ -1532,6 +1482,7 @@ returns boolean language sql security definer stable as $$
   );
 $$;
 
+DROP FUNCTION IF EXISTS public.is_parent_of() CASCADE;
 create or replace function public.is_parent_of(uid uuid, child uuid)
 returns boolean language sql security definer stable as $$
   select exists (
@@ -1540,6 +1491,7 @@ returns boolean language sql security definer stable as $$
   );
 $$;
 
+DROP FUNCTION IF EXISTS public.compute_fee_payment_balance() CASCADE;
 create or replace function public.compute_fee_payment_balance()
 returns trigger language plpgsql as $$
 begin
@@ -1551,6 +1503,7 @@ begin
   return new;
 end $$;
 
+DROP FUNCTION IF EXISTS public.compute_payroll_net() CASCADE;
 create or replace function public.compute_payroll_net()
 returns trigger language plpgsql as $$
 begin
@@ -1561,6 +1514,7 @@ begin
   return new;
 end $$;
 
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
@@ -1576,6 +1530,7 @@ begin
   return new;
 end; $$;
 
+DROP FUNCTION IF EXISTS public.verify_certificate() CASCADE;
 create or replace function public.verify_certificate(p_code text)
 returns table(source text, serial_no text, student_name text, certificate_type text, issued_on text, score text, status text)
 language plpgsql security definer set search_path=public as $$
@@ -1592,6 +1547,7 @@ begin
   where r.cert_code is not null and r.cert_code<>'' and upper(r.cert_code)=upper(p_code);
 end $$;
 
+DROP FUNCTION IF EXISTS public.sc_generate_admission_no() CASCADE;
 create or replace function public.sc_generate_admission_no()
 returns trigger language plpgsql security definer set search_path=public as $$
 declare pfx text; n int;
@@ -1604,6 +1560,7 @@ begin
   return new;
 end $$;
 
+DROP FUNCTION IF EXISTS public.sc_generate_staff_no() CASCADE;
 create or replace function public.sc_generate_staff_no()
 returns trigger language plpgsql security definer set search_path=public as $$
 declare pfx text; n int;
@@ -1616,6 +1573,7 @@ begin
   return new;
 end $$;
 
+DROP FUNCTION IF EXISTS public.sc_push_cbt_to_results() CASCADE;
 create or replace function public.sc_push_cbt_to_results(p_exam_id uuid, p_column text default 'exam', p_term text default '', p_session text default '')
 returns int language plpgsql security definer set search_path=public as $$
 declare e record; r record; sid uuid; saved int:=0; payload jsonb;
@@ -1631,6 +1589,7 @@ begin
  end loop; return saved;
 end $$;
 
+DROP FUNCTION IF EXISTS public.cbt_get_public_exam() CASCADE;
 create or replace function public.cbt_get_public_exam(p_code text)
 returns jsonb language plpgsql security definer stable set search_path=public as $$
 declare e record; qs jsonb;
@@ -1643,6 +1602,7 @@ begin
  return jsonb_build_object('id',e.id,'code',e.code,'title',e.title,'subject',e.subject,'class',e.class,'term',e.term,'session',e.session,'duration',e.duration,'questions',qs,'_questions',qs,'report_column',e.report_column,'max_score',e.max_score,'exam_mode',e.exam_mode);
 end $$;
 
+DROP FUNCTION IF EXISTS public.cbt_submit() CASCADE;
 create or replace function public.cbt_submit(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare e record; rid uuid; sid uuid; n int; score numeric:=0; total numeric:=0; ans jsonb; q jsonb; i int:=0; a text; k text; mark numeric;
@@ -1657,6 +1617,7 @@ begin
  return jsonb_build_object('saved',true,'result_id',rid,'score',score,'total',total,'percent',n,'cert_code',(select cert_code from public.cbt_results where id=rid));
 exception when others then return jsonb_build_object('saved',false,'error',sqlerrm); end $$;
 
+DROP FUNCTION IF EXISTS public.generate_timetable() CASCADE;
 create or replace function public.generate_timetable(p_class text,p_session text default '',p_term text default '',p_periods_per_day int default 6)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare d text; p int; r record; days text[]:=array['Monday','Tuesday','Wednesday','Thursday','Friday']; placed int:=0; unplaced int:=0; allowed text[]; done_one boolean;
@@ -2383,6 +2344,7 @@ create unique index if not exists cbt_results_client_ref_uidx
   on public.cbt_results (exam_id, client_ref)
   where client_ref is not null and client_ref <> '';
 
+DROP FUNCTION IF EXISTS public.cbt_get_public_exam_v2() CASCADE;
 create or replace function public.cbt_get_public_exam_v2(p_code text)
 returns jsonb language plpgsql security definer stable set search_path=public as $$
 declare e record; qs jsonb;
@@ -2413,6 +2375,7 @@ begin
   );
 end $$;
 
+DROP FUNCTION IF EXISTS public.cbt_submit_v2() CASCADE;
 create or replace function public.cbt_submit_v2(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare
@@ -2533,6 +2496,7 @@ alter table if exists public.results add column if not exists assessment_ref uui
 create unique index if not exists results_assessment_uidx on public.results (assessment_source, assessment_ref);
 
 -- ── 3) DAILY COMPUTE — grade every checked student for one date ─────────────
+DROP FUNCTION IF EXISTS public.compute_punctuality_awards() CASCADE;
 create or replace function public.compute_punctuality_awards(p_date date default current_date, p_class text default '')
 returns int language plpgsql security definer set search_path=public as $$
 declare
@@ -2589,6 +2553,7 @@ end $$;
 -- Mirrors the CBT → Report Card flow: one Results row per student carrying
 -- their point total in the chosen column. assessment_ref is deterministic
 -- (md5 → uuid), so re-pushing the same term/class/range UPDATES, never dupes.
+DROP FUNCTION IF EXISTS public.sc_push_punctuality_to_results() CASCADE;
 create or replace function public.sc_push_punctuality_to_results(
   p_term text, p_session text, p_column text default 'ca2', p_class text default '',
   p_start date default null, p_end date default null, p_subject text default 'PUNCTUALITY')
@@ -2667,6 +2632,7 @@ alter table public.admissions
   add column if not exists extracted boolean not null default false;
 
 -- 18.1 sc_current_role() — one-call {role,status,full_name,...} for the shell
+DROP FUNCTION IF EXISTS public.sc_current_role() CASCADE;
 create or replace function public.sc_current_role()
 returns json language plpgsql stable security definer set search_path=public as $$
 declare p record;
@@ -2679,6 +2645,7 @@ revoke execute on function public.sc_current_role() from public, anon;
 grant  execute on function public.sc_current_role() to authenticated;
 
 -- 18.2 lookup_login_email(identifier → email) — login with admission/staff no or phone
+DROP FUNCTION IF EXISTS public.lookup_login_email() CASCADE;
 create or replace function public.lookup_login_email(p_identifier text)
 returns text language plpgsql stable security definer set search_path=public as $$
 declare ident text := btrim(coalesce(p_identifier,'')); em text;
@@ -2704,6 +2671,7 @@ revoke execute on function public.lookup_login_email(text) from public;
 grant  execute on function public.lookup_login_email(text) to anon, authenticated;
 
 -- 18.3 notif_mark_read(id) — atomic read-by append of the caller's uid
+DROP FUNCTION IF EXISTS public.notif_mark_read() CASCADE;
 create or replace function public.notif_mark_read(p_id uuid)
 returns void language plpgsql security definer set search_path=public as $$
 begin
@@ -2717,7 +2685,8 @@ end $$;
 revoke execute on function public.notif_mark_read(uuid) from public, anon;
 grant  execute on function public.notif_mark_read(uuid) to authenticated;
 
--- 18.4 table_sizes() — storage console overview (rows: per-table + TOTAL_DATABASE_USED)
+-- 18.4 table_sizes() — storage console overview
+DROP FUNCTION IF EXISTS public.table_sizes() CASCADE;
 create or replace function public.table_sizes()
 returns table(table_name text, pretty text, row_estimate bigint, total_bytes bigint)
 language plpgsql stable security definer set search_path=public as $$
@@ -2743,6 +2712,7 @@ revoke execute on function public.table_sizes() from public, anon;
 grant  execute on function public.table_sizes() to authenticated;
 
 -- 18.5 purge_old(table, days) — storage console purge, admin-only, strict whitelist
+DROP FUNCTION IF EXISTS public.purge_old() CASCADE;
 create or replace function public.purge_old(p_table text, p_days integer)
 returns integer language plpgsql security definer set search_path=public as $$
 declare r text; n integer := 0;
@@ -2764,6 +2734,7 @@ revoke execute on function public.purge_old(text, integer) from public, anon;
 grant  execute on function public.purge_old(text, integer) to authenticated;
 
 -- 18.6 submit_admission(payload) — public apply form write path
+DROP FUNCTION IF EXISTS public.submit_admission() CASCADE;
 create or replace function public.submit_admission(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare new_id uuid;
@@ -2789,6 +2760,7 @@ revoke execute on function public.submit_admission(jsonb) from public;
 grant  execute on function public.submit_admission(jsonb) to anon, authenticated;
 
 -- 18.7 extract_admission(id) — Accept & Extract: admit the applicant as a student
+DROP FUNCTION IF EXISTS public.extract_admission() CASCADE;
 create or replace function public.extract_admission(p_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare a record; sid uuid; r text;
@@ -2819,6 +2791,7 @@ revoke execute on function public.extract_admission(uuid) from public, anon;
 grant  execute on function public.extract_admission(uuid) to authenticated;
 
 -- 18.8 generate_timetable(class, session, term, periods/day) — auto weekday planner
+DROP FUNCTION IF EXISTS public.generate_timetable() CASCADE;
 create or replace function public.generate_timetable(p_class text, p_session text default '', p_term text default '', p_periods_per_day integer default 6)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare req record; inserted integer := 0;
@@ -2870,6 +2843,7 @@ grant  execute on function public.generate_timetable(text, text, text, integer) 
 -- Same server-authoritative, shuffle-safe grading as cbt_submit_v2 but WITHOUT
 -- the exam-window / attempt-limit gates (backups reach the teacher after the
 -- sitting). Idempotent on client_ref like the live path.
+DROP FUNCTION IF EXISTS public.cbt_import_backup() CASCADE;
 create or replace function public.cbt_import_backup(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare
@@ -2947,3 +2921,9 @@ notify pgrst, 'reload schema';
 select pg_notify('pgrst','reload schema');
 
 select 'School Connect v12.5 clean schema installed successfully ✅ (CBT scale pack + Punctuality Points engine + all runtime helper RPCs included — fully self-contained)' as status;
+
+-- Enhanced admission number and staff ID format settings
+alter table public.school_settings add column if not exists admission_format text default 'prefix-dash';
+alter table public.school_settings add column if not exists admission_start_num integer default 1;
+alter table public.school_settings add column if not exists admission_include_year boolean default false;
+alter table public.school_settings add column if not exists staff_mid_segment text default 'STF';
