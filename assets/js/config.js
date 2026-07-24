@@ -56,8 +56,8 @@ window.SC.jsStr = function (s) { return JSON.stringify(String(s == null ? '' : s
 window.SC.slugify = function (s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); };
 
 // Supabase client initialisation — paste YOUR demo project URL + anon key above.
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://qbjoyytchrgfhacjauts.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiam95eXRjaHJnZmhhY2phdXRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3OTI3NDMsImV4cCI6MjEwMDM2ODc0M30.Kvf34SHb05JP7MRhXcvF1PathTSCvHQA-8Gst5OFwio';
 
 // Always expose safe globals so public/offline pages never throw ReferenceError.
 window.sb = null;
