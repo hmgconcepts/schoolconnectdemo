@@ -460,6 +460,30 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       </div>
     </header>
     <div class="app-content">
+<div class="card" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:2px solid #3b82f6;margin-bottom:20px">
+      <h2 style="color:#1e40af;margin-top:0">📊 Mark Entry Workflow — How It Works</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:16px 0">
+        <div style="background:white;padding:16px;border-radius:8px;border-left:4px solid #10b981">
+          <strong style="color:#10b981">Step 1: Subject Broadsheet</strong>
+          <p style="margin:8px 0 0;font-size:.9rem">Teachers enter marks for their subject. Each subject has its own broadsheet. Enter CA1, CA2, CBT, Project, Exam scores.</p>
+          <p style="margin:8px 0 0;font-size:.85rem;color:#64748b"><strong>Who:</strong> Subject Teachers</p>
+        </div>
+        <div style="background:white;padding:16px;border-radius:8px;border-left:4px solid #f59e0b">
+          <strong style="color:#f59e0b">Step 2: Class Broadsheet</strong>
+          <p style="margin:8px 0 0;font-size:.9rem">Automatically populated from all subject broadsheets. Shows all students × all subjects in one view.</p>
+          <p style="margin:8px 0 0;font-size:.85rem;color:#64748b"><strong>Who:</strong> Class Teachers / Admin (view only)</p>
+        </div>
+        <div style="background:white;padding:16px;border-radius:8px;border-left:4px solid #8b5cf6">
+          <strong style="color:#8b5cf6">Step 3: Report Cards</strong>
+          <p style="margin:8px 0 0;font-size:.9rem">Automatically generated from class broadsheet. Individual student report with all subjects, grades, positions.</p>
+          <p style="margin:8px 0 0;font-size:.85rem;color:#64748b"><strong>Who:</strong> Auto-generated (Admin reviews)</p>
+        </div>
+      </div>
+      <div style="background:#fef3c7;padding:12px;border-radius:6px;margin-top:12px">
+        <strong>⚡ Important:</strong> Enter marks ONCE in the Subject Broadsheet. They automatically flow to Class Broadsheet and Report Cards. No need to re-enter!
+      </div>
+    </div>
+
       
       <div class="card" style="margin-bottom:16px;background:#eef2ff;border-color:#c7d2fe">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer" onclick="var b=document.getElementById('pg-more');b.style.display=b.style.display==='none'?'block':'none'">

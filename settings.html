@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Settings • School Connect Demonstration College</title>
-<meta name="description" content="School Connect Demonstration College — Settings. Comprehensive school management platform.">
-<meta name="keywords" content="$1">
+<title>Settings • School Connect Demo School</title>
+<meta name="description" content="School Connect Demo School — Settings. Comprehensive school management platform.">
+<meta name="keywords" content="School Connect Demo School, school management, SCD, HMG Concepts">
 <meta name="theme-color" content="#0506ae">
 <link rel="icon" type="image/png" href="assets/img/logo.png">
 <link rel="manifest" href="manifest.json">
@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-<meta property="og:title" content="Settings • School Connect Demonstration College">
-<meta property="og:description" content="$1 — Comprehensive school management platform">
+<meta property="og:title" content="Settings • School Connect Demo School">
+<meta property="og:description" content="School Connect Demo School — Free school management by HMG Concepts">
 <meta property="og:image" content="assets/img/logo.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -61,22 +61,22 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 @media(min-width:901px){.app-topbar .mobile-toggle{display:none}}
 </style>
 
-    <meta name="description" content="School Connect Demonstration College — Settings. Comprehensive school management platform.">
-    <meta name="keywords" content="$1">
+    <meta name="description" content="School Connect Demo School — Settings. Comprehensive school management platform.">
+    <meta name="keywords" content="School Connect Demo School, school management, SCD, HMG Concepts">
     <meta name="author" content="HMG Concepts">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="./settings.html">
-    <meta property="og:title" content="Settings • School Connect Demonstration College">
-    <meta property="og:description" content="School Connect Demonstration College — Settings. Comprehensive school management platform.">
+    <meta property="og:title" content="Settings • School Connect Demo School">
+    <meta property="og:description" content="School Connect Demo School — Settings. Comprehensive school management platform.">
     <meta property="og:url" content="./settings.html">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="School Connect v5 — School Connect Demonstration College">
+    <meta property="og:site_name" content="School Connect v5 — School Connect Demo School">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Settings • School Connect Demonstration College">
-    <meta name="twitter:description" content="School Connect Demonstration College — Settings. Comprehensive school management platform.">
+    <meta name="twitter:title" content="Settings • School Connect Demo School">
+    <meta name="twitter:description" content="School Connect Demo School — Settings. Comprehensive school management platform.">
     <link rel="alternate" href="https://hmgconcepts.pages.dev/" title="HMG Concepts Ecosystem">
   </head>
-<body data-theme="theme15" data-school="School Connect Demonstration College" data-font="plusjakarta">
+<body data-theme="theme15" data-school="School Connect Demo School" data-font="plusjakarta">
 
 <div id="notif-bell" class="notif-bell" title="Notifications" data-chatbot>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -119,9 +119,9 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <div class="app-layout sidebar" data-require-role="super_admin admin principal proprietor head_teacher bursar">
   <aside class="app-sidebar" id="app-sidebar">
       <div class="app-brand">
-        <img src="assets/img/logo.png" alt="School Connect Demonstration College" style="object-fit:contain" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{textContent:('G'),style:'width:40px;height:40px;border-radius:10px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900'}))">
+        <img src="assets/img/logo.png" alt="School Connect Demo School" style="object-fit:contain" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{textContent:('G'),style:'width:40px;height:40px;border-radius:10px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900'}))">
         <div>
-          <strong>School Connect Demonstration College</strong>
+          <strong>School Connect Demo School</strong>
           <div style="font-size:0.7rem;color:var(--gray-500)">SCD</div>
         </div>
       </div>
@@ -535,6 +535,57 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           <button class="btn btn-primary btn-sm" onclick="ST.saveCheckinDeadline()">Save staff check-in deadline</button>
         </div>
         <div class="card" data-admin-only>
+          <h3>🔢 Auto-Generated Admission Numbers &amp; Staff IDs</h3>
+          <p style="color:var(--gray-600);font-size:.9rem;line-height:1.65">Configure how the system automatically generates student admission numbers and staff IDs when new records are created. Numbers start with your school's acronym/prefix followed by a sequential number.</p>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>Student Admission Prefix</label>
+              <input class="form-input" id="st-adm-prefix" placeholder="e.g. GOSA" maxlength="8">
+              <small style="color:var(--gray-500)">Format: <b id="st-adm-preview">SCH-00001</b></small>
+            </div>
+            <div class="form-group">
+              <label>Staff ID Prefix</label>
+              <input class="form-input" id="st-staff-prefix" placeholder="e.g. GOSA" maxlength="8">
+              <small style="color:var(--gray-500)">Format: <b id="st-staff-preview">SCH-STF-00001</b></small>
+            </div>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>Admission Number Format</label>
+              <select class="form-select" id="st-adm-format">
+                <option value="prefix-dash">PREFIX-NNNNN (e.g. GOSA-00001)</option>
+                <option value="prefix-slash">PREFIX/YYYY/NNNN (e.g. GOSA/2026/0001)</option>
+                <option value="prefix-only">PREFIXNNNNN (e.g. GOSA00001)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Starting Sequence Number</label>
+              <input class="form-input" type="number" id="st-adm-start" value="1" min="1">
+              <small style="color:var(--gray-500)">Next admission number will use this if no existing records</small>
+            </div>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>Staff ID Middle Segment</label>
+              <input class="form-input" id="st-staff-mid" value="STF" placeholder="e.g. STF, STAFF, TCH">
+              <small style="color:var(--gray-500)">Appears between prefix and number (leave blank to omit)</small>
+            </div>
+            <div class="form-group">
+              <label>Auto-include Academic Year in Admission?</label>
+              <select class="form-select" id="st-adm-year">
+                <option value="no">No — just prefix + number</option>
+                <option value="yes">Yes — include year (e.g. GOSA/2026/0001)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="ST.saveIdSettings()">Save ID settings</button>
+          <div id="st-id-preview-box" style="margin-top:12px;padding:12px;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200)">
+            <strong>Preview:</strong><br>
+            <span id="st-id-preview-adm" style="font-family:monospace;font-size:1.1rem;color:var(--primary)">—</span> &nbsp; <small>(next student admission)</small><br>
+            <span id="st-id-preview-staff" style="font-family:monospace;font-size:1.1rem;color:var(--primary)">—</span> &nbsp; <small>(next staff ID)</small>
+          </div>
+        </div>
+        <div class="card" data-admin-only>
           <h3>✍️ Official Signature for Documents</h3>
           <p style="color:var(--gray-600);font-size:.9rem">Paste a Google Drive/direct image link for the principal/admin signature. It will appear on receipts, certificates, admission letters and academic records printed from this browser/site.</p>
           <div class="form-group"><label>Principal / signatory name</label><input class="form-input" id="st-principal" placeholder="Principal name"></div>
@@ -565,7 +616,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',done);else done();})();
 </script>
     <footer style="padding:20px 28px;border-top:1px solid var(--gray-200);font-size:0.82rem;color:var(--gray-500);text-align:center">
-      © 2026 School Connect Demonstration College · Licensed by <a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">HMG Technologies</a>
+      © 2026 School Connect Demo School · Licensed by <a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">HMG Technologies</a>
     </footer>
   </main>
 </div>
@@ -595,7 +646,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script>
 const ST={
   async init(){ try{ const p=await Enterprise.security.getPrefs(); const c=document.getElementById('st-2fa'); if(c)c.checked=!!p.two_factor; }catch(e){}
-    const l=document.getElementById('st-lang'); if(l) l.value=Enterprise.i18n.lang; const sig=document.getElementById('st-signature'), pn=document.getElementById('st-principal'); if(sig) sig.value=localStorage.getItem('sc-signature-url')||''; if(pn) pn.value=localStorage.getItem('sc-principal-name')||''; if(document.getElementById('st-stamp-text'))document.getElementById('st-stamp-text').value=(window.SC_SETTINGS&&SC_SETTINGS.stamp_text)||localStorage.getItem('sc-stamp-text')||'OFFICIAL SCHOOL SEAL'; if(document.getElementById('st-stamp-color'))document.getElementById('st-stamp-color').value=(window.SC_SETTINGS&&SC_SETTINGS.stamp_color)||localStorage.getItem('sc-stamp-color')||'#1e3a8a'; if(document.getElementById('st-stamp-enabled'))document.getElementById('st-stamp-enabled').checked=!((window.SC_SETTINGS&&SC_SETTINGS.stamp_enabled)===false); await ST.loadGeofence(); await ST.loadNextTermFees(); await ST.populateFeeBillDropdowns(); ST.loadClassFeeBills(); await ST.loadCheckinDeadline(); ST.preview(); ST.initSigPad(); },
+    const l=document.getElementById('st-lang'); if(l) l.value=Enterprise.i18n.lang; const sig=document.getElementById('st-signature'), pn=document.getElementById('st-principal'); if(sig) sig.value=localStorage.getItem('sc-signature-url')||''; if(pn) pn.value=localStorage.getItem('sc-principal-name')||''; if(document.getElementById('st-stamp-text'))document.getElementById('st-stamp-text').value=(window.SC_SETTINGS&&SC_SETTINGS.stamp_text)||localStorage.getItem('sc-stamp-text')||'OFFICIAL SCHOOL SEAL'; if(document.getElementById('st-stamp-color'))document.getElementById('st-stamp-color').value=(window.SC_SETTINGS&&SC_SETTINGS.stamp_color)||localStorage.getItem('sc-stamp-color')||'#1e3a8a'; if(document.getElementById('st-stamp-enabled'))document.getElementById('st-stamp-enabled').checked=!((window.SC_SETTINGS&&SC_SETTINGS.stamp_enabled)===false); await ST.loadGeofence(); await ST.loadNextTermFees(); await ST.populateFeeBillDropdowns(); ST.loadClassFeeBills(); await ST.loadCheckinDeadline(); await ST.loadIdSettings(); ST.preview(); ST.initSigPad();
+    ['st-adm-prefix','st-staff-prefix','st-staff-mid','st-adm-format','st-adm-start','st-adm-year'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', () => ST.updateIdPreview()); el.addEventListener('change', () => ST.updateIdPreview()); } }); },
   initSigPad() {
     const canvas = document.getElementById('sig-pad');
     if (!canvas) return;
@@ -638,6 +690,65 @@ const ST={
   async loadNextTermFees(){ try{let d=window.SC_SETTINGS||{};if(sb){const r=await sb.from('school_settings').select('next_term_fees,next_term_fees_currency,next_term_begins,next_term_fees_note').eq('id',1).maybeSingle();d=r.data||d;} const set=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v;};set('st-next-fee',d.next_term_fees);set('st-next-begins',d.next_term_begins);set('st-next-currency',d.next_term_fees_currency||'₦');set('st-next-note',d.next_term_fees_note||'Payable before resumption');}catch(_){}},
   async saveNextTermFees(){const payload={id:1,next_term_fees:Number(document.getElementById('st-next-fee')?.value)||0,next_term_fees_currency:document.getElementById('st-next-currency')?.value||'₦',next_term_begins:document.getElementById('st-next-begins')?.value||null,next_term_fees_note:document.getElementById('st-next-note')?.value?.trim()||'Payable before resumption'};try{if(sb){const r=await sb.from('school_settings').upsert(payload,{onConflict:'id'});if(r.error)throw r.error;}window.SC_SETTINGS=Object.assign(window.SC_SETTINGS||{},payload);localStorage.setItem('sc-next-term-fees',String(payload.next_term_fees));localStorage.setItem('sc-next-term-begins',payload.next_term_begins||'');toast('Default next-term bill saved. Class/department overrides can be managed below.','success');}catch(e){toast('Could not save next-term bill: '+(e.message||e),'danger');}},
 
+
+  async saveIdSettings(){
+    const admPrefix = (document.getElementById('st-adm-prefix')?.value || '').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8) || 'SCH';
+    const staffPrefix = (document.getElementById('st-staff-prefix')?.value || '').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8) || admPrefix;
+    const staffMid = (document.getElementById('st-staff-mid')?.value || 'STF').toUpperCase();
+    const admFormat = document.getElementById('st-adm-format')?.value || 'prefix-dash';
+    const admStart = parseInt(document.getElementById('st-adm-start')?.value) || 1;
+    const admYear = document.getElementById('st-adm-year')?.value || 'no';
+    const payload = { id: 1, admission_prefix: admPrefix, admission_acronym: admPrefix, admission_format: admFormat, admission_start_num: admStart, admission_include_year: admYear === 'yes', staff_prefix: staffPrefix, staff_mid_segment: staffMid };
+    try {
+      if (sb) { const r = await sb.from('school_settings').upsert(payload, {onConflict:'id'}); if (r.error) throw r.error; }
+      window.SC_SETTINGS = Object.assign(window.SC_SETTINGS || {}, payload);
+      if (window.SCHOOL) { window.SCHOOL.admissionAcronym = admPrefix; window.SCHOOL.staffPrefix = staffPrefix; window.SCHOOL.staffMidSegment = staffMid; }
+      localStorage.setItem('sc-adm-prefix', admPrefix); localStorage.setItem('sc-staff-prefix', staffPrefix);
+      localStorage.setItem('sc-staff-mid', staffMid); localStorage.setItem('sc-adm-format', admFormat);
+      localStorage.setItem('sc-adm-start', String(admStart)); localStorage.setItem('sc-adm-year', admYear);
+      ST.updateIdPreview();
+      toast('Admission & Staff ID settings saved! Student: ' + ST.formatAdmPreview() + ', Staff: ' + ST.formatStaffPreview(), 'success', 8000);
+    } catch(e) { toast('Could not save ID settings: ' + (e.message || e), 'danger'); }
+  },
+  async loadIdSettings(){
+    try {
+      let d = window.SC_SETTINGS || {};
+      if (sb) { const r = await sb.from('school_settings').select('admission_prefix,admission_acronym,admission_format,admission_start_num,admission_include_year,staff_prefix,staff_mid_segment').eq('id',1).maybeSingle(); if (r.data) d = Object.assign(d, r.data); }
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+      const admPrefix = d.admission_prefix || d.admission_acronym || (window.SCHOOL && SCHOOL.admissionAcronym) || localStorage.getItem('sc-adm-prefix') || 'SCH';
+      setVal('st-adm-prefix', admPrefix);
+      setVal('st-staff-prefix', d.staff_prefix || admPrefix);
+      setVal('st-staff-mid', d.staff_mid_segment || localStorage.getItem('sc-staff-mid') || 'STF');
+      setVal('st-adm-format', d.admission_format || localStorage.getItem('sc-adm-format') || 'prefix-dash');
+      setVal('st-adm-start', d.admission_start_num || localStorage.getItem('sc-adm-start') || '1');
+      setVal('st-adm-year', d.admission_include_year ? 'yes' : (localStorage.getItem('sc-adm-year') || 'no'));
+      ST.updateIdPreview();
+    } catch(e) { console.warn('Could not load ID settings:', e); }
+  },
+  formatAdmPreview(){
+    const prefix = (document.getElementById('st-adm-prefix')?.value || 'SCH').toUpperCase();
+    const fmt = document.getElementById('st-adm-format')?.value || 'prefix-dash';
+    const start = parseInt(document.getElementById('st-adm-start')?.value) || 1;
+    const year = new Date().getFullYear();
+    if (fmt === 'prefix-slash') return prefix + '/' + year + '/' + String(start).padStart(4,'0');
+    if (fmt === 'prefix-only') return prefix + String(start).padStart(5,'0');
+    return prefix + '-' + String(start).padStart(5,'0');
+  },
+  formatStaffPreview(){
+    const prefix = (document.getElementById('st-staff-prefix')?.value || document.getElementById('st-adm-prefix')?.value || 'SCH').toUpperCase();
+    const mid = (document.getElementById('st-staff-mid')?.value || 'STF').toUpperCase();
+    return prefix + (mid ? '-' + mid : '') + '-00001';
+  },
+  updateIdPreview(){
+    const admEl = document.getElementById('st-id-preview-adm');
+    const staffEl = document.getElementById('st-id-preview-staff');
+    if (admEl) admEl.textContent = ST.formatAdmPreview();
+    if (staffEl) staffEl.textContent = ST.formatStaffPreview();
+    const admPrev = document.getElementById('st-adm-preview');
+    const staffPrev = document.getElementById('st-staff-preview');
+    if (admPrev) admPrev.textContent = ST.formatAdmPreview();
+    if (staffPrev) staffPrev.textContent = ST.formatStaffPreview();
+  },
   async populateFeeBillDropdowns(){
     try {
       if(!sb) return;

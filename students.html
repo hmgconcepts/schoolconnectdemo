@@ -460,6 +460,14 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       </div>
     </header>
     <div class="app-content">
+<div id="bulk-actions-toolbar" style="display:none;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:white;padding:12px 20px;border-radius:8px;margin-bottom:16px;align-items:center;gap:12px">
+          <span id="bulk-count">0 students selected</span>
+          <button class="btn btn-sm" style="background:white;color:#3b82f6" onclick="CRUD.bulkAction('export')">📥 Export Selected</button>
+          <button class="btn btn-sm" style="background:white;color:#3b82f6" onclick="CRUD.bulkAction('message')">💬 Message Selected</button>
+          <button class="btn btn-sm" style="background:white;color:#ef4444" onclick="CRUD.bulkAction('delete')">🗑️ Delete Selected</button>
+          <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white" onclick="CRUD.clearSelection()">✕ Clear</button>
+        </div>
+
       
       <div class="card" style="margin-bottom:16px;background:#eef2ff;border-color:#c7d2fe">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer" onclick="var b=document.getElementById('pg-more');b.style.display=b.style.display==='none'?'block':'none'">
