@@ -29,22 +29,27 @@ free static hosting). No credit card. No monthly fees. No AI APIs.
 
 1. In the left sidebar of your Supabase project, click **SQL Editor**.
 2. Click **+ New query**.
-3. Run these four files **in order** (open each from this ZIP, copy all, paste, Run):
-   1. **`database/schema.sql`** → `School Connect schema v8 installed successfully ✅`
-   2. **`database/voting-schema.sql`** → `Voting schema v8 ready ✅`
-   3. **`database/cbt-schema.sql`** → `School Connect CBT schema v2 installed ✅`
-   4. **`database/reportcard-schema.sql`** → `School Connect Report-Card schema v2 installed ✅`
-   5. **`database/enterprise-schema.sql`** → `School Connect Enterprise schema (FINAL v2) installed ✅`
-4. Click **Run** (or press Ctrl/Cmd+Enter) for each.
+3. Run this **ONE file** (open it from this ZIP, copy all, paste, Run):
+   **`database/complete-schema.sql`** → success banner
+   `School Connect v12.5 clean schema installed successfully ✅ (CBT scale pack +
+   Punctuality Points engine + all runtime helper RPCs included — fully self-contained)`.
+   It installs **everything**: all tables, RLS policies, triggers, views, the CBT
+   engine + question contracts, voting, report cards, enterprise tables, the
+   Punctuality Points engine, and **all 16 RPCs** the app calls.
+   - ✅ **Self-contained & idempotent** — run it once; safe to re-run. Apart from the
+     optional demo packs (`demo-users.sql`, `demo-seed.sql`), it is the **only** SQL
+     your deployment ever needs.
+   - ❌ Do **not** run the smaller feature packs (`cbt-1000-scale.sql`,
+     `punctuality-points.sql`, `runtime-helper-rpcs.sql`) on a fresh install — each is
+     already inside the complete schema; they exist only to upgrade *older live*
+     projects without a full re-run.
+4. Click **Run** (or press Ctrl/Cmd+Enter).
 5. The CBT engine and report cards are now installed and **interconnected** — when a
    student takes an online exam that is mapped to a report-card column, the score
    flows automatically into the report card.
-   - ✅ This single file creates **all** tables, security policies, the voting
-     system and the new-user trigger. You do **NOT** need to run
-     `voting-schema.sql` separately (it is only for upgrading an old project).
    - ❌ If you ever see `relation "public.profiles" does not exist`, you are
-     running an **old** SQL file. Use the `database/schema.sql` from THIS ZIP —
-     it has been re-ordered so that error can no longer happen.
+     running an **old** SQL file. Use the `database/complete-schema.sql` from
+     THIS ZIP — it is dependency-ordered, so that error can no longer happen.
 
 ## STEP 3 — Get your API keys
 
@@ -108,7 +113,7 @@ Pick ONE of these (all free):
 
 ## 🔧 Quick checklist
 - [ ] Supabase project created
-- [ ] `database/schema.sql` run → success message shown
+- [ ] `database/complete-schema.sql` run → v12.5 success message shown
 - [ ] URL + anon key pasted into `assets/js/config.js`
 - [ ] Site uploaded to free hosting and opens in a browser
 - [ ] First user registered, promoted to admin via SQL, and able to log in
