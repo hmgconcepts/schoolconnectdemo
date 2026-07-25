@@ -7,9 +7,9 @@
 <meta name="description" content="Build printable termly report cards. Custom columns (CA1, CA2, Assignment, Project, Exam). Family-safe: parents and students see only their own.">
 <meta name="keywords" content="report cards, results, scoresheet, broadsheet, school, HMG Concepts">
 <meta name="theme-color" content="#0506ae">
-<link rel="icon" type="image/png" href="assets/img/logo.png">
+<link rel="icon" type="image/png" href="assets/img/logo.svg">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="assets/img/logo.png">
+<link rel="apple-touch-icon" href="assets/img/logo.svg">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Report Cards • School Portal">
 <meta name="twitter:card" content="summary_large_image">
@@ -59,7 +59,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
     <meta property="og:description" content="Build printable termly report cards. Custom columns (CA1, CA2, Assignment, Project, Exam). Family-safe: parents and students see only their own.">
     <meta property="og:url" content="./report-cards.html">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="School Connect v5 — School Connect Demo School">
+    <meta property="og:site_name" content="School Connect v5 — School Connect Demonstration College">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Report Cards • School Portal">
     <meta name="twitter:description" content="Build printable termly report cards. Custom columns (CA1, CA2, Assignment, Project, Exam). Family-safe: parents and students see only their own.">
@@ -81,7 +81,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 
 <div id="pwa-install-banner" class="pwa-install">
   <div class="pwa-install-header">
-    <img src="assets/img/logo.png" alt="" class="pwa-install-icon">
+    <img src="assets/img/logo.svg" alt="" class="pwa-install-icon">
     <div style="flex:1">
       <div class="pwa-install-title">📲 Install School Connect</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
@@ -108,7 +108,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <div class="app-layout sidebar" data-require-role="super_admin admin principal proprietor head_teacher bursar staff teacher parent student">
   <aside class="app-sidebar" id="app-sidebar">
       <div class="app-brand">
-        <img src="assets/img/logo.png" alt="School" style="object-fit:contain" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{textContent:('S'),style:'width:40px;height:40px;border-radius:10px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900'}))">
+        <img src="assets/img/logo.svg" alt="School" style="object-fit:contain" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{textContent:('S'),style:'width:40px;height:40px;border-radius:10px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900'}))">
         <div>
           <strong>School Portal</strong>
           <div style="font-size:0.7rem;color:var(--gray-500)" data-school-short></div>
@@ -494,11 +494,13 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       this.ctx = this.ctxVals();
       if (!this.ctx.class || !this.ctx.subject) { toast('Choose a class and subject first.', 'warning'); return; }
       try {
-        const { data: cols } = await window.sb.from('assessment_columns').select('*')
-          .eq('class', this.ctx.class).eq('subject', '*')
-          .eq('term', this.ctx.term).eq('session', this.ctx.session)
-          .order('position');
-        this.cols = cols || [];
+        const { data: allCols } = await window.sb.from('assessment_columns').select('*')
+          .eq('class', this.ctx.class).eq('term', this.ctx.term).eq('session', this.ctx.session).order('position');
+        const global=(allCols||[]).filter(c=>c.subject==='*');
+        const specific=(allCols||[]).filter(c=>String(c.subject||'')===this.ctx.subject);
+        // Modern deployments create the template once with subject='*'. Legacy
+        // deployments remain usable through the exact-subject fallback.
+        this.cols = global.length ? global : specific;
       } catch (e) { this.cols = []; console.warn('RC cols load failed', e); }
       try {
         const { data: studs } = await window.sb.from('students').select('id,full_name,admission_no,class').eq('class', this.ctx.class).order('full_name');
@@ -583,7 +585,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       const exp = $('rc-export-csv'); if (exp) exp.addEventListener('click', () => RC.exportCSV());
     },
 
-    grade(p) { p = Number(p); if (p >= 70) return 'A'; if (p >= 60) return 'B'; if (p >= 50) return 'C'; if (p >= 45) return 'D'; if (p >= 40) return 'E'; return 'F'; },
+    grade(p) { p = Number(p); if (p >= 80) return 'A'; if (p >= 70) return 'B'; if (p >= 60) return 'C'; if (p >= 50) return 'D'; if (p >= 40) return 'E'; return 'F'; },
 
     async saveScore(el){
       if (this._familyMode) { toast('Read-only: parents and students cannot edit report cards.', 'warning'); return; }
@@ -656,8 +658,14 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         field = 'ca1';
       } else if (token.includes('ca2') || token.includes('ca_2') || token.includes('test_2') || token.includes('test2') || token.includes('second_ca') || token.includes('second_test')) {
         field = 'ca2';
-      } else if (token.includes('ca3') || token.includes('ca_3') || token.includes('test_3') || token.includes('test3') || token.includes('cbt') || token.includes('project') || token.includes('assignment') || token.includes('homework') || token.includes('classwork') || token.includes('mid_term') || token.includes('midterm') || token.includes('third_ca') || token.includes('third_test')) {
+      } else if (token.includes('ca3') || token.includes('ca_3') || token.includes('test_3') || token.includes('test3') || token.includes('cbt') || token.includes('mid_term') || token.includes('midterm') || token.includes('third_ca') || token.includes('third_test')) {
         field = 'ca3';
+      } else if (token.includes('project') || token.includes('assignment') || token.includes('homework') || token.includes('classwork') || token.includes('practical')) {
+        // `results` is a legacy four-band compatibility table. When a real
+        // CA3/CBT column exists, Project remains authoritative in report_scores
+        // instead of overwriting CA3. The print engine reads report_scores.
+        const hasThird=(this.cols||[]).some(c=>/(ca\s*_?3|cbt|third\s*(ca|test)|mid\s*_?term)/i.test(String(c.name||'')));
+        field = hasThird ? null : 'ca3';
       } else if (token.includes('exam') || token.includes('test') || token.includes('paper') || token.includes('terminal')) {
         field = 'exam';
       } else {
@@ -667,7 +675,8 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         else if (colIndex === 2) field = 'ca3';
         else field = 'exam';
       }
-      const identity={student_id:el.dataset.studentId||null,student_name:el.dataset.name,subject:this.ctx.subject,class:this.ctx.class,term:this.ctx.term,session:this.ctx.session};
+      if(!field) return;
+      const identity={student_id:el.dataset.studentId||null,student_name:el.dataset.name,student_id_ref:el.dataset.ref||'',subject:this.ctx.subject,class:this.ctx.class,term:this.ctx.term,session:this.ctx.session};
       try { const q=window.sb.from('results').select('id').eq('student_name',identity.student_name).eq('subject',identity.subject).eq('class',identity.class).eq('term',identity.term).eq('session',identity.session).limit(1); const {data}=await q; const payload=Object.assign({},identity,{[field]:score,assessment_source:'report_sheet'}); if(data&&data[0]) await window.sb.from('results').update(payload).eq('id',data[0].id); else await window.sb.from('results').insert(payload); }
       catch(e){ console.warn('Results mirror failed; report score was saved safely.',e); }
     },
@@ -723,26 +732,11 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       const term = this.ctx.term || ($('rc-term') || {}).value || '';
       const ses = this.ctx.session || ($('rc-session') || {}).value || '';
       const cls = this.ctx.class || ($('rc-class') || {}).value || '';
-      let data = [];
       try {
-        const r = await window.sb.from('report_subject_totals').select('*').eq('student_name', name).eq('term', term).eq('session', ses);
-        data = r.data || [];
-      } catch (e) { console.warn('RC report-card data load failed', e); }
-      let html = '<p><strong>Student:</strong> ' + esc(name) + ' &nbsp; <strong>Class:</strong> ' + esc(cls) + ' &nbsp; <strong>Term:</strong> ' + esc(term) + ' &nbsp; <strong>Session:</strong> ' + esc(ses) + '</p>';
-      if (!data.length) {
-        html += '<p>No recorded scores yet for this student/term/session. Ask the school to enter the scores first.</p>';
-      } else {
-        let go = 0, ob = 0;
-        html += '<table><thead><tr><th>Subject</th><th>Obtained</th><th>Obtainable</th><th>%</th><th>Grade</th><th>Position</th><th>Remark</th></tr></thead><tbody>' + data.map(r => {
-          go += Number(r.obtained || 0); ob += Number(r.obtainable || 0);
-          const pct = r.percent != null ? r.percent : (r.obtainable ? Math.round((r.obtained / r.obtainable) * 1000) / 10 : 0);
-          return '<tr><td>' + esc(r.subject) + '</td><td>' + r.obtained + '</td><td>' + r.obtainable + '</td><td>' + pct + '%</td><td>' + RC.grade(pct) + '</td><td>' + (r.position || '—') + '</td><td>' + esc(r.remark || '') + '</td></tr>';
-        }).join('') + '</tbody></table>';
-        const pct = ob ? ((go / ob) * 100).toFixed(1) : 0;
-        html += '<p style="margin-top:12px"><strong>Overall:</strong> ' + go.toFixed(1) + ' / ' + ob.toFixed(1) + ' (' + pct + '%) — Grade ' + RC.grade(pct) + '</p>';
-        html += '<div style="margin-top:24px;display:flex;justify-content:space-between"><div>____________________<br>Class Teacher</div><div>____________________<br>Head of School</div></div>';
-      }
-      this._print('Termly Report Card', html);
+        ReportEngine.init(window.sb);
+        const html=await ReportEngine.renderStudent({student:name,class:cls,term:term,session:ses});
+        ReportEngine.print('Termly Report Card — '+name,html,false);
+      } catch(e) { console.error(e); toast('Could not generate report card: '+(e.message||e),'danger',8000); }
     },
 
     async broadsheet(){
@@ -752,26 +746,11 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       const term = this.ctx.term || ($('rc-term') || {}).value || '';
       const ses = this.ctx.session || ($('rc-session') || {}).value || '';
       if (!cls) { toast('Choose a class first.', 'warning'); return; }
-      let data = [];
-      try { const r = await window.sb.from('report_subject_totals').select('*').eq('class', cls).eq('term', term).eq('session', ses); data = r.data || []; } catch (e) { console.warn('broad sheet load failed', e); }
-      const subs = [...new Set((data || []).map(r => r.subject))].sort();
-      const studs = [...new Set((data || []).map(r => r.student_name))].sort();
-      let html = '<p><strong>Class:</strong> ' + esc(cls) + ' &nbsp; <strong>Term:</strong> ' + esc(term) + ' &nbsp; <strong>Session:</strong> ' + esc(ses) + '</p>';
-      if (!studs.length) { html += '<p>No scores recorded for this class/term/session.</p>'; }
-      else {
-        html += '<table><thead><tr><th>Student</th>' + subs.map(s => '<th>' + esc(s) + '</th>').join('') + '<th>Total</th><th>%</th><th>Position</th></tr></thead><tbody>';
-        studs.forEach(st => {
-          let tot = 0, obt = 0, subjCount = 0;
-          const cells = subs.map(su => {
-            const r = (data || []).find(x => x.student_name === st && x.subject === su);
-            if (r) { tot += Number(r.obtained || 0); obt += Number(r.obtainable || 0); subjCount++; }
-            return '<td>' + (r ? r.obtained : '-') + '</td>';
-          }).join('');
-          html += '<tr><td>' + esc(st) + '</td>' + cells + '<td>' + tot.toFixed(1) + '</td><td>' + (obt ? ((tot / obt) * 100).toFixed(1) : 0) + '%</td><td>—</td></tr>';
-        });
-        html += '</tbody></table>';
-      }
-      this._print('Class Broadsheet — ' + esc(cls), html);
+      try {
+        ReportEngine.init(window.sb);
+        const html=await ReportEngine.renderClass({class:cls,term:term,session:ses});
+        ReportEngine.print('Class Broadsheet — '+cls,html,true);
+      } catch(e) { console.error(e); toast('Could not generate class broadsheet: '+(e.message||e),'danger',8000); }
     },
 
     async scoresheet(){
@@ -780,26 +759,13 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       const cls = this.ctx.class || ($('rc-class') || {}).value || '';
       const sub = this.ctx.subject || ($('rc-subject') || {}).value || '';
       if (!cls || !sub) { toast('Choose class and subject first.', 'warning'); return; }
-      const ids = this.cols.map(c => c.id);
-      let scores = [];
-      try { if (ids.length) { const r = await window.sb.from('report_scores').select('*').in('column_id', ids); scores = r.data || []; } } catch (e) { console.warn('scoresheet load failed', e); }
-      const map = {};
-      (scores || []).forEach(s => { map[(s.student_id_ref || s.student_name) + '|' + s.column_id] = s.score; });
-      const totalMax = this.cols.reduce((a, c) => a + Number(c.max_mark), 0);
-      let html = '<p><strong>Class:</strong> ' + esc(cls) + ' &nbsp; <strong>Subject:</strong> ' + esc(sub) + '</p>';
-      if (!this.cols.length) { html += '<p>No assessment columns configured for this combination yet.</p>'; }
-      else {
-        html += '<table><thead><tr><th>Student</th>' + this.cols.map(c => '<th>' + esc(c.name) + '<br>/' + c.max_mark + '</th>').join('') + '<th>Total</th><th>%</th><th>Grade</th></tr></thead><tbody>';
-        (this.students || []).forEach(st => {
-          const ref = st.admission_no || st.full_name;
-          let tot = 0;
-          const cells = this.cols.map(c => { const v = map[ref + '|' + c.id]; if (v != null) tot += Number(v); return '<td>' + (v != null ? v : '') + '</td>'; }).join('');
-          const pct = totalMax ? ((tot / totalMax) * 100).toFixed(1) : 0;
-          html += '<tr><td>' + esc(st.full_name) + '</td>' + cells + '<td>' + tot.toFixed(1) + '</td><td>' + pct + '%</td><td>' + RC.grade(pct) + '</td></tr>';
-        });
-        html += '</tbody></table>';
-      }
-      this._print('Teacher Scoresheet — ' + esc(sub) + ' (' + esc(cls) + ')', html);
+      const term=this.ctx.term||($('rc-term')||{}).value||'';
+      const ses=this.ctx.session||($('rc-session')||{}).value||'';
+      try {
+        ReportEngine.init(window.sb);
+        const html=await ReportEngine.renderSubject({class:cls,subject:sub,term:term,session:ses});
+        ReportEngine.print('Subject Broadsheet — '+sub+' ('+cls+')',html,false);
+      } catch(e) { console.error(e); toast('Could not generate subject broadsheet: '+(e.message||e),'danger',8000); }
     }
   };
 
