@@ -7,9 +7,9 @@
 <meta name="description" content="Take an online CBT exam. Multi-subject support with subject tabs, anti-cheat monitoring, automatic grading, and printable certificates.">
 <meta name="keywords" content="CBT, online exam, multi-subject, UTME, school, HMG Concepts">
 <meta name="theme-color" content="#0506ae">
-<link rel="icon" type="image/png" href="assets/img/logo.png">
+<link rel="icon" type="image/png" href="assets/img/logo.svg">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="assets/img/logo.png">
+<link rel="apple-touch-icon" href="assets/img/logo.svg">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Take Exam • School Portal">
 <meta name="twitter:card" content="summary_large_image">
@@ -19,9 +19,16 @@
 body{font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;background:#f8fafc;margin:0;padding:0;color:#0f172a;min-height:100vh}
 .login-shell{min-height:100vh;background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);padding:24px}
 .login-shell .card{background:white;border-radius:18px;box-shadow:0 4px 24px rgba(15,23,42,.08);padding:24px;max-width:840px;margin:0 auto}
-.login-shell .hero-card{text-align:center;margin-bottom:18px;background:linear-gradient(135deg,#0506ae,#964eec);color:white;padding:32px 24px}
-.login-shell .hero-card img{width:54px;height:54px;border-radius:12px;object-fit:contain;background:white;padding:6px;margin-bottom:8px}
-.login-shell h1{margin:8px 0 0;font-size:1.4rem;font-weight:800}
+.login-shell .hero-card{text-align:center;margin-bottom:18px;background:linear-gradient(135deg,var(--sc-primary),var(--sc-accent));color:white;padding:24px}
+.exam-school-head{display:grid;grid-template-columns:78px minmax(0,1fr);gap:16px;align-items:center;text-align:left;max-width:720px;margin:0 auto}
+.login-shell .hero-card img{width:72px;height:72px;border-radius:14px;object-fit:contain;background:white;padding:7px;box-sizing:border-box;box-shadow:0 3px 12px rgba(0,0,0,.18)}
+.login-shell h1{margin:0;font-size:1.45rem;font-weight:900;line-height:1.2}
+.exam-school-motto{margin:5px 0 0;font-size:.84rem;font-weight:700;opacity:.96}
+.exam-school-contact{margin:5px 0 0;font-size:.76rem;line-height:1.5;opacity:.92}
+.exam-portal-label{margin:10px 0 0;padding-top:9px;border-top:1px solid rgba(255,255,255,.3);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;font-weight:900;text-align:center}
+.exam-context{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;margin-bottom:12px;padding:10px;border:1px solid #dbeafe;background:#eff6ff;border-radius:12px;font-size:.78rem}
+.exam-context span{display:block;color:#475569}.exam-context b{display:block;color:#0f172a;margin-top:2px}
+@media(max-width:560px){.exam-school-head{grid-template-columns:58px minmax(0,1fr);gap:10px}.login-shell .hero-card img{width:58px;height:58px}.login-shell h1{font-size:1.14rem}.exam-school-contact{font-size:.69rem}}
 .login-shell h2{margin:0 0 8px;font-size:1.15rem;font-weight:800;color:#0f172a}
 .login-shell .form-group{margin-bottom:12px}
 .login-shell .form-group label{display:block;font-weight:600;font-size:.85rem;color:#475569;margin-bottom:5px}
@@ -72,7 +79,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     <meta property="og:description" content="Take an online CBT exam. Multi-subject support with subject tabs, anti-cheat monitoring, automatic grading, and printable certificates.">
     <meta property="og:url" content="./cbt-exam.html">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="School Connect v5 — God of Seed Academy">
+    <meta property="og:site_name" content="School Connect v5 — School Connect Demonstration College">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Take Exam • School Portal">
     <meta name="twitter:description" content="Take an online CBT exam. Multi-subject support with subject tabs, anti-cheat monitoring, automatic grading, and printable certificates.">
@@ -81,11 +88,17 @@ textarea.form-input{min-height:80px;resize:vertical}
 <body>
 <main class="login-shell">
   <div style="max-width:840px;margin:0 auto">
-    <div class="card hero-card">
-      <img src="assets/img/logo.png" alt="School" onerror="this.style.display='none'">
-      <h1>Online Examination Portal</h1>
-      <p style="margin:6px 0 0;font-size:.95rem;opacity:.95">CBT Exam Runner · 17 question types · Anti-cheat · Multi-subject tabs · Auto-grade</p>
-    </div>
+    <header class="card hero-card" aria-label="School examination identity">
+      <div class="exam-school-head">
+        <img id="exam-school-logo" src="assets/img/logo.svg" alt="School logo">
+        <div>
+          <h1 id="exam-school-name">School</h1>
+          <p class="exam-school-motto" id="exam-school-motto">Excellence in Education</p>
+          <p class="exam-school-contact" id="exam-school-contact">Official school CBT examination portal</p>
+        </div>
+      </div>
+      <p class="exam-portal-label">Official Computer-Based Examination Portal</p>
+    </header>
     <div id="exam-root">
       <div class="card"><span class="pulse">Initialising exam system…</span></div>
     </div>
@@ -126,6 +139,40 @@ textarea.form-input{min-height:80px;resize:vertical}
   function openModal(){}
   function closeModal(){}
 
+  /* School identity is available before login from generated config.js. The
+     public exam RPC may return a newer, safe subset from school_settings; those
+     values win without exposing any private configuration. */
+  function applySchoolIdentity(remoteSchool){
+    const cfg = window.SCHOOL || {};
+    const db = remoteSchool && typeof remoteSchool === 'object' ? remoteSchool : {};
+    const school = {
+      name: db.name || db.school_name || cfg.name || 'School',
+      motto: db.motto || cfg.motto || 'Excellence in Education',
+      address: db.address || cfg.address || '',
+      phone: db.phone || cfg.phone || '',
+      email: db.email || cfg.email || '',
+      logo: db.logo_url || cfg.logoUrl || cfg.logo_url || ('assets/img/logo.' + (cfg.logoExt || 'svg')),
+      primary: (cfg.theme && cfg.theme.primary) || cfg.primary || '#0506ae',
+      accent: (cfg.theme && cfg.theme.accent) || cfg.accent || '#964eec'
+    };
+    document.documentElement.style.setProperty('--sc-primary', school.primary);
+    document.documentElement.style.setProperty('--sc-accent', school.accent);
+    const set = (id, value) => { const el=$(id); if(el) el.textContent=value; };
+    set('exam-school-name', school.name);
+    set('exam-school-motto', school.motto);
+    const contact = [school.address, school.phone ? 'Tel: '+school.phone : '', school.email].filter(Boolean).join(' · ');
+    set('exam-school-contact', contact || 'Official school CBT examination portal');
+    const logo=$('exam-school-logo');
+    if(logo){
+      logo.onerror=function(){ if(!this.dataset.fallback){this.dataset.fallback='1';this.src='assets/img/logo.svg';}else{this.style.display='none';} };
+      logo.src=school.logo;
+      logo.alt=school.name+' logo';
+    }
+    document.title='Take Exam • '+school.name;
+    return school;
+  }
+  applySchoolIdentity();
+
   /* ---------- State ---------- */
   const Exam = {
     data: null,
@@ -139,6 +186,8 @@ textarea.form-input{min-height:80px;resize:vertical}
     violations: 0,
     violationLog: [],
     student: null,
+    clientRef: '',
+    school: null,
     _done: false,
   };
 
@@ -236,7 +285,7 @@ textarea.form-input{min-height:80px;resize:vertical}
       if (this.subjectOf(qq) !==current) return '';
       localNo++;
       const cls = i === this.idx ? 'current' : (this.answers[i] != null && String(this.answers[i]).trim() !== '' ? 'answered' : (this.flags[i] ? 'flagged' : ''));
-      return '<button type="button" onclick="Exam.go(' + i + ')" class="' + cls + '" data-i="' + i + '" title="' + esc(current) + ' question ' + localNo + '">' + localNo + '</button>';
+      return '<button type="button" class="' + cls + '" data-i="' + i + '" title="' + esc(current) + ' question ' + localNo + '">' + localNo + '</button>';
     }).join('') + '</div>';
   };
 
@@ -248,25 +297,39 @@ textarea.form-input{min-height:80px;resize:vertical}
     const subjectIndexes = this.indexesForSubject(current);
     const localPos = subjectIndexes.indexOf(this.idx);
     const localNo = localPos + 1;
-    const hasOptions = (q.options || []).length > 0 && !FREE_TYPES_NO_OPTIONS.includes((q.type || '').toLowerCase());
+    const qType = String(q.type || 'mcq').toLowerCase();
+    const hasOptions = (q.options || []).length > 0 && !FREE_TYPES_NO_OPTIONS.includes(qType);
+    const isMultiSelect = qType === 'multi_select';
+    const selectedValues = Array.isArray(this.answers[this.idx]) ? this.answers[this.idx] : (this.answers[this.idx] == null ? [] : [String(this.answers[this.idx])]);
 
     const opts = hasOptions ? (q.options || []).map((o, i) => {
       const L = String.fromCharCode(65 + i);
-      const checked = this.answers[this.idx] === L;
-      return '<label class="option-label' + (checked ? ' selected' : '') + '"><input type="radio" name="opt" value="' + L + '" ' + (checked ? 'checked' : '') + ' style="display:none"><span class="option-letter">' + L + '</span><span class="option-text">' + esc(o) + '</span></label>';
+      const checked = selectedValues.includes(L);
+      return '<label class="option-label' + (checked ? ' selected' : '') + '" data-option="' + L + '"><input type="' + (isMultiSelect ? 'checkbox' : 'radio') + '" name="opt" value="' + L + '" ' + (checked ? 'checked' : '') + ' style="display:none"><span class="option-letter">' + L + '</span><span class="option-text">' + esc(o) + '</span></label>';
     }).join('') : '';
 
-    const free = !hasOptions ? '<textarea class="form-input" rows="3" placeholder="Type your answer here">' + esc(this.answers[this.idx] || '') + '</textarea>' : '';
+    const existingText = Array.isArray(this.answers[this.idx]) ? this.answers[this.idx].join(', ') : (this.answers[this.idx] || '');
+    const free = !hasOptions ? '<textarea class="form-input" rows="3" placeholder="Type your answer here">' + esc(existingText) + '</textarea>' : '';
+    const passage = q.passage ? '<div class="notice" style="background:#f8fafc;border-color:#cbd5e1;color:#334155"><strong>Passage / Case:</strong><br>' + esc(q.passage) + '</div>' : '';
+    const media = q.media_url ? (/\.(mp3|wav|ogg|m4a)(\?|$)/i.test(q.media_url) ? '<audio controls style="width:100%;margin:8px 0" src="'+esc(q.media_url)+'"></audio>' : (/\.(mp4|webm|mov)(\?|$)/i.test(q.media_url) ? '<video controls style="max-width:100%;max-height:360px;margin:8px auto;display:block" src="'+esc(q.media_url)+'"></video>' : '<img src="'+esc(q.media_url)+'" alt="Question media" style="max-width:100%;max-height:360px;object-fit:contain;margin:8px auto;display:block" referrerpolicy="no-referrer">')) : '';
     const m = Math.floor(this.remaining / 60), ss = this.remaining % 60;
     const urgent = this.remaining <= 60;
 
     const html = '<div class="card">' +
+      '<div class="exam-context" aria-label="Current examination details">' +
+        '<span>Examination<b>'+esc((this.data&&this.data.title)||'CBT Examination')+'</b></span>' +
+        '<span>Candidate<b>'+esc((this.student&&this.student.name)||'Anonymous')+'</b></span>' +
+        '<span>Class<b>'+esc((this.student&&this.student.class)||(this.data&&this.data.class)||'—')+'</b></span>' +
+        '<span>Term / Session<b>'+esc([this.data&&this.data.term,this.data&&this.data.session].filter(Boolean).join(' · ')||'—')+'</b></span>' +
+      '</div>' +
       this.renderTabs(current) +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">' +
         '<strong>' + esc(current) + ' · Q ' + localNo + ' / ' + subjectIndexes.length + ' <span style="color:#64748b;font-weight:600">(overall ' + (this.idx + 1) + ' / ' + this.qs().length + ')</span></strong>' +
         '<div><span class="clock' + (urgent ? ' urgent' : '') + '" id="clock">' + m + ':' + String(ss).padStart(2, '0') + '</span> <span id="viol" class="viol"></span></div>' +
       '</div>' +
+      passage + media +
       '<p style="font-size:1.05rem;margin:0 0 12px;line-height:1.5">' + esc(q.question || '(no question text)') + (q.mark ? ' <span style="color:#64748b;font-size:.85rem">[' + q.mark + ' mark' + (q.mark > 1 ? 's' : '') + ']</span>' : '') + '</p>' +
+      (isMultiSelect ? '<p style="font-size:.78rem;color:#475569;margin:-4px 0 8px">Select every correct option.</p>' : '') +
       opts + free +
       '<div class="actions">' +
         '<button type="button" class="btn btn-outline" data-act="prev-in" ' + (localPos <= 0 ? 'disabled' : '') + '>← Prev in ' + esc(current) + '</button>' +
@@ -282,11 +345,16 @@ textarea.form-input{min-height:80px;resize:vertical}
     this.root().innerHTML = html;
 
     // Wire up the buttons
-    if (this.root().querySelectorAll) this.root().querySelectorAll('.option-label').forEach((label, i) => {
-      label.addEventListener('click', () => {
-        const L = String.fromCharCode(65 + i);
-        this.answer(L);
-        // Re-render to update the selected state
+    if (this.root().querySelectorAll) this.root().querySelectorAll('.option-label').forEach((label) => {
+      label.addEventListener('click', (event) => {
+        event.preventDefault();
+        const L = label.dataset.option;
+        if (isMultiSelect) {
+          const next = Array.isArray(this.answers[this.idx]) ? this.answers[this.idx].slice() : [];
+          const at = next.indexOf(L); if (at >= 0) next.splice(at, 1); else next.push(L);
+          next.sort(); this.answer(next);
+        } else this.answer(L);
+        // Re-render to update selected state and the per-subject progress badge.
         this.render();
       });
     });
@@ -317,7 +385,11 @@ textarea.form-input{min-height:80px;resize:vertical}
   };
 
   Exam.saveDraft = function(){
-    try { localStorage.setItem('cbt-draft-' + (this.data && this.data.code), JSON.stringify({ a: this.answers, i: this.idx, t: Date.now() })); } catch(e) {}
+    try {
+      const keyed = this.qs().map((q,i) => ({ index:(q._orig_index != null ? q._orig_index : i), answer:this.answers[i] }));
+      const current = this.qs()[this.idx] || {};
+      localStorage.setItem('cbt-draft-' + (this.data && this.data.code), JSON.stringify({ version:2, answers:keyed, index:(current._orig_index != null ? current._orig_index : this.idx), client_ref:this.clientRef, t:Date.now() }));
+    } catch(e) {}
   };
 
   Exam.confirmSubmit = function(){
@@ -339,7 +411,7 @@ textarea.form-input{min-height:80px;resize:vertical}
         '<p style="color:#64748b;margin:0 0 16px;font-size:.9rem">Ask your teacher for the exam code. You can sit the exam with or without an account.</p>' +
         '<div class="form-group"><label>Exam code *</label><input class="form-input" id="e-code" value="' + esc(prefill) + '" placeholder="e.g. ABC123" autofocus></div>' +
         '<div class="form-group"><label>Your full name <span style="color:#94a3b8;font-weight:400">(optional for anonymous exams)</span></label><input class="form-input" id="e-name" placeholder="Surname First-name"></div>' +
-        '<div class="form-group"><label>Your student / staff ID (if registered)</label><input class="form-input" id="e-id" placeholder="e.g. GOSA/2024/001"></div>' +
+        '<div class="form-group"><label>Your student / staff ID (if registered)</label><input class="form-input" id="e-id" placeholder="e.g. SCD/2024/001"></div>' +
         '<div class="form-group"><label>Class</label><input class="form-input" id="e-class" placeholder="e.g. JSS 1A"></div>' +
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">' +
           '<button type="button" class="btn btn-primary" id="e-start">Start Exam ▶</button>' +
@@ -368,28 +440,29 @@ textarea.form-input{min-height:80px;resize:vertical}
     };
     if (!code) { toast('Enter the exam code.', 'warning'); return; }
 
-    // 10-minute local exam cache
-    let data = null, error = null;
+    // Network-first with an offline fallback. The former cache-first flow kept a
+    // repaired multi-subject exam stale for ten minutes, which made “Repair
+    // Tabs” appear ineffective on candidate devices.
+    let data = null, error = null, cached = null;
     const cacheKey = 'cbt-exam-cache-' + code;
     try {
       const c = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-      if (c && (Date.now() - c.at) < 600000) data = c.exam;
+      if (c && (Date.now() - Number(c.at||0)) < 86400000) cached = c.exam;
     } catch (_) {}
 
-    if (!data) {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          const r = await window.sb.rpc('cbt_get_public_exam', { p_code: code });
-          data = r.data; error = r.error;
-        } catch (e) { error = e; }
-        if (data && !error) break;
-        const wait = Math.min(6000, (400 * Math.pow(2, attempt))) + Math.floor(Math.random() * 500);
-        toast('Busy server — retrying (' + (attempt + 1) + '/5)…', 'info', 1500);
-        await new Promise(r => setTimeout(r, wait));
-      }
-      if (data && !error && !data.wait && !data.closed) {
-        try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), exam: data })); } catch (_) {}
-      }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const r = await window.sb.rpc('cbt_get_public_exam', { p_code: code });
+        data = r.data; error = r.error;
+      } catch (e) { error = e; }
+      if (data && !error) break;
+      const wait = Math.min(6000, (400 * Math.pow(2, attempt))) + Math.floor(Math.random() * 500);
+      if (attempt < 4) toast('Busy server — retrying (' + (attempt + 1) + '/5)…', 'info', 1500);
+      await new Promise(r => setTimeout(r, wait));
+    }
+    if ((!data || error) && cached) { data=cached; error=null; toast('Network unavailable — using the latest saved exam copy on this device.','warning',5000); }
+    if (data && !error && !data.wait && !data.closed) {
+      try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), exam: data })); } catch (_) {}
     }
 
     if (error || !data) {
@@ -405,7 +478,12 @@ textarea.form-input{min-height:80px;resize:vertical}
       this.root().innerHTML = '<div class="card"><h2>🚫 Closed</h2><p>This exam is no longer accepting submissions.</p></div>';
       return;
     }
+    if(!String(data.engine_version||'').startsWith('v5.1')){
+      this.root().innerHTML='<div class="card"><div class="notice notice-error"><h2 style="margin-top:0">⚠️ Exam temporarily unavailable</h2><p>This database is still using an obsolete CBT grading engine that can record incorrect zero marks. The exam has been stopped before you begin.</p><p><strong>Administrator:</strong> back up Supabase, then run the latest <code>database/complete-schema.sql</code>. Confirm the final message says CBT V5.1 is installed, then reload this page.</p></div></div>';
+      return;
+    }
     this.data = data;
+    this.school = applySchoolIdentity(data.school || null);
     if (window.CBT && typeof window.CBT.prepareForStudent === 'function') window.CBT.prepareForStudent(this.data);
     if (!this.qs().length) {
       this.root().innerHTML = '<div class="card"><h2>No questions</h2><p>This CBT exam has no valid questions. Ask your teacher to re-upload the CSV question bank. Make sure the CSV has a header row and at least one data row.</p></div>';
@@ -413,6 +491,21 @@ textarea.form-input{min-height:80px;resize:vertical}
     }
     this.answers = new Array(this.qs().length).fill(null);
     this.flags = {};
+    this._done = false;
+    this.clientRef = (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : ('cbt-'+Date.now()+'-'+Math.random().toString(36).slice(2,10));
+    // Restore a recent draft by ORIGINAL question index, so randomisation and
+    // multi-subject grouping cannot attach an answer to the wrong question.
+    try {
+      const draft = JSON.parse(localStorage.getItem('cbt-draft-' + data.code) || 'null');
+      if (draft && (Date.now() - Number(draft.t||0)) < 86400000) {
+        if (Array.isArray(draft.answers)) {
+          const byIndex = new Map(draft.answers.map(x => [Number(x.index), x.answer]));
+          this.qs().forEach((q,i) => { const oi=Number(q._orig_index != null?q._orig_index:i); if(byIndex.has(oi)) this.answers[i]=byIndex.get(oi); });
+          const wanted=Number(draft.index); const at=this.qs().findIndex((q,i)=>Number(q._orig_index!=null?q._orig_index:i)===wanted); if(at>=0)this.idx=at;
+        } else if (Array.isArray(draft.a) && draft.a.length === this.answers.length) { this.answers=draft.a; this.idx=Math.max(0,Math.min(Number(draft.i)||0,this.answers.length-1)); }
+        if (draft.client_ref) this.clientRef=String(draft.client_ref);
+      }
+    } catch(_) {}
     this.startTs = Date.now();
     this.deadline = Date.now() + ((data.duration || 45) * 60 * 1000);
     this.remaining = Math.max(0, Math.ceil((this.deadline - Date.now()) / 1000));
@@ -430,7 +523,7 @@ textarea.form-input{min-height:80px;resize:vertical}
   };
 
   Exam.codeEntryHTML = function(code) {
-    return '<div style="margin-top:12px"><button type="button" class="btn btn-outline" id="e-retry">Try a different code</button></div>';
+    return '<div style="margin-top:12px"><a class="btn btn-outline" href="cbt-exam.html">Try a different code</a></div>';
   };
 
   Exam.beginMonitor = function(){
@@ -478,6 +571,10 @@ textarea.form-input{min-height:80px;resize:vertical}
       student_class: this.student.class,
       student_id_ref: this.student.id_ref,
       student_type: this.data.exam_mode,
+      client_ref: this.clientRef,
+      client_engine: 'v5.1',
+      // Client grading is only a resilience preview. The canonical RPC ignores
+      // these values and re-grades against the private server-side answer key.
       score: graded.score, total: graded.total, percent: graded.percent,
       correct_count: graded.correct, wrong_count: graded.wrong, skipped_count: graded.skipped,
       time_taken: timeTaken, violations: this.violations || 0, violation_log: this.violationLog || [],
@@ -489,25 +586,30 @@ textarea.form-input{min-height:80px;resize:vertical}
     };
     let resp = null;
     for (let attempt = 0; attempt < 6; attempt++) {
-      try { resp = await window.sb.rpc('cbt_submit', { p_payload: payload }); } catch (e) { resp = { error: e }; }
-      if (resp && !resp.error && resp.data && resp.data.saved) break;
+      try { resp = await window.sb.rpc('cbt_submit_v5', { p_payload: payload }); } catch (e) { resp = { error: e }; }
+      if (resp && !resp.error && resp.data && resp.data.saved && String(resp.data.engine_version||'').startsWith('v5.1')) break;
+      if (resp && !resp.error && resp.data && ['closed','not_started','attempts_exhausted','exam_not_found','answer_key_missing','question_bank_empty'].includes(resp.data.error)) break;
+      if(resp && resp.error && /cbt_submit_v5|schema cache|function/i.test(String(resp.error.message||resp.error))) break;
       const wait = Math.min(8000, (500 * Math.pow(2, attempt))) + Math.floor(Math.random() * 600);
       this.root().insertAdjacentHTML('beforeend', '<p style="text-align:center;color:#64748b">Submitting… retry ' + (attempt + 1) + ' of 6</p>');
       await new Promise(r => setTimeout(r, wait));
     }
-    if (!resp || resp.error || !resp.data || !resp.data.saved) {
+    const confirmed=!!(resp&&!resp.error&&resp.data&&resp.data.saved&&String(resp.data.engine_version||'').startsWith('v5.1'));
+    const terminalError=resp&&resp.data&&['closed','not_started','attempts_exhausted','exam_not_found','answer_key_missing','question_bank_empty'].includes(resp.data.error);
+    if (!confirmed && !terminalError) {
       try { const q = JSON.parse(localStorage.getItem('cbt-pending-queue') || '[]'); q.push(payload); localStorage.setItem('cbt-pending-queue', JSON.stringify(q.slice(-10))); } catch (_) {}
-    } else {
-      try { localStorage.removeItem('cbt-pending-queue'); } catch (_) {}
+    } else if (confirmed) {
+      try { localStorage.removeItem('cbt-pending-queue'); localStorage.removeItem('cbt-draft-' + (this.data && this.data.code)); } catch (_) {}
     }
-    try { localStorage.removeItem('cbt-draft-' + (this.data && this.data.code)); } catch (e) {}
-    if (!resp || resp.error || !resp.data || !resp.data.saved) {
+    if (!confirmed) {
       const blob = new Blob([JSON.stringify({ payload, graded }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
+      const rpcMissing=resp&&resp.error&&/cbt_submit_v5|schema cache|function/i.test(String(resp.error.message||resp.error));
+      const message=rpcMissing?'The V5.1 grading engine is not installed in this database. An administrator must run the latest database/complete-schema.sql before results can be accepted.':((resp&&resp.data&&(resp.data.message||resp.data.error))||'The server could not confirm this submission.');
       this.root().innerHTML =
-        '<div class="card"><h2>⚠️ Could not save online</h2>' +
-        '<p>Your answers are saved locally. Please download your result and send it to your teacher.</p>' +
-        '<a class="btn btn-primary" href="' + url + '" download="exam-backup-' + this.data.code + '.json">⬇ Download backup</a></div>';
+        '<div class="card"><h2>⚠️ Submission not confirmed</h2>' +
+        '<p>'+esc(message)+'</p><p>Your answers remain saved locally. If your teacher asks for proof, download the encrypted-safe answer payload below; it contains no answer key.</p>' +
+        '<a class="btn btn-primary" href="' + url + '" download="exam-backup-' + this.data.code + '.json">⬇ Download backup</a> <a class="btn btn-outline" href="cbt-exam.html">Return</a></div>';
       return;
     }
     const d = resp.data;
@@ -523,17 +625,19 @@ textarea.form-input{min-height:80px;resize:vertical}
     }
     const pct = d.percent != null ? d.percent : graded.percent;
     const gradeColor = pct >= 75 ? '#0506ae' : (pct >= 50 ? '#059669' : (pct >= 40 ? '#f59e0b' : '#dc2626'));
+    const subjectSummary = d.subject_scores && Object.keys(d.subject_scores).length > 1 ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;max-width:620px;margin:16px auto 0">'+Object.entries(d.subject_scores).map(([name,s])=>{const sp=Number(s.total)>0?Math.round(Number(s.score||0)/Number(s.total)*10000)/100:0;return '<div style="padding:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px"><b>'+esc(name)+'</b><div style="font-size:1.2rem;font-weight:900;color:var(--sc-primary)">'+sp+'%</div><small>'+Number(s.score||0)+' / '+Number(s.total||0)+' · '+Number(s.correct||0)+' correct</small></div>';}).join('')+'</div>' : '';
     this.root().innerHTML =
       '<div class="card" style="text-align:center;padding:40px">' +
-      '<div class="score-circle" style="background:linear-gradient(135deg,' + gradeColor + ',#964eec)"><div class="pct">' + (pct || 0) + '%</div><div class="lbl">Grade ' + (graded.grade || 'F') + '</div></div>' +
+      '<div class="score-circle" style="background:linear-gradient(135deg,' + gradeColor + ',var(--sc-accent))"><div class="pct">' + (pct || 0) + '%</div><div class="lbl">Grade ' + (d.grade || graded.grade || 'F') + '</div></div>' +
       '<h2 style="margin:0 0 8px">🎉 Exam Complete</h2>' +
-      '<p style="color:#64748b;margin:0 0 16px">' + esc(this.student.name) + ' · ' + esc(this.data.title || 'Exam') + '</p>' +
+      '<p style="color:#64748b;margin:0 0 6px">' + esc(this.student.name) + ' · ' + esc(this.data.title || 'Exam') + '</p>' +
+      '<p style="color:#16a34a;font-size:.72rem;font-weight:800;margin:0 0 16px">SERVER VERIFIED · GRADING ENGINE '+esc(d.engine_version||'v5.1')+'</p>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:520px;margin:0 auto">' +
       '<div style="padding:10px;background:#f8fafc;border-radius:10px"><div style="font-size:1.4rem;font-weight:900">' + (d.score != null ? d.score : graded.score) + '</div><div style="font-size:.7rem;color:#64748b;text-transform:uppercase">Score</div></div>' +
       '<div style="padding:10px;background:#f8fafc;border-radius:10px"><div style="font-size:1.4rem;font-weight:900">' + (d.correct_count != null ? d.correct_count : graded.correct) + '</div><div style="font-size:.7rem;color:#64748b;text-transform:uppercase">Correct</div></div>' +
       '<div style="padding:10px;background:#f8fafc;border-radius:10px"><div style="font-size:1.4rem;font-weight:900">' + (d.wrong_count != null ? d.wrong_count : graded.wrong) + '</div><div style="font-size:.7rem;color:#64748b;text-transform:uppercase">Wrong</div></div>' +
       '<div style="padding:10px;background:#f8fafc;border-radius:10px"><div style="font-size:1.4rem;font-weight:900">' + (d.skipped_count != null ? d.skipped_count : graded.skipped) + '</div><div style="font-size:.7rem;color:#64748b;text-transform:uppercase">Skipped</div></div>' +
-      '</div>' +
+      '</div>' + subjectSummary +
       (d.cert_code ? '<p style="margin-top:20px">Certificate code: <strong style="font-size:1.1rem;color:#0506ae">' + esc(d.cert_code) + '</strong></p>' : '') +
       (d.report_column ? '<p style="color:#64748b;font-size:.88rem">This result was added to the <strong>' + esc(d.report_column) + '</strong> column of your report card.</p>' : '') +
       '<p style="margin-top:20px"><a class="btn btn-primary" href="cbt.html">Back to CBT Manager</a> <a class="btn btn-outline" href="verify-certificate.html">Verify Certificate</a></p>' +
@@ -549,8 +653,8 @@ textarea.form-input{min-height:80px;resize:vertical}
         const rest = [];
         for (const p of q) {
           try {
-            const r = await window.sb.rpc('cbt_submit', { p_payload: p });
-            if (!(r && r.data && r.data.saved)) rest.push(p);
+            const r = await window.sb.rpc('cbt_submit_v5', { p_payload: Object.assign({client_engine:'v5.1'},p) });
+            if (!(r && !r.error && r.data && r.data.saved && String(r.data.engine_version||'').startsWith('v5.1'))) rest.push(p);
           } catch (_) { rest.push(p); }
         }
         localStorage.setItem('cbt-pending-queue', JSON.stringify(rest));
@@ -561,6 +665,10 @@ textarea.form-input{min-height:80px;resize:vertical}
       }
     } catch (_) {}
   })();
+
+  // Exposed for accessibility tooling, automated regression tests and the
+  // manager's safe preview—not for grading (grading remains server-authoritative).
+  window.Exam = Exam;
 
   // Start the exam
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => Exam.start());

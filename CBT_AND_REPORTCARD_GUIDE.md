@@ -1,20 +1,32 @@
-# CBT & Report Card Guide — School Connect Gen v8
+# CBT & Report Card Guide — School Connect V5.1
 
-## CBT (Computer-Based Testing)
-- Engine: `assets/js/cbt-engine.js` (17 question types, anti-cheat config, instant scoring, certificate codes).
-- Schema: **`database/complete-schema.sql` (v12.5)** — the only SQL a deployment needs. It ships the student-safe fetch RPCs `cbt_get_public_exam` / `cbt_get_public_exam_v2` (answers/explanations stripped server-side), the server-graded submit RPCs `cbt_submit` / `cbt_submit_v2` (attempt limits, close-window, shuffle-safe `_orig_index` grading, idempotent retries via `client_ref`), and `cbt_import_backup` (teacher-side import of offline backup files). Question banks live in `cbt_exams.csv_data` (legacy `cbt_exams.questions` is honoured as a fallback).
-- Pages: `assets/templates/pages/cbt.html`, `cbt-exam.html`, `cbt-multi.html`, `cbt-prompts.html`, `entrance.html`.
-- Question import: CSV upload (see `database/sample-question-bank.csv`, `database/sample-questions.csv` and `database/further_maths_sample.csv`).
-- Anonymous/entrance mode: guests can sit entrance exams; results, certificates and admission letters are generated instantly (single + bulk).
-- Offline resilience: a candidate whose submission is blocked (network drop, expired window) hands the teacher their backup file; the teacher imports it on the CBT page and `cbt_import_backup` grades it server-side exactly like a live submission.
+## Definitive CBT grading path
 
-## Report Cards
-- Engine: `assets/js/report-engine.js` — report card, broadsheet and scoresheet outputs.
-- Schema: `database/complete-schema.sql` (same single file; results/report tables, triggers and policies included).
-- Page: `assets/templates/pages/report-cards.html` — branded, printable, includes digital-library reading marks.
+- Candidate fetch: `cbt_get_public_exam` reports `engine_version: v5.1.0` and strips answer/explanation aliases case-insensitively.
+- Candidate submit: `cbt-exam.html` calls only `cbt_submit_v5` and accepts a result only when the server returns V5.1.
+- Existing database repair: back up Supabase, run `database/cbt-v5.1-zero-score-hotfix.sql`, then deploy matching CBT pages/engine. Fresh projects run `complete-schema.sql` only.
+- The browser sends answers and original bank indexes; it does not decide the official mark.
+- Server matching supports letter↔option text, true/false aliases, numeric tolerance, multi-select sets, accepted alternatives, legacy option indexes and case-insensitive fields such as `CorrectAnswer`, `Correct Answer`, `answer_key`, `correct_option` and `rightAnswer`.
+- If an objective answer key is missing, the server returns `answer_key_missing` and inserts no false-zero result.
+- CBT Manager provides **Diagnose Scoring**, **Repair Scoring** and **Repair Tabs**.
+- New/edited/appended banks are validated before publishing and both `csv_data`/`questions` stay synchronised.
+- Result rows record `engine_version`, `grading_status`, `ungraded_count` and `subject_scores`.
 
-## Flow
-1. Teacher creates exam (CBT page) → students take it (cbt-exam) →
-2. Scores pushed to report cards from the **Report Engine → “Push CBT Scores → Report Card”** button (`ReportEngine.openCBTExportModal()` / `doCBTExport()` — choose the target results column; upserts idempotently) →
-3. Report cards printed / broadcast to parents (WhatsApp / email / SMS).
-4. Punctuality Points can likewise be pushed into a chosen term-results column (`sc_push_punctuality_to_results`) from the Punctuality page.
+## Question imports
+
+Use `database/sample-question-bank.csv`, `sample-questions.csv` or `further_maths_sample.csv`. Both `CorrectAnswer` and `Correct Answer` headers work. Objective rows require a correct key. Essay/manual rows are stored for teacher review and do not expose an answer key.
+
+## Offline resilience
+
+A failed submission retains its local draft and downloadable answer payload. Authorised staff can import it through `cbt_import_backup`, which delegates to the same V5.1 matcher with idempotent `client_ref` handling.
+
+## Report cards
+
+- `assets/js/report-engine.js` creates the sample-matched report card, class broadsheet and subject broadsheet.
+- `report-cards.html` routes all three print actions through this engine.
+- `report_scores`/`assessment_columns` are authoritative; legacy `results` remains supported.
+- CBT results can be mapped to a selected report-card column through the Report Engine export workflow.
+
+## Required test
+
+After deployment, create a disposable exam containing a letter key, exact option-text key, true/false, numeric tolerance and multi-select. Submit it, then confirm the row shows `engine_version='v5.1.0'`, a nonzero score and correct counts.

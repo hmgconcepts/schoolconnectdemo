@@ -17,7 +17,7 @@
     <meta property="og:description" content="Multi-Subject CBT Builder — School Connect v5 by HMG Concepts">
     <meta property="og:url" content="./cbt-multi.html">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="School Connect v5 — God of Seed Academy">
+    <meta property="og:site_name" content="School Connect v5 — School Connect Demonstration College">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Multi-Subject CBT Builder">
     <meta name="twitter:description" content="Multi-Subject CBT Builder — School Connect v5 by HMG Concepts">
@@ -127,11 +127,15 @@ const MM = {
       const csv = b.querySelector('.ms-csv').value.trim();
       if (!name || !csv) continue;
       const qs = CBT.parseCSV(csv);
+      if(!qs.length){ alert('No valid questions were detected for '+name+'. Check the CSV header and rows.'); return; }
+      if(subjects.some(s=>s.toLowerCase()===name.toLowerCase())){alert('Each subject tab needs a unique name. Duplicate: '+name);return;}
       qs.forEach(q => { q.section = name; q.subject = name; q.subject_section = name; q.exam_subject = name; });
       subject_breakdown.push({ name, start: questions.length, count: qs.length, end: questions.length + qs.length - 1 });
       questions = questions.concat(qs); subjects.push(name);
     }
     if (subjects.length < 2) { alert('Add at least TWO subjects, each with a name and CSV questions.'); return; }
+    const bankCheck=CBT.validateQuestionBank(questions);
+    if(!bankCheck.ok){alert('Cannot publish this exam:\n\n'+bankCheck.errors.slice(0,8).join('\n'));return;}
     const exam = {
       title, subject: 'MULTI-SUBJECT: ' + subjects.join(', '), class: v('mm-class'), term: v('mm-term'), session: v('mm-session'),
       assessment_type: 'exam', topic: subjects.join(', '), report_column: v('mm-col'),
