@@ -173,9 +173,26 @@ const CBT = {
     if (opts.length) {
       const letterToText = (x) => (x.length === 1 && x >= 'a' && x <= 'z') ? opts[x.charCodeAt(0) - 97] : undefined;
       const textToLetter = (x) => { const i = opts.indexOf(x); return i >= 0 ? String.fromCharCode(97 + i) : undefined; };
-      if (letterToText(g) !== undefined && letterToText(g) === a) return true;   // given=letter, answer=text
-      if (letterToText(a) !== undefined && letterToText(a) === g) return true;   // answer=letter, given=text
+      if (letterToText(g) !== undefined && letterToText(g) === a) return true;
+      if (letterToText(a) !== undefined && letterToText(a) === g) return true;
       if (textToLetter(g) !== undefined && textToLetter(g) === a) return true;
+      // FIX: Also check if answer is the option INDEX (0,1,2,3)
+      const ansNum = Number(ans);
+      if (!isNaN(ansNum) && ansNum >= 0 && ansNum < opts.length) {
+        if (g === String.fromCharCode(97 + ansNum)) return true; // given='a', answer=0
+        if (g === opts[ansNum]) return true; // given=option text, answer=index
+      }
+      // FIX: Check if given is the option INDEX
+      const gNum = Number(given);
+      if (!isNaN(gNum) && gNum >= 0 && gNum < opts.length) {
+        if (String.fromCharCode(97 + gNum) === a) return true;
+        if (opts[gNum] === a) return true;
+      }
+    }
+    // FIX: Last resort — check if given matches any option by position
+    if (opts.length && g.length === 1 && g >= 'a' && g <= 'e') {
+      const idx = g.charCodeAt(0) - 97;
+      if (idx < opts.length && opts[idx] === a) return true;
     }
     return false;
   },
