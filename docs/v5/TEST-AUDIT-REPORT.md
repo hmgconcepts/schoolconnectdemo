@@ -6,7 +6,7 @@
 
 | Suite | Result |
 |---|---:|
-| V5.2 SQL/link/parity/security contract audit | 43 passed, 0 failed |
+| V5.2.1 SQL/link/parity/security contract audit | 45 passed, 0 failed |
 | CBT UTME tab simulation | 9 passed, 0 failed |
 | CBT browser scoring/parser unit tests | 11 passed, 0 failed |
 | Executed V5.1 SQL grading engine (PGlite) | 10/10, 100%, 5 correct; idempotence, historical regrade, redaction and missing-key guard passed |
@@ -15,8 +15,8 @@
 | Sample/receipt/fee workflow regression | 12 passed, 0 failed |
 | Role-navigation regression | passed |
 | Generator packaging contract | passed |
-| Traditional real JSZip build | 183 entries; 0 broken links; 0 orphans |
-| Modern real JSZip build | 387 entries; 0 broken links; 0 orphans |
+| Traditional real JSZip build | 184 entries; 0 broken links; 0 orphans |
+| Modern real JSZip build | 389 entries; 0 broken links; 0 orphans |
 | PostgreSQL parsing | complete schema 970 statements; demo seed 34 top-level statements |
 | Demo seed/schema column contract | 0 missing tables/columns |
 | Shared runtime parity across generator/GOSA/demo | passed |

@@ -14,7 +14,11 @@
 
 Do **not** run `demo-seed.sql` on a real school database.
 
-## B. Existing deployment upgrade (CBT V5.1 + report/bulk/access V5.2)
+## B. Existing deployment upgrade (CBT V5.1.1 + report/bulk/access V5.2)
+
+If the only current error is `column "motto" does not exist`, run the small
+`database/cbt-v5.1.1-getter-school-settings-fix.sql`, deploy the updated candidate
+page/service worker and hard-refresh. For the complete V5.2 release use the full schema.
 
 For the complete V5.2 correction, run the **full updated `complete-schema.sql`**. The focused CBT hotfix repairs only the CBT engine/getter and does not install the cumulative promotion/report integrity additions.
 
