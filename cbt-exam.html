@@ -91,7 +91,31 @@
   <div style="max-width:840px;margin:0 auto">
     <div class="card" style="text-align:center;margin-bottom:16px">
       <img src="assets/img/logo.svg" alt="" style="width:54px;height:54px;border-radius:12px;object-fit:contain">
-      <h1 style="margin:8px 0 0;font-size:1.4rem">School Connect Demonstration College — Online Exam</h1>
+      <div style="display:flex;align-items:center;gap:16px;margin-top:8px">
+        <img src="assets/img/logo.svg" alt="School Connect Demonstration College" style="width:60px;height:60px;border-radius:12px;object-fit:contain;background:white;padding:4px">
+        <div style="text-align:left">
+          <h1 style="margin:0;font-size:1.3rem">School Connect Demonstration College</h1>
+          <p style="margin:4px 0 0;font-size:.85rem;color:var(--gray-600)" id="exam-school-address"></p>
+          <p style="margin:2px 0 0;font-size:.85rem;color:var(--gray-600)" id="exam-school-contact"></p>
+        </div>
+      </div>
+      <p style="margin:8px 0 0;font-size:.9rem;color:var(--gray-500);font-style:italic" id="exam-school-motto"></p>
+      <script>
+        (function(){
+          const s = window.SCHOOL || {};
+          const addr = document.getElementById('exam-school-address');
+          const contact = document.getElementById('exam-school-contact');
+          const motto = document.getElementById('exam-school-motto');
+          if (addr) addr.textContent = s.address || '';
+          if (contact) {
+            const parts = [];
+            if (s.phone) parts.push('📞 ' + s.phone);
+            if (s.email) parts.push('✉️ ' + s.email);
+            contact.textContent = parts.join(' · ');
+          }
+          if (motto) motto.textContent = s.motto || '';
+        })();
+      </script>
     </div>
     <div id="exam-root"><div class="card"><span class="pulse">Loading…</span></div></div>
   </div>
@@ -281,6 +305,10 @@ const Exam = {
   async submit(){
     if(this._done)return; this._done=true; clearInterval(this.timer); if(this.monitor)this.monitor.stop();
     const graded=CBT.gradeSubmission(this.data,this.answers);
+    console.log('[CBT DEBUG] Grading result:', graded);
+    console.log('[CBT DEBUG] Questions count:', this.qs().length);
+    console.log('[CBT DEBUG] Answers array:', this.answers);
+    console.log('[CBT DEBUG] First 3 questions:', this.qs().slice(0,3));
     const timeTaken=Math.round((Date.now()-this.startTs)/1000);
     const payload={ exam_id:this.data.id, student_name:this.student.name, student_class:this.student.class, student_id_ref:this.student.id_ref, student_type:this.data.exam_mode,
       client_ref:this.clientRef||null,
