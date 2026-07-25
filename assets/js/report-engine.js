@@ -15,6 +15,7 @@ const ReportEngine = {
   esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); },
   n(v){ v=Number(v); return isNaN(v)?0:v; },
   fmt(v, d=2){ v=this.n(v); return Number.isInteger(v)?String(v):v.toFixed(d).replace(/\.00$/,''); },
+  scoreCell(row,field){ return row&&row._assessmentPresent&&!row._assessmentPresent[field]?'—':this.fmt(row?row[field]:null); },
   ordinal(n){ n=Number(n)||0; const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); },
   fmtDMY(v){ if(!v)return ''; const d=new Date(String(v).length===10?String(v)+'T00:00:00':v); return isNaN(d)?String(v):String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); },
   // Matches the published sample documents exactly.
@@ -77,15 +78,15 @@ const ReportEngine = {
      staff entered a subject scoresheet successfully, but printable documents
      queried only `results` and showed blank/old figures. */
   async loadAssessmentRows(ctx, students, scope){
-    const db=this.sb || (typeof sb!=='undefined'?sb:null); if(!db)return [];
+    const db=this.sb || (typeof sb!=='undefined'?sb:null); if(!db)return {rows:[],configured:false,columns:[]};
     try{
       let cq=db.from('assessment_columns').select('id,class,subject,term,session,name,max_mark,position,source').order('position').limit(1000);
       if(ctx.class)cq=cq.eq('class',ctx.class); if(ctx.term)cq=cq.eq('term',ctx.term); if(ctx.session)cq=cq.eq('session',ctx.session);
-      const cr=await cq; if(cr.error || !(cr.data||[]).length)return [];
-      const cols=cr.data||[], ids=cols.map(c=>c.id), colById=new Map(cols.map(c=>[String(c.id),c]));
+      const cr=await cq; if(cr.error || !(cr.data||[]).length)return {rows:[],configured:false,columns:[]};
+      const allCols=cr.data||[],cols=ctx.subject?allCols.filter(c=>c.subject==='*'||String(c.subject||'')===String(ctx.subject)):allCols;if(!cols.length)return {rows:[],configured:false,columns:[]};const ids=cols.map(c=>c.id);
       let sq=db.from('report_scores').select('*').in('column_id',ids).limit(10000);
       if(ctx.class)sq=sq.eq('class',ctx.class); if(ctx.subject)sq=sq.eq('subject',ctx.subject); if(ctx.term)sq=sq.eq('term',ctx.term); if(ctx.session)sq=sq.eq('session',ctx.session);
-      const sr=await sq; if(sr.error)return [];
+      const sr=await sq; if(sr.error)return {rows:[],configured:true,columns:cols,error:sr.error};
       const allowed=(sr.data||[]).filter(r=>(!ctx.student||String(r.student_name||'').toLowerCase().includes(String(ctx.student).toLowerCase()))&&this.allowRowForScope(r,scope));
       const groups=new Map();
       allowed.forEach(r=>{
@@ -94,29 +95,31 @@ const ReportEngine = {
         groups.get(key).scores.set(String(r.column_id),this.n(r.score));
       });
       const token=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'_');
-      return [...groups.values()].map(g=>{
+      const assembled=[...groups.values()].map(g=>{
         // Prefer the modern global template; otherwise use this subject's legacy columns.
         const globals=cols.filter(c=>c.subject==='*' && (!c.class||c.class===g.class));
         const specific=cols.filter(c=>String(c.subject||'')===String(g.subject||''));
         const applicable=(globals.length?globals:specific).filter(c=>g.scores.has(String(c.id)) || globals.length);
-        const out={student_id:g.student_id,student_id_ref:g.student_id_ref,student_name:g.student_name,class:g.class,subject:g.subject,term:g.term,session:g.session,project:0,ca1:0,ca2:0,cbt:0,paper:0,total:0,max:0,_assessmentMax:{project:0,ca1:0,ca2:0,cbt:0,paper:0},_assessmentValues:{}};
+        const out={student_id:g.student_id,student_id_ref:g.student_id_ref,student_name:g.student_name,class:g.class,subject:g.subject,term:g.term,session:g.session,project:null,ca1:null,ca2:null,cbt:null,paper:null,total:0,max:0,_assessmentMax:{project:0,ca1:0,ca2:0,cbt:0,paper:0},_assessmentValues:{},_assessmentPresent:{project:false,ca1:false,ca2:false,cbt:false,paper:false}};
         const used=new Set();
         applicable.forEach((c,index)=>{
-          const value=g.scores.has(String(c.id))?this.n(g.scores.get(String(c.id))):0, max=this.n(c.max_mark)||0, t=token(c.name); let field='';
+          const hasScore=g.scores.has(String(c.id)), value=hasScore?this.n(g.scores.get(String(c.id))):null, max=this.n(c.max_mark)||0, t=token(c.name); let field='';
           if(/project|practical|assignment/.test(t))field='project';
           else if(/(^|_)ca_?1($|_)|first_ca|first_test|test_?1/.test(t))field='ca1';
           else if(/(^|_)ca_?2($|_)|second_ca|second_test|test_?2/.test(t))field='ca2';
           else if(/(^|_)ca_?3($|_)|third_ca|third_test|cbt|mid_?term/.test(t))field='cbt';
           else if(/exam|terminal|paper/.test(t))field='paper';
           else field=['ca1','ca2','cbt','project','paper'].find(x=>!used.has(x))||'project';
-          used.add(field); out[field]+=value; out._assessmentMax[field]+=max; out._assessmentValues[c.name]=value; out.total+=value; out.max+=max;
+          used.add(field); out._assessmentMax[field]+=max; out._assessmentValues[c.name]=value; out.max+=max;
+          if(hasScore){out[field]=(out[field]==null?0:out[field])+value;out._assessmentPresent[field]=true;out.total+=value;}
         });
         const st=(students||[]).find(s=>(s.id&&String(s.id)===String(g.student_id))||(s.admission_no&&s.admission_no===g.student_id_ref)||(s.full_name&&String(s.full_name).toLowerCase()===String(g.student_name).toLowerCase()));
         if(st){out.student_id=out.student_id||st.id;out.student_name=out.student_name||st.full_name;out.admission_no=st.admission_no||g.student_id_ref;out.gender=st.gender||'';out.photo_url=st.photo_url||'';}
         else out.admission_no=g.student_id_ref;
         return out;
       }).filter(r=>r.max>0);
-    }catch(e){console.warn('Assessment-score adapter failed:',e);return [];}
+      return {rows:assembled,configured:true,columns:cols};
+    }catch(e){console.warn('Assessment-score adapter failed:',e);return {rows:[],configured:false,columns:[],error:e};}
   },
 
   async loadContext(ctx={}){
@@ -134,29 +137,29 @@ const ReportEngine = {
     if (subject) q = q.eq('subject', subject);
     if (term) q = q.eq('term', term);
     if (session) q = q.eq('session', session);
-    if (studentText) q = q.ilike('student_name', '%' + studentText + '%');
+    // Student name is resolved after joining the students list because many
+    // legitimate legacy results contain student_id but a blank student_name.
     const { data: rows, error } = await q;
     if (error) throw new Error(error.message);
-    let extraRows = [];
+    // V5.2 data authority: raw CBT/reading/LMS attempts are NOT injected into
+    // official reports. They appear only after an explicit push into report_scores.
+    // This removes phantom scores and prevents a raw percentage from being counted
+    // a second time alongside the pushed/scaled score.
     const familyFilter = (r) => this.allowRowForScope(r, scope);
-    try { let cq = db.from('cbt_results').select('*,cbt_exams(subject,class,term,session,report_column,max_score)').limit(5000); const cbtResults = await cq; (cbtResults.data||[]).forEach(x => { const e=x.cbt_exams||{}; const row={student_name:x.student_name, student_id_ref:x.student_id_ref, class:x.student_class||e.class, subject:e.subject||'CBT', term:e.term, session:e.session, cbt_score:x.percent, total:x.percent, max_score:100}; if (familyFilter(row)) extraRows.push(row); }); } catch(e) {}
-    try { const reading = await db.from('reading_scores').select('*').limit(5000); (reading.data||[]).forEach(x => { const row={student_name:x.student_name, class:x.class, subject:x.subject||'Digital Library', term:x.term, session:x.session, assignment:x.score, total:x.score, max_score:100}; if (familyFilter(row)) extraRows.push(row); }); } catch(e) {}
-    try { const subs = await db.from('lms_submissions').select('*,assignments(subject,class,title)').limit(5000); (subs.data||[]).forEach(x => { const a=x.assignments||{}; const row={student_id:x.student_id, student_name:x.student_name||'', class:a.class, subject:a.subject||a.title||'Assignment', term:x.term, session:x.session, assignment:x.score, total:x.score, max_score:100}; if (familyFilter(row)) extraRows.push(row); }); } catch(e) {}
 
     let sq = db.from('students').select('*').limit(5000);
     if (klass) sq = sq.eq('class', klass);
     const { data: students } = await sq;
 
     const baseRows = (scope.family ? (rows || []).filter(r => familyFilter(r)) : (rows || []));
-    let normalized = baseRows.concat(extraRows.filter(r => (!klass || r.class===klass) && (!subject || r.subject===subject) && (!term || r.term===term) && (!session || r.session===session))).map(r => this.normalizeResult(r, students || []));
-    const assessmentRows=await this.loadAssessmentRows({class:klass,subject,term,session,student:studentText},students||[],scope);
-    // Assessment rows are the source of truth for matching learner+subject rows;
-    // retain Results-only rows for backward compatibility and other assessments.
-    const key=r=>[r.student_id||'',String(r.student_name||'').toLowerCase(),r.subject||'',r.class||'',r.term||'',r.session||''].join('|');
-    const assessmentNormalized=assessmentRows.map(r=>this.normalizeResult(r,students||[]));
-    const assessmentKeys=new Set(assessmentNormalized.map(key));
-    normalized=normalized.filter(r=>!assessmentKeys.has(key(r))).concat(assessmentNormalized);
-    return { ctx:{class:klass,subject,term,session,student:studentText}, rows:normalized, students:students||[], school:this.school(), feeBalances: await this.loadFeeBalances(students||[], term, session) };
+    let legacyNormalized=baseRows.map(r=>this.normalizeResult(r,students||[])).filter(r=>!studentText||String(r.student_name||'').toLowerCase().includes(studentText.toLowerCase()));
+    const assessmentPack=await this.loadAssessmentRows({class:klass,subject,term,session,student:studentText},students||[],scope);
+    const assessmentNormalized=(assessmentPack.rows||[]).map(r=>this.normalizeResult(r,students||[]));
+    // Once assessment columns exist for this report context, report_scores is the
+    // only official source. Legacy results is a fallback solely for old contexts
+    // that have never been configured in Report Cards.
+    const normalized=assessmentPack.configured?assessmentNormalized:legacyNormalized;
+    return {ctx:{class:klass,subject,term,session,student:studentText},rows:normalized,students:students||[],school:this.school(),sourceMode:assessmentPack.configured?'report_scores':'legacy_results',assessmentColumns:assessmentPack.columns||[],feeBalances:await this.loadFeeBalances(students||[],term,session)};
   },
 
 
@@ -226,19 +229,20 @@ const ReportEngine = {
   normalizeResult(r, students){
     const name = r.student_name || r.full_name || '';
     const st = (students||[]).find(s => (s.id && s.id===r.student_id) || (s.full_name && String(s.full_name).toLowerCase()===String(name).toLowerCase()) || (s.admission_no && s.admission_no===r.student_id_ref));
-    const project = this.n(r.project ?? r.practical ?? r.assignment ?? r.ca_project ?? 0);
-    const ca1 = this.n(r.ca1 ?? r.ca_score ?? r.ca ?? 0);
-    const ca2 = this.n(r.ca2 ?? 0);
-    const cbt = this.n(r.ca3 ?? r.cbt ?? r.cbt_score ?? r.online_score ?? 0);
-    const paper = this.n(r.exam ?? r.exam_score ?? r.paper_exam ?? 0);
-    const total = this.n(r.total ?? r.total_score ?? (project+ca1+ca2+cbt+paper));
+    const ap=r._assessmentPresent||null;
+    const project = ap ? (ap.project?this.n(r.project):null) : this.n(r.project ?? r.practical ?? r.assignment ?? r.ca_project ?? 0);
+    const ca1 = ap ? (ap.ca1?this.n(r.ca1):null) : this.n(r.ca1 ?? r.ca_score ?? r.ca ?? 0);
+    const ca2 = ap ? (ap.ca2?this.n(r.ca2):null) : this.n(r.ca2 ?? 0);
+    const cbt = ap ? (ap.cbt?this.n(r.cbt):null) : this.n(r.ca3 ?? r.cbt ?? r.cbt_score ?? r.online_score ?? 0);
+    const paper = ap ? (ap.paper?this.n(r.paper):null) : this.n(r.exam ?? r.exam_score ?? r.paper_exam ?? 0);
+    const total = this.n(r.total ?? r.total_score ?? ([project,ca1,ca2,cbt,paper].reduce((a,v)=>a+this.n(v),0)));
     return {
       raw:r, student_id:r.student_id || (st&&st.id) || '', student_name:name || (st&&st.full_name) || 'Student',
       admission_no:r.admission_no || r.student_id_ref || (st&&st.admission_no) || '', class:r.class || (st&&st.class) || '',
       gender:r.gender || (st&&st.gender) || '', photo_url:r.photo_url || (st&&st.photo_url) || '',
       subject:r.subject || 'Subject', term:r.term || '', session:r.session || '',
       project, ca1, ca2, cbt, paper, total, max: this.n(r.max ?? r.max_score ?? r.obtainable ?? 100) || 100,
-      _assessmentMax:r._assessmentMax||null,_assessmentValues:r._assessmentValues||null
+      _assessmentMax:r._assessmentMax||null,_assessmentValues:r._assessmentValues||null,_assessmentPresent:r._assessmentPresent||null
     };
   },
 
@@ -276,6 +280,17 @@ const ReportEngine = {
     return `<div class="stamp-wrap re-stamp-wrap"><svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><defs><path id="${safe}TopArc" d="M 16,60 A 44,44 0 0,1 104,60" fill="none"/><path id="${safe}BotArc" d="M 18,62 A 42,42 0 0,0 102,62" fill="none"/></defs><circle cx="60" cy="60" r="55" fill="none" stroke="${color}" stroke-width="3"/><circle cx="60" cy="60" r="48" fill="none" stroke="${color}" stroke-width="1.5"/><text font-family="Georgia,serif" font-size="8" letter-spacing="1.5" font-weight="800" fill="${color}"><textPath href="#${safe}TopArc" startOffset="50%" text-anchor="middle">★ ${this.esc(String(sc.name||'SCHOOL').toUpperCase())} ★</textPath></text><text font-family="Georgia,serif" font-size="5.5" font-style="italic" fill="${color}"><textPath href="#${safe}BotArc" startOffset="50%" text-anchor="middle">${this.esc(office)}</textPath></text><text x="60" y="54" font-family="Georgia,serif" font-size="13" font-weight="900" fill="${color}" text-anchor="middle">${this.esc((sc.shortName||'SC').toUpperCase())}</text><text x="60" y="66" font-family="Georgia,serif" font-size="5" fill="${color}" text-anchor="middle">— OFFICIAL SEAL —</text><line x1="35" y1="76" x2="85" y2="76" stroke="${color}" stroke-width="0.6"/><text x="60" y="86" font-family="Georgia,serif" font-size="5.2" font-weight="700" fill="${color}" text-anchor="middle">★ AUTHENTICATED ★</text></svg></div>`;
   },
 
+  async loadPromotionStatus(studentId,studentName,term,session){
+    const db=this.sb||(typeof sb!=='undefined'?sb:null);const pending={code:'not_decided',label:'PROMOTION NOT YET DECIDED',detail:'No approved promotion decision has been recorded.',color:'#92400e',background:'#fef3c7'};if(!db||(!studentId&&!studentName))return pending;
+    try{const run=async(field,value)=>{let q=db.from('promotions').select('*').eq(field,value);if(term)q=q.eq('term',term);if(session)q=q.eq('session',session);return await q.order('created_at',{ascending:false}).limit(1);};let r=studentId?await run('student_id',studentId):{data:[]};if(!(r.data||[]).length&&studentName)r=await run('student_name',studentName);const p=(r.data||[])[0];if(!p)return pending;const action=String(p.action||'').toLowerCase(),status=String(p.status||'approved').toLowerCase(),to=p.to_class||'';
+      if(!['approved','active','completed'].includes(status))return {code:'pending',label:'PROMOTION DECISION PENDING',detail:'Recorded action: '+(action||'pending')+(to?' → '+to:''),color:'#92400e',background:'#fef3c7'};
+      if(action==='promote')return {code:'promoted',label:'PROMOTED'+(to?' TO '+String(to).toUpperCase():''),detail:'Approved promotion decision.',color:'#166534',background:'#dcfce7'};
+      if(action==='graduate')return {code:'graduated',label:'GRADUATED',detail:to?('Graduated to '+to):'Approved graduation decision.',color:'#1e40af',background:'#dbeafe'};
+      if(action==='repeat')return {code:'not_promoted',label:'NOT PROMOTED — REPEAT'+(to?' '+String(to).toUpperCase():''),detail:'Approved repeat decision.',color:'#991b1b',background:'#fee2e2'};
+      return {code:'not_promoted',label:'NOT PROMOTED',detail:'Recorded decision: '+(action||'not promoted')+(to?' → '+to:''),color:'#991b1b',background:'#fee2e2'};
+    }catch(e){console.warn('Promotion status load failed:',e);return pending;}
+  },
+
   async renderStudent(ctx){
     const data = await this.loadContext(ctx); const rows = data.rows;
     if (!rows.length) return this.empty('No result records found for this student/filter.');
@@ -283,6 +298,7 @@ const ReportEngine = {
     const studentRows = rows.filter(r => !ctx.student || r.student_name.toLowerCase().includes(String(ctx.student).toLowerCase()));
     const list = studentRows.length ? studentRows : rows;
     const first = list[0] || {}; const sc=data.school;
+    const promotion=await this.loadPromotionStatus(first.student_id,first.student_name,ctx.term||first.term,ctx.session||first.session);
     const total = list.reduce((a,b)=>a+this.n(b.total),0); const obtainable=list.reduce((a,b)=>a+this.n(b.max||100),0)||list.length*100;
     const avg = obtainable ? (total/obtainable*100) : 0;
     const bal = data.feeBalances[first.student_id] ?? data.feeBalances[String(first.student_name||'').toLowerCase()] ?? 0;
@@ -304,7 +320,7 @@ const ReportEngine = {
       const subPos = subjectPositions[r.student_name + '|' + r.subject];
       const subPosStr = subPos ? this.ordinal(subPos) : '—';
       const subjectPct=this.n(r.max)?this.n(r.total)/this.n(r.max)*100:0;
-      return `<tr><td class="left">${this.esc(r.subject)}</td><td>${this.fmt(r.ca1)}</td><td>${this.fmt(r.ca2)}</td><td>${this.fmt(r.cbt)}</td><td>${this.fmt(r.project)}</td><td>${this.fmt(r.paper)}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade">${this.grade(subjectPct)}</td><td>${subPosStr}</td><td>${this.remark(subjectPct)}</td></tr>`;
+      return `<tr><td class="left">${this.esc(r.subject)}</td><td>${this.scoreCell(r,'ca1')}</td><td>${this.scoreCell(r,'ca2')}</td><td>${this.scoreCell(r,'cbt')}</td><td>${this.scoreCell(r,'project')}</td><td>${this.scoreCell(r,'paper')}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade">${this.grade(subjectPct)}</td><td>${subPosStr}</td><td>${this.remark(subjectPct)}</td></tr>`;
     }).join('');
 
     // v5: Compute class position
@@ -322,21 +338,17 @@ const ReportEngine = {
     }catch(_){}
 
     // v5: Try to load affective/psychomotor from v9 tables or fall back to a sensible default
-    let affective = {
-      Punctuality: '5', Neatness: '5', Politeness: '5', Honesty: '5', Leadership: '4', Cooperation: '5', Attentiveness: '5', Initiative: '4'
-    };
-    let psychomotor = {
-      Handwriting: '4', 'Verbal Fluency': '5', Sports: '4', Creativity: '5', Crafts: '4', 'Handling Tools': '4', Drawing: '4', Music: '5'
-    };
+    // Never invent ratings. Empty domains print “Not rated” until a teacher
+    // explicitly saves traits for this learner/term/session.
+    let affective = {};
+    let psychomotor = {};
     try{
       const {data: aff} = await this.sb.from('affective_traits').select('*').eq('student_id', first.student_id).eq('term', first.term||'').eq('session', first.session||'').maybeSingle();
-      if(aff && aff.data) affective = Object.assign(affective, aff.data);
-      else if(aff && aff.ratings) affective = Object.assign(affective, aff.ratings);
+      if(aff) affective=Object.assign({},aff.ratings||{},aff.data||{});
     }catch(_){}
     try{
       const {data: ps} = await this.sb.from('psychomotor_traits').select('*').eq('student_id', first.student_id).eq('term', first.term||'').eq('session', first.session||'').maybeSingle();
-      if(ps && ps.data) psychomotor = Object.assign(psychomotor, ps.data);
-      else if(ps && ps.ratings) psychomotor = Object.assign(psychomotor, ps.ratings);
+      if(ps) psychomotor=Object.assign({},ps.ratings||{},ps.data||{});
     }catch(_){}
 
     const ratingLabel = (v) => {
@@ -350,8 +362,8 @@ const ReportEngine = {
       const grade = isNaN(val) ? 'B' : (val >= 5 ? 'A' : val >= 4 ? 'B' : val >= 3 ? 'C' : val >= 2 ? 'D' : 'F');
       return `<span class="re-rating re-rating-${grade.toLowerCase()}">${this.esc(val || v)}</span> <small style="font-size:0.7rem;color:#64748b">${this.esc(label)}</small>`;
     };
-    const affectiveRows = Object.entries(affective).map(([k,v]) => `<tr><td class="left">${this.esc(k)}</td><td>${ratingCell(v)}</td></tr>`).join('');
-    const psychomotorRows = Object.entries(psychomotor).map(([k,v]) => `<tr><td class="left">${this.esc(k)}</td><td>${ratingCell(v)}</td></tr>`).join('');
+    const affectiveRows = Object.keys(affective).length?Object.entries(affective).map(([k,v]) => `<tr><td class="left">${this.esc(k)}</td><td>${ratingCell(v)}</td></tr>`).join(''):'<tr><td colspan="2" style="color:#64748b">Not rated</td></tr>';
+    const psychomotorRows = Object.keys(psychomotor).length?Object.entries(psychomotor).map(([k,v]) => `<tr><td class="left">${this.esc(k)}</td><td>${ratingCell(v)}</td></tr>`).join(''):'<tr><td colspan="2" style="color:#64748b">Not rated</td></tr>';
 
     // Attendance stores dates (not term/session columns). Resolve the academic
     // period first; the former query referenced non-existent columns and always
@@ -383,8 +395,8 @@ const ReportEngine = {
         if(ct.next_term_begins) nextTermBegins = this.fmtDMY(ct.next_term_begins);
       }
     }catch(_){}
-    classTeacherComment = classTeacherComment || this.remark(avg) + '. A good performance.';
-    principalComment = principalComment || (avg >= 50 ? 'Promoted to the next class.' : 'Needs more effort in the coming term.');
+    classTeacherComment = classTeacherComment || 'No class teacher comment entered.';
+    principalComment = principalComment || 'No principal comment entered. Promotion decision is shown separately below.';
 
     // v5: Build school stamp SVG with embedded principal signature
     let sigUrl = '';
@@ -429,7 +441,7 @@ const ReportEngine = {
       <text x="60" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="4" font-weight="700" fill="${stampColor}">${new Date().toLocaleDateString()}</text>
     </svg>`;
 
-    return `<div class="report-sheet sample-report"><div class="head"><img class="logo" src="${logo}" onerror="this.style.display='none'"><div class="school"><h1>${this.esc(sc.name)}</h1><p>📍 ${this.esc(sc.address)} · 📞 ${this.esc(sc.phone)} · ✉️ ${this.esc(sc.email)}</p><p style="font-style:italic;color:#7c2d12">Motto: ${this.esc(sc.motto)}</p></div><div class="photo">${first.photo_url ? `<img src="${this.esc(first.photo_url)}" onerror="this.parentNode.innerHTML='Photo'">` : 'Student<br>Photo'}</div></div><div class="title">TERMINAL REPORT SHEET — ${this.esc(ctx.term||first.term||'TERM')}, ${this.esc(ctx.session||first.session||'SESSION')}</div><table class="info"><tr><td><b>Name:</b> ${this.esc(first.student_name)}</td><td><b>Admission No:</b> ${this.esc(first.admission_no)}</td><td><b>Class:</b> ${this.esc(first.class)}</td></tr><tr><td><b>No. in Class:</b> ${classSize}</td><td><b>Attendance:</b> ${this.esc(attendanceStr)}</td><td><b>Position:</b> <b style="color:#16a34a">${classPosition}</b></td></tr></table><table class="scores" style="margin-top:8px"><thead><tr><th class="left">SUBJECT</th><th>CA1<br>(${this.fmt(maxBands.ca1||10)})</th><th>CA2<br>(${this.fmt(maxBands.ca2||10)})</th><th>CA3 / CBT<br>(${this.fmt(maxBands.cbt||10)})</th><th>PROJECT<br>(${this.fmt(maxBands.project||10)})</th><th>EXAM<br>(${this.fmt(maxBands.paper||60)})</th><th>TOTAL<br>(100)</th><th>GRADE</th><th>POSITION</th><th>REMARK</th></tr></thead><tbody>${scoreRows}</tbody></table><table class="info" style="margin-top:8px"><tr><td><b>Total Score:</b> ${this.fmt(total)} / ${this.fmt(obtainable)}</td><td><b>Average:</b> ${this.fmt(avg,1)}%</td><td><b>Class Average:</b> ${this.fmt(classAverage,1)}%</td><td><b>Grade:</b> <span class="grade">${this.grade(avg)}</span></td></tr></table>
+    return `<div class="report-sheet sample-report"><div class="head"><img class="logo" src="${logo}" onerror="this.style.display='none'"><div class="school"><h1>${this.esc(sc.name)}</h1><p>📍 ${this.esc(sc.address)} · 📞 ${this.esc(sc.phone)} · ✉️ ${this.esc(sc.email)}</p><p style="font-style:italic;color:#7c2d12">Motto: ${this.esc(sc.motto)}</p></div><div class="photo">${first.photo_url ? `<img src="${this.esc(first.photo_url)}" onerror="this.parentNode.innerHTML='Photo'">` : 'Student<br>Photo'}</div></div><div class="title">TERMINAL REPORT SHEET — ${this.esc(ctx.term||first.term||'TERM')}, ${this.esc(ctx.session||first.session||'SESSION')}</div><table class="info"><tr><td><b>Name:</b> ${this.esc(first.student_name)}</td><td><b>Admission No:</b> ${this.esc(first.admission_no)}</td><td><b>Class:</b> ${this.esc(first.class)}</td></tr><tr><td><b>No. in Class:</b> ${classSize}</td><td><b>Attendance:</b> ${this.esc(attendanceStr)}</td><td><b>Position:</b> <b style="color:#16a34a">${classPosition}</b></td></tr></table><table class="scores" style="margin-top:8px"><thead><tr><th class="left">SUBJECT</th><th>CA1<br>(${this.fmt(maxBands.ca1||10)})</th><th>CA2<br>(${this.fmt(maxBands.ca2||10)})</th><th>CA3 / CBT<br>(${this.fmt(maxBands.cbt||10)})</th><th>PROJECT<br>(${this.fmt(maxBands.project||10)})</th><th>EXAM<br>(${this.fmt(maxBands.paper||60)})</th><th>TOTAL<br>(100)</th><th>GRADE</th><th>POSITION</th><th>REMARK</th></tr></thead><tbody>${scoreRows}</tbody></table><table class="info" style="margin-top:8px"><tr><td><b>Total Score:</b> ${this.fmt(total)} / ${this.fmt(obtainable)}</td><td><b>Average:</b> ${this.fmt(avg,1)}%</td><td><b>Class Average:</b> ${this.fmt(classAverage,1)}%</td><td><b>Grade:</b> <span class="grade">${this.grade(avg)}</span></td></tr></table><div class="promotion-status" style="margin-top:8px;padding:9px 12px;border:1.5px solid ${promotion.color};background:${promotion.background};color:${promotion.color};border-radius:8px;text-align:center"><b style="font-size:13px;letter-spacing:.7px">${this.esc(promotion.label)}</b><div style="font-size:9.5px;margin-top:2px">${this.esc(promotion.detail)}</div></div>
 <table class="info" style="margin-top:6px;background:#fffbeb;border:1px solid #fcd34d"><tr><td><b>Previous School Fees Owed:</b> <span style="color:${bal>0?'#b91c1c':'#16a34a'};font-weight:900">${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</span></td><td><b>Next Term School Bill:</b> <span style="color:#b45309;font-weight:900">${nextTermBill.fees ? (nextTermBill.currency + Number(nextTermBill.fees).toLocaleString()) : '—'} </span> <small style="color:#92400e">(${this.esc(nextTermBill.note||'Payable before resumption')})</small></td><td><b>Next Term Begins:</b> ${this.esc(nextTermBill.begins ? this.fmtDMY(nextTermBill.begins) : (nextTermBegins||'—'))}</td></tr></table><div class="traits re-traits"><div><table><tr><th colspan="2">⭐ AFFECTIVE DOMAIN</th></tr>${affectiveRows}</table></div><div><table><tr><th colspan="2">🏃 PSYCHOMOTOR DOMAIN</th></tr>${psychomotorRows}</table></div></div><table class="comments" style="margin-top:10px"><tr><td>Class Teacher's Comment</td><td>${this.esc(classTeacherComment)}</td></tr><tr><td>Principal's Comment</td><td>${this.esc(principalComment)}</td></tr><tr><td>Next Term Begins</td><td>${this.esc(nextTermBegins || sc.next_term_begins || 'See school calendar')} &nbsp;·&nbsp; <b>Fees Balance:</b> ${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</td></tr></table><div class="sig re-sig"><div><div class="re-sig-script">${this.signatureInk('teacher')}</div><div class="re-sig-line">Class Teacher's Signature</div></div><div style="position:relative">${stampEnabled ? '<div class="re-stamp-wrap">'+stampSvg+'</div><div class="re-sig-line" style="margin-top:6px">Principal\'s Signature &amp; Official Stamp</div>' : '<div class="re-sig-line">Principal\'s Signature</div>'}</div></div><p class="note">This is an official computer-generated report sheet. It carries the school stamp with embedded verification code and is valid without physical seal. Verify at the school portal.</p></div>`;
   },
 
@@ -441,7 +453,7 @@ const ReportEngine = {
     const highest=sorted.length?pct(sorted[0]):0,lowest=sorted.length?pct(sorted[sorted.length-1]):0,passRate=sorted.length?sorted.filter(r=>pct(r)>=50).length/sorted.length*100:0;
     let teacher=''; try{const tr=await this.sb.from('subjects').select('teacher').eq('name',ctx.subject||rows[0].subject).maybeSingle();teacher=(tr.data&&tr.data.teacher)||'';}catch(_){}
     const maxBands=(sorted.find(r=>r._assessmentMax)||{})._assessmentMax||{ca1:10,ca2:10,cbt:10,project:10,paper:60};
-    const body=sorted.map((r,i)=>`<tr${i===0?' class="top"':''}><td>${i+1}</td><td class="left">${this.esc(r.student_name)}</td><td>${this.esc(r.admission_no)}</td><td>${this.fmt(r.ca1)}</td><td>${this.fmt(r.ca2)}</td><td>${this.fmt(r.cbt)}</td><td>${this.fmt(r.project)}</td><td>${this.fmt(r.paper)}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade ${this.grade(pct(r))}">${this.grade(pct(r))}</td><td>${this.ordinal(i+1)}</td><td>${this.remark(pct(r))}</td></tr>`).join('');
+    const body=sorted.map((r,i)=>`<tr${i===0?' class="top"':''}><td>${i+1}</td><td class="left">${this.esc(r.student_name)}</td><td>${this.esc(r.admission_no)}</td><td>${this.scoreCell(r,'ca1')}</td><td>${this.scoreCell(r,'ca2')}</td><td>${this.scoreCell(r,'cbt')}</td><td>${this.scoreCell(r,'project')}</td><td>${this.scoreCell(r,'paper')}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade ${this.grade(pct(r))}">${this.grade(pct(r))}</td><td>${this.ordinal(i+1)}</td><td>${this.remark(pct(r))}</td></tr>`).join('');
     return `<div class="sheet subject-sheet"><h1>${this.esc(sc.name)} — SUBJECT BROADSHEET</h1><p class="meta">SUBJECT: ${this.esc(ctx.subject||rows[0].subject)} · CLASS: ${this.esc(ctx.class||rows[0].class||'')} · ${this.esc(ctx.term||rows[0].term||'TERM')}, ${this.esc(ctx.session||rows[0].session||'SESSION')} · Subject Teacher: ${this.esc(teacher||'—')} · ${sorted.length} students</p><table><thead><tr><th>S/N</th><th class="left">FULL NAME</th><th>ADM NO.</th><th>CA1 (${this.fmt(maxBands.ca1||10)})</th><th>CA2 (${this.fmt(maxBands.ca2||10)})</th><th>CA3/CBT (${this.fmt(maxBands.cbt||10)})</th><th>PROJECT (${this.fmt(maxBands.project||10)})</th><th>EXAM (${this.fmt(maxBands.paper||60)})</th><th>TOTAL (100)</th><th>GRADE</th><th>POS</th><th>REMARK</th></tr></thead><tbody>${body}</tbody></table><div class="stat"><div><b>${this.fmt(avg,1)}%</b>Subject Average</div><div><b>${this.fmt(highest,1)}</b>Highest Score</div><div><b>${this.fmt(lowest,1)}</b>Lowest Score</div><div><b>${this.fmt(passRate,1)}%</b>Pass Rate (≥50)</div></div><div class="grading-scale"><b>Grading scale:</b> A (80–100) Excellent · B (70–79) Very Good · C (60–69) Good · D (50–59) Credit · E (40–49) Pass · F (0–39) Fail</div><div class="sig"><div><div class="sig-script">${this.signatureInk('teacher')}</div><div class="sig-line">Subject Teacher's Signature</div></div><div>${this.sealSvg('subjectSeal','EXAMINATIONS OFFICE')}<div class="sig-line">Head of Department's Signature &amp; Stamp</div></div></div><p class="note">Official per-subject scoresheet. Automatic totals, grades, positions and subject statistics. Licensed Platform · HMG Technologies.</p></div>`;
   },
 
@@ -488,87 +500,81 @@ const ReportEngine = {
   },
 
 
-  // V2.1 Issue #15-16: Push CBT exam results into Results table with column selection
-  // Teacher can choose which report sheet column (CA1, CA2, CA3, CBT Exam, Exam, Project, etc) to fill
-  async pushCBTToResults(examId, column, term, session){
-    const db = this.sb || (typeof sb !== 'undefined' ? sb : null);
-    if(!db){ toast('Database not configured','warning'); return; }
-    if(!examId){ toast('Select an exam','warning'); return; }
-    if(!column){ toast('Select the report-card column created for this assessment.','warning'); return; }
-    const {data: exam, error: eErr} = await db.from('cbt_exams').select('*').eq('id', examId).maybeSingle();
-    if(eErr || !exam){ toast('Exam not found: '+(eErr?.message||''),'danger'); return; }
-    const {data: results, error} = await db.from('cbt_results').select('*').eq('exam_id', examId).limit(5000);
-    if(error){ toast('Could not load CBT results: '+error.message,'danger'); return; }
-    if(!results || !results.length){ toast('No CBT results to push yet.','info'); return; }
-    let ok=0, fail=0;
-    for(const r of results){
-      // Normalize student lookup
-      let studentId = null;
-      try{
-        const {data: st} = await db.from('students').select('id').or(`admission_no.eq.${r.student_id_ref},full_name.ilike.%${r.student_name}%`).maybeSingle();
-        if(st) studentId = st.id;
-      }catch(_){}
-      const payload = {
-        student_id: studentId,
-        student_name: r.student_name,
-        subject: exam.subject || 'CBT',
-        class: r.student_class || exam.class || '',
-        term: term || exam.term || '',
-        session: session || exam.session || '',
-        assessment_source: 'cbt',
-        assessment_ref: r.id
-      };
-      payload[column] = r.percent != null ? Math.round((Number(r.percent)/100) * (Number(exam.max_score)||20)) : (r.score||0);
-      // Use upsert by assessment_ref to avoid duplicates
-      const {error: insErr} = await db.from('results').upsert(payload, {onConflict:'assessment_source,assessment_ref'});
-      if(insErr){
-        // fallback insert
-        const {error: insErr2} = await db.from('results').insert(payload);
-        if(insErr2) fail++; else ok++;
-      } else ok++;
+  // V5.2 canonical CBT → report_scores bulk pipeline. Raw CBT attempts never
+  // enter a report until an authorised user explicitly previews and pushes them.
+  _bulkCBT:{exams:[],columns:[],counts:{},filtered:[]},
+  labelToken(v){return String(v||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');},
+  unique(values){return [...new Set((values||[]).map(v=>String(v||'').trim()).filter(Boolean))].sort();},
+  selectOptions(values,label){return '<option value="">'+this.esc(label||'All')+'</option>'+this.unique(values).map(v=>'<option value="'+this.esc(v)+'">'+this.esc(v)+'</option>').join('');},
+
+  async openBulkCBTExportModal(){
+    const db=this.sb||(typeof sb!=='undefined'?sb:null);if(!db){toast('Database not configured','warning');return;}
+    const [er,cr]=await Promise.all([
+      db.from('cbt_exams').select('id,code,title,subject,class,term,session,report_column,max_score,is_open,exam_mode,anti_cheat_config,created_at').order('created_at',{ascending:false}).limit(500),
+      db.from('assessment_columns').select('id,class,subject,term,session,name,max_mark,position,source').order('position').limit(2000)
+    ]);
+    if(er.error){toast('Could not load CBT exams: '+er.error.message,'danger');return;}
+    const exams=er.data||[];if(!exams.length){toast('No CBT exams found.','warning');return;}
+    let counts={};try{const rr=await db.from('cbt_results').select('exam_id').in('exam_id',exams.map(e=>e.id)).limit(20000);(rr.data||[]).forEach(r=>counts[r.exam_id]=(counts[r.exam_id]||0)+1);}catch(_){}
+    this._bulkCBT={exams,columns:cr.data||[],counts,filtered:[]};
+    const columnNames=this.unique((cr.data||[]).filter(c=>c.subject==='*').map(c=>c.name));
+    const body=`<div class="notice" style="background:#eff6ff;border-color:#93c5fd;color:#1e3a8a"><b>Bulk workflow — three clear steps</b><ol style="margin:6px 0 0;padding-left:20px"><li>Filter by class, subject, term and session.</li><li>Review the matching exams/results and select what to push.</li><li>Use each exam's destination or override it, then push once.</li></ol></div>
+      <div class="grid grid-2">
+       <div class="form-group"><label>Class filter</label><select id="be-class" class="form-select" onchange="ReportEngine.refreshCBTBulkPreview()">${this.selectOptions(exams.map(e=>e.class),'All classes')}</select></div>
+       <div class="form-group"><label>Subject filter</label><select id="be-subject" class="form-select" onchange="ReportEngine.refreshCBTBulkPreview()">${this.selectOptions(exams.flatMap(e=>{const a=e.anti_cheat_config&&e.anti_cheat_config.subjects;return Array.isArray(a)?a:[e.subject]}),'All subjects')}</select></div>
+       <div class="form-group"><label>Term filter</label><select id="be-term" class="form-select" onchange="ReportEngine.refreshCBTBulkPreview()">${this.selectOptions(exams.map(e=>e.term),'All terms')}</select></div>
+       <div class="form-group"><label>Session filter</label><select id="be-session" class="form-select" onchange="ReportEngine.refreshCBTBulkPreview()">${this.selectOptions(exams.map(e=>e.session),'All sessions')}</select></div>
+      </div>
+      <div class="card" style="background:#f8fafc;margin:10px 0"><h4 style="margin-top:0">Destination rule</h4>
+       <select id="be-destination" class="form-select" onchange="ReportEngine.refreshCBTBulkPreview()"><option value="__exam__">Use each exam's configured Report column (recommended)</option>${columnNames.map(n=>'<option value="'+this.esc(n)+'">Override every selected exam → '+this.esc(n)+'</option>').join('')}</select>
+       <div class="grid grid-2" style="margin-top:8px"><label><input type="checkbox" id="be-create" checked onchange="ReportEngine.refreshCBTBulkPreview()"> Create a missing global destination column automatically</label><label>Maximum mark for an auto-created column <input id="be-max" class="form-input" type="number" min="1" step="0.5" value="10" style="max-width:100px;display:inline-block"></label></div>
+       <label style="display:block;margin-top:8px"><input type="checkbox" id="be-verified" checked onchange="ReportEngine.refreshCBTBulkPreview()"> Push only V5.1 server-verified/regraded results (recommended)</label>
+      </div><div id="be-preview"><span class="pulse">Preparing preview…</span></div>`;
+    openModal('🚀 Bulk Push CBT Scores → Official Report Cards',body,'<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="ReportEngine.executeBulkCBTPush()">Push selected exams now</button>');
+    await this.refreshCBTBulkPreview();
+  },
+  openCBTExportModal(){return this.openBulkCBTExportModal();},
+
+  async refreshCBTBulkPreview(){
+    const host=document.getElementById('be-preview');if(!host)return;const val=id=>(document.getElementById(id)||{}).value||'';
+    const cls=val('be-class'),sub=val('be-subject'),term=val('be-term'),sess=val('be-session'),dest=val('be-destination')||'__exam__';
+    const filtered=(this._bulkCBT.exams||[]).filter(e=>(!cls||e.class===cls)&&(!term||e.term===term)&&(!sess||e.session===sess)&&(!sub||(String(e.subject||'').toLowerCase().includes(sub.toLowerCase())||(Array.isArray(e.anti_cheat_config&&e.anti_cheat_config.subjects)&&(e.anti_cheat_config.subjects||[]).some(x=>String(x).toLowerCase()===sub.toLowerCase())))));
+    this._bulkCBT.filtered=filtered;
+    const rows=filtered.map(e=>{const target=dest==='__exam__'?(e.report_column||'CBT / Online Exam'):dest;const col=(this._bulkCBT.columns||[]).find(c=>c.subject==='*'&&c.class===e.class&&c.term===e.term&&c.session===e.session&&this.labelToken(c.name)===this.labelToken(target));const count=this._bulkCBT.counts[e.id]||0;return '<tr><td><input class="be-exam" type="checkbox" value="'+this.esc(e.id)+'" '+(count?'checked':'disabled')+'></td><td><b>'+this.esc(e.code||'')+'</b><br><small>'+this.esc(e.title||'')+'</small></td><td>'+this.esc(e.class||'—')+'</td><td>'+this.esc(e.subject||'—')+'</td><td>'+this.esc(e.term||'—')+'<br>'+this.esc(e.session||'—')+'</td><td><b>'+count+'</b></td><td>'+this.esc(target)+(col?'<br><span style="color:#166534">Ready · max '+Number(col.max_mark||0)+'</span>':'<br><span style="color:#b45309">Missing — '+(document.getElementById('be-create')?.checked?'will be created':'enable auto-create')+'</span>')+'</td></tr>';}).join('');
+    host.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0"><b>'+filtered.length+' exam(s) match · '+filtered.reduce((a,e)=>a+(this._bulkCBT.counts[e.id]||0),0)+' result row(s)</b><label><input type="checkbox" checked onchange="document.querySelectorAll(\'.be-exam:not(:disabled)\').forEach(x=>x.checked=this.checked)"> Select all</label></div><div class="table-wrap"><table><thead><tr><th>Push</th><th>Exam</th><th>Class</th><th>Subject(s)</th><th>Term / Session</th><th>Results</th><th>Destination</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">No exams match these filters.</td></tr>')+'</tbody></table></div><p style="font-size:.8rem;color:#64748b">Scores are scaled from each verified percentage to the destination column maximum. Re-running is safe: the same learner/subject/destination row is updated, not duplicated.</p>';
+  },
+
+  async ensureCBTDestination(exam,name,maxMark,autoCreate){
+    const same=c=>(c.subject==='*'&&c.class===(exam.class||'')&&c.term===(exam.term||'')&&c.session===(exam.session||'')&&this.labelToken(c.name)===this.labelToken(name));let col=(this._bulkCBT.columns||[]).find(same);if(col)return col;
+    if(!autoCreate)throw new Error('Missing report column "'+name+'" for '+(exam.class||'class')+' · '+(exam.term||'term')+' · '+(exam.session||'session'));
+    const peers=(this._bulkCBT.columns||[]).filter(c=>c.class===(exam.class||'')&&c.term===(exam.term||'')&&c.session===(exam.session||''));const payload={class:exam.class||'',subject:'*',term:exam.term||'',session:exam.session||'',name,max_mark:Number(maxMark)||10,weight:1,position:peers.length,source:'cbt',cbt_assessment_type:exam.assessment_type||'exam',created_by:(window.SC_PROFILE&&SC_PROFILE.id)||null};
+    const res=await this.sb.from('assessment_columns').insert(payload).select().maybeSingle();if(res.error){const again=await this.sb.from('assessment_columns').select('*').eq('class',payload.class).eq('subject','*').eq('term',payload.term).eq('session',payload.session);col=(again.data||[]).find(same);if(!col)throw new Error(res.error.message);}else col=res.data;this._bulkCBT.columns.push(col);return col;
+  },
+
+  async pushOneCBTExam(exam,targetName,opts){
+    const rr=await this.sb.from('cbt_results').select('*').eq('exam_id',exam.id).limit(10000);if(rr.error)throw new Error(rr.error.message);const verifiedOnly=!!opts.verifiedOnly;let skippedLegacy=0,skippedManual=0;const rows=[];
+    for(const r of (rr.data||[])){
+      if(verifiedOnly&&!String(r.engine_version||'').startsWith('v5.1')){skippedLegacy++;continue;}if(String(r.grading_status||'graded')!=='graded'){skippedManual++;continue;}
+      let parts=[];const breakdown=r.subject_scores&&typeof r.subject_scores==='object'?r.subject_scores:{};const names=Object.keys(breakdown);
+      if(names.length){parts=names.map(subject=>{const x=breakdown[subject]||{},pct=Number(x.total)>0?Number(x.score||0)/Number(x.total)*100:0;return{subject,pct};});}
+      else {if(String(exam.subject||'').toUpperCase().startsWith('MULTI-SUBJECT')){skippedManual++;continue;}const pct=r.percent!=null?Number(r.percent):(Number(r.total)>0?Number(r.score||0)/Number(r.total)*100:0);parts=[{subject:exam.subject||'CBT',pct}];}
+      for(const part of parts){if(opts.subjectFilter&&String(part.subject).toLowerCase()!==String(opts.subjectFilter).toLowerCase())continue;rows.push({column_id:opts.column.id,student_id:r.student_id||null,student_id_ref:r.student_id_ref||'',student_name:r.student_name||'Student',class:exam.class||r.student_class||'',subject:part.subject,term:exam.term||'',session:exam.session||'',score:Math.round((part.pct/100)*Number(opts.column.max_mark||10)*100)/100,source:'cbt:'+r.id,updated_by:(window.SC_PROFILE&&SC_PROFILE.id)||null,updated_at:new Date().toISOString()});}
     }
-    toast(`✅ Pushed ${ok} CBT result(s) into Results table column ${column}. ${fail?fail+' failed.':''} Use Report Cards to see them.`, 'success', 8000);
-    if(window.App && App.logActivity) App.logActivity('push-cbt-to-results', 'results', `${ok} rows from exam ${examId} → ${column}`);
+    let saved=0;for(let i=0;i<rows.length;i+=400){const chunk=rows.slice(i,i+400),res=await this.sb.from('report_scores').upsert(chunk,{onConflict:'column_id,student_id_ref,student_name,class,subject,term,session'});if(res.error)throw new Error(res.error.message);saved+=chunk.length;}
+    return{saved,skippedLegacy,skippedManual,totalResults:(rr.data||[]).length};
   },
 
-  async reportPickerOptions(){
-    const db=this.sb || (typeof sb!=='undefined'?sb:null); const empty={terms:[],sessions:[],columns:[]}; if(!db)return empty;
-    try { const [{data:lookups},{data:columns}]=await Promise.all([db.from('lookups').select('kind,value').in('kind',['term','session']),db.from('assessment_columns').select('name,max_mark,position,subject').eq('subject','*').order('position')]);
-      const unique=(a)=>[...new Set(a.filter(Boolean))]; return {terms:unique((lookups||[]).filter(x=>x.kind==='term').map(x=>x.value)),sessions:unique((lookups||[]).filter(x=>x.kind==='session').map(x=>x.value)),columns:(columns||[])};
-    } catch(_){return empty;}
-  },
-  _options(values, selected='', label='— select —'){return '<option value="">'+this.esc(label)+'</option>'+values.map(v=>{const value=typeof v==='string'?v:(v.name||''); const text=typeof v==='string'?v:(v.name+(v.max_mark!=null?' (max '+v.max_mark+')':'')); return '<option value="'+this.esc(String(value).toLowerCase().replace(/[^a-z0-9]+/g,'_'))+'" '+(String(value).toLowerCase().replace(/[^a-z0-9]+/g,'_')===selected?'selected':'')+'>'+this.esc(text)+'</option>';}).join('');},
-  async openCBTExportModal(){
-    const db = this.sb || (typeof sb !== 'undefined' ? sb : null);
-    if(!db){ toast('Database not configured','warning'); return; }
-    const {data: exams} = await db.from('cbt_exams').select('id,title,subject,class,term,session,report_column,max_score').order('created_at',{ascending:false}).limit(100);
-    if(!exams || !exams.length){ toast('No CBT exams found','warning'); return; }
-    const examOpts = exams.map(e=>`<option value="${e.id}">${this.esc(e.title)} — ${this.esc(e.subject||'')} (${this.esc(e.class||'')}) [${this.esc(e.report_column||'CBT Exam')}]</option>`).join('');
-    const picker = await this.reportPickerOptions();
-    const colOpts = this._options(picker.columns, '', '— select report-card column —');
-    const termOpts = this._options(picker.terms, '', '— select term —');
-    const sessionOpts = this._options(picker.sessions, '', '— select session —');
-    openModal('📊 Push CBT Results → Report Card',
-      `<p style="color:var(--gray-600)">Select the CBT exam and which report sheet column its scores should fill. CBT is used for <strong>mid-term tests (CA1/CA2)</strong> and <strong>terminal exams (Exam)</strong> — mapping is now easy.</p>
-       <div class="form-group"><label>CBT Exam</label><select id="cbt-exp-exam" class="form-select">${examOpts}</select></div>
-       <div class="grid grid-3">
-         <div class="form-group"><label>Target Column</label><select id="cbt-exp-col" class="form-select">${colOpts}</select><small style="color:var(--gray-500)">Where scores go in report card</small></div>
-         <div class="form-group"><label>Term</label><select id="cbt-exp-term" class="form-select">${termOpts}</select></div>
-         <div class="form-group"><label>Session</label><select id="cbt-exp-sess" class="form-select">${sessionOpts}</select></div>
-       </div>
-       <p style="font-size:.85rem;color:var(--gray-500)">Scores are scaled to the exam's max_score (e.g. 20) and upserted into Results table. Then open <strong>Report Cards</strong> to generate broadsheet and report card — broadsheet, subject broadsheet and report card are prepared automatically.</p>`,
-      `<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="ReportEngine.doCBTExport()">🚀 Push to Report Card</button>`
-    );
+  async executeBulkCBTPush(){
+    const ids=[...document.querySelectorAll('.be-exam:checked')].map(x=>x.value);if(!ids.length){toast('Select at least one exam that has results.','warning');return;}const dest=(document.getElementById('be-destination')||{}).value||'__exam__',auto=!!document.getElementById('be-create')?.checked,maxMark=Number(document.getElementById('be-max')?.value)||10,verifiedOnly=!!document.getElementById('be-verified')?.checked,subjectFilter=(document.getElementById('be-subject')||{}).value||'';let saved=0,legacy=0,manual=0,failed=[];
+    for(const id of ids){const exam=(this._bulkCBT.exams||[]).find(e=>e.id===id);if(!exam)continue;const target=dest==='__exam__'?(exam.report_column||'CBT / Online Exam'):dest;try{const column=await this.ensureCBTDestination(exam,target,maxMark,auto),out=await this.pushOneCBTExam(exam,target,{column,verifiedOnly,subjectFilter});saved+=out.saved;legacy+=out.skippedLegacy;manual+=out.skippedManual;}catch(e){failed.push((exam.code||exam.title)+': '+(e.message||e));}}
+    if(window.App&&App.logActivity)App.logActivity('bulk-push-cbt','report_scores',saved+' report score rows from '+ids.length+' exams');closeModal();openModal('✅ Bulk CBT push complete','<div class="stats-grid"><div class="stat-card"><div class="stat-value">'+saved+'</div><div class="stat-label">Report score rows saved/updated</div></div><div class="stat-card"><div class="stat-value">'+ids.length+'</div><div class="stat-label">Exams processed</div></div><div class="stat-card"><div class="stat-value">'+legacy+'</div><div class="stat-label">Legacy rows skipped</div></div><div class="stat-card"><div class="stat-value">'+manual+'</div><div class="stat-label">Manual/multi rows skipped</div></div></div>'+(failed.length?'<div class="notice notice-error"><b>Needs attention:</b><br>'+failed.map(this.esc).join('<br>')+'</div>':'<div class="notice" style="background:#f0fdf4;border-color:#86efac;color:#166534">Official `report_scores` is now updated. Open Report Cards and generate the student/class output.</div>'),'<button class="btn btn-primary" onclick="closeModal();location.href=\'report-cards.html\'">Open Report Cards</button>');
   },
 
-  async doCBTExport(){
-    const examId=document.getElementById('cbt-exp-exam')?.value;
-    const col=document.getElementById('cbt-exp-col')?.value||'cbt';
-    const term=document.getElementById('cbt-exp-term')?.value||'';
-    const sess=document.getElementById('cbt-exp-sess')?.value||'';
-    closeModal();
-    await this.pushCBTToResults(examId, col, term, sess);
+  async pushCBTToResults(examId,column,term,session){
+    // Compatibility entry point: one exam now uses the same canonical pipeline.
+    const er=await this.sb.from('cbt_exams').select('*').eq('id',examId).maybeSingle();if(er.error||!er.data){toast('Exam not found','danger');return;}this._bulkCBT.columns=(await this.sb.from('assessment_columns').select('*').limit(2000)).data||[];const exam=Object.assign({},er.data,{term:term||er.data.term,session:session||er.data.session});try{const target=column||exam.report_column||'CBT / Online Exam',col=await this.ensureCBTDestination(exam,target,Number(exam.max_score)||10,true),out=await this.pushOneCBTExam(exam,target,{column:col,verifiedOnly:true,subjectFilter:''});toast('✅ '+out.saved+' CBT score row(s) pushed into official report scores.','success',9000);}catch(e){toast('Push failed: '+e.message,'danger',10000);}
   },
+  doCBTExport(){return this.executeBulkCBTPush();},
 
   print(title, html, landscape=false){
     const w=window.open('','_blank'); if(!w){ if(typeof toast==='function')toast('Popup blocked. Please allow popups.','warning'); return; }

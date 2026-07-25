@@ -157,7 +157,8 @@ const CRUD = {
       {key:'recorded_by',label:'Recorded by',type:'text'}
     ]},
     promotion: { table:'promotions', title:'Promotion', cols:[
-      {key:'student_name',label:'Student',type:'ref',refTable:'students',refValue:'full_name',refExtra:['class'],refStore:'value',groupBy:'class',searchable:true,autofill:{from_class:'class'}},
+      {key:'student_id',label:'Student',type:'ref',refTable:'students',refValue:'full_name',refExtra:['class','admission_no'],refStore:'id',groupBy:'class',searchable:true,autofill:{student_name:'full_name',from_class:'class'}},
+      {key:'student_name',label:'Student name (auto)',type:'text',readonly:true},
       {key:'from_class',label:'From class',type:'text'},
       {key:'to_class',label:'To class',type:'ref',refTable:'classes',refValue:'name'},
       {key:'average',label:'Term average %',type:'number',help:'auto-filled by Auto-promote'},
