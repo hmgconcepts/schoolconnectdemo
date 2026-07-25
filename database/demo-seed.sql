@@ -569,7 +569,7 @@ begin
   if (select count(*) from public.complaints) = 0 then
     insert into public.complaints (submitted_by, type, subject, body, status, urgency) values
       (coalesce((select id from sc_demo_ids where role='parent'),'00000000-0000-0000-0000-000000000000'::uuid),'Academic','Concern about Mathematics performance','My child has been struggling with Mathematics this term. Could we arrange extra coaching?','in_progress','normal'),
-      (coalesce((select id from sc_demo_ids where role='parent'),'00000000-0000-0000-0000-000000000000'::uuid),'Facilities','Broken desk in JSS 1 classroom','The desk in row 3 has a broken leg and is unsafe.','open','low'),
+      (coalesce((select id from sc_demo_ids where role='parent'),'00000000-0000-0000-0000-000000000000'::uuid),'Facilities','Broken desk in JSS 1 classroom','The desk in row 3 has a broken leg and is unsafe.','submitted','low'),
       (coalesce((select id from sc_demo_ids where role='student'),'00000000-0000-0000-0000-000000000000'::uuid),'General','Request for additional library books','We would appreciate more WAEC preparation materials.','resolved','normal');
   end if;
 
