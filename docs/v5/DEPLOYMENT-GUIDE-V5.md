@@ -14,11 +14,13 @@
 
 Do **not** run `demo-seed.sql` on a real school database.
 
-## B. Existing deployment upgrade (the required zero-score repair)
+## B. Existing deployment upgrade (CBT V5.1 + report/bulk/access V5.2)
+
+For the complete V5.2 correction, run the **full updated `complete-schema.sql`**. The focused CBT hotfix repairs only the CBT engine/getter and does not install the cumulative promotion/report integrity additions.
 
 1. Supabase → Database → Backups/export: create a restorable backup. Export `cbt_exams`, `cbt_results`, `assessment_columns`, `report_scores`, `results`, payments and identities.
 2. Put the site in a short maintenance window; do not begin an examination during the database upgrade.
-3. Run `database/cbt-v5.1-zero-score-hotfix.sql` for the focused CBT repair, or run the full new `database/complete-schema.sql` when applying all cumulative platform repairs. Do not run both in sequence; the full schema already includes the hotfix.
+3. Run the full new `database/complete-schema.sql` for V5.2. If you intentionally need only the earlier CBT repair, use `cbt-v5.1-zero-score-hotfix.sql` instead. Do not run both; the full schema includes it.
 4. Confirm SQL functions exist:
    ```sql
    select routine_name from information_schema.routines

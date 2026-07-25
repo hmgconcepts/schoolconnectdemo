@@ -6,11 +6,12 @@
 
 | Suite | Result |
 |---|---:|
-| V5.1 SQL/link/parity/security contract audit | 38 passed, 0 failed |
+| V5.2 SQL/link/parity/security contract audit | 43 passed, 0 failed |
 | CBT UTME tab simulation | 9 passed, 0 failed |
 | CBT browser scoring/parser unit tests | 11 passed, 0 failed |
 | Executed V5.1 SQL grading engine (PGlite) | 10/10, 100%, 5 correct; idempotence, historical regrade, redaction and missing-key guard passed |
-| Report-output unit tests | 4 passed, 0 failed |
+| Report-output unit tests | 5 passed, 0 failed |
+| Bulk CBT → canonical report_scores tests | 4 passed, 0 failed |
 | Sample/receipt/fee workflow regression | 12 passed, 0 failed |
 | Role-navigation regression | passed |
 | Generator packaging contract | passed |
