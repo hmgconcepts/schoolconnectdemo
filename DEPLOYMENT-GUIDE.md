@@ -12,7 +12,9 @@ Everything uses **free tools only**. No credit card, no monthly fees, no AI APIs
 > run **`database/cbt-v5.1-zero-score-hotfix.sql`**, then deploy the matching V5.1
 > CBT pages/engine. The candidate page deliberately refuses to start against an
 > old engine. In CBT Manager use **Diagnose Scoring** and **Repair Scoring** on
-> legacy exams. Fresh projects run only `complete-schema.sql`, which includes V5.1.
+> legacy exams. If the getter specifically reports `column "motto" does not exist`,
+> run `database/cbt-v5.1.1-getter-school-settings-fix.sql`. Fresh projects run only
+> `complete-schema.sql`, which includes both repairs.
 
 ---
 
