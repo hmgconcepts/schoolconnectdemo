@@ -5,7 +5,17 @@ self-contained, dependency-ordered, idempotent v12 schema for a **fresh** deploy
 and it also **repairs** older School Connect databases (missing tables, columns, unique
 keys, policies) without touching your data.
 
-> **Self-sufficiency contract (v12.5):** apart from the two optional demo packs
+## CBT V5.1 zero-score repair
+
+For an **existing** database where correct CBT attempts are stored as zero, back up
+Supabase and run `cbt-v5.1-zero-score-hotfix.sql`, then deploy the matching V5.1
+`cbt-exam.html`, `cbt.html`, `cbt-multi.html` and `assets/js/cbt-engine.js` files.
+The hotfix is executed against an embedded PostgreSQL-compatible engine by
+`tools/test-cbt-sql-engine.mjs`: mixed legacy key names score 10/10, retries are
+idempotent, public questions contain no answer aliases, and a missing key fails
+loudly instead of saving a false zero. Fresh projects only need the complete schema.
+
+> **Self-sufficiency contract (V5.1):** apart from the two optional demo packs
 > (`demo-users.sql`, `demo-seed.sql` — demo deployments only), `complete-schema.sql`
 > is the **ONLY** SQL a School Connect deployment ever needs. Every table,
 > constraint, index, policy, trigger, view and **every RPC the client code calls**
@@ -13,7 +23,8 @@ keys, policies) without touching your data.
 > **only** to bring *already-live* older projects up to date without a full re-run.
 
 Files:
-- `complete-schema.sql` — **run this** (currently **v12.5**; ends with PostgREST cache reload).
+- `complete-schema.sql` — **fresh install / cumulative full repair**; includes CBT V5.1 and ends with PostgREST cache reload.
+- `cbt-v5.1-zero-score-hotfix.sql` — focused existing-database repair; do not use instead of the full schema on a fresh project.
 - `complete-schema-v12-clean.sql` — identical named copy (kept byte-in-sync with `complete-schema.sql`).
 - `complete-schema-v11-LEGACY-MERGED.sql` — historical reference only; do NOT run on new projects.
 - `*.csv` — import templates & sample question banks.
