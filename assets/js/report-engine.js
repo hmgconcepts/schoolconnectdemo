@@ -16,8 +16,10 @@ const ReportEngine = {
   n(v){ v=Number(v); return isNaN(v)?0:v; },
   fmt(v, d=2){ v=this.n(v); return Number.isInteger(v)?String(v):v.toFixed(d).replace(/\.00$/,''); },
   ordinal(n){ n=Number(n)||0; const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); },
-  grade(score){ score=this.n(score); if(score>=75)return'A1'; if(score>=70)return'B2'; if(score>=65)return'B3'; if(score>=60)return'C4'; if(score>=55)return'C5'; if(score>=50)return'C6'; if(score>=45)return'D7'; if(score>=40)return'E8'; return'F9'; },
-  remark(score){ const g=this.grade(score); return {A1:'Excellent',B2:'Very good',B3:'Good',C4:'Credit',C5:'Credit',C6:'Credit',D7:'Pass',E8:'Pass',F9:'Fail'}[g]||''; },
+  fmtDMY(v){ if(!v)return ''; const d=new Date(String(v).length===10?String(v)+'T00:00:00':v); return isNaN(d)?String(v):String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); },
+  // Matches the published sample documents exactly.
+  grade(score){ score=this.n(score); if(score>=80)return'A'; if(score>=70)return'B'; if(score>=60)return'C'; if(score>=50)return'D'; if(score>=40)return'E'; return'F'; },
+  remark(score){ const g=this.grade(score); return {A:'Excellent',B:'Very Good',C:'Good',D:'Credit',E:'Pass',F:'Fail'}[g]||''; },
 
 
 
@@ -70,6 +72,53 @@ const ReportEngine = {
     };
   },
 
+  /* Convert the canonical assessment_columns + report_scores model into the
+     sample document's five score bands. This removes the old split-brain bug:
+     staff entered a subject scoresheet successfully, but printable documents
+     queried only `results` and showed blank/old figures. */
+  async loadAssessmentRows(ctx, students, scope){
+    const db=this.sb || (typeof sb!=='undefined'?sb:null); if(!db)return [];
+    try{
+      let cq=db.from('assessment_columns').select('id,class,subject,term,session,name,max_mark,position,source').order('position').limit(1000);
+      if(ctx.class)cq=cq.eq('class',ctx.class); if(ctx.term)cq=cq.eq('term',ctx.term); if(ctx.session)cq=cq.eq('session',ctx.session);
+      const cr=await cq; if(cr.error || !(cr.data||[]).length)return [];
+      const cols=cr.data||[], ids=cols.map(c=>c.id), colById=new Map(cols.map(c=>[String(c.id),c]));
+      let sq=db.from('report_scores').select('*').in('column_id',ids).limit(10000);
+      if(ctx.class)sq=sq.eq('class',ctx.class); if(ctx.subject)sq=sq.eq('subject',ctx.subject); if(ctx.term)sq=sq.eq('term',ctx.term); if(ctx.session)sq=sq.eq('session',ctx.session);
+      const sr=await sq; if(sr.error)return [];
+      const allowed=(sr.data||[]).filter(r=>(!ctx.student||String(r.student_name||'').toLowerCase().includes(String(ctx.student).toLowerCase()))&&this.allowRowForScope(r,scope));
+      const groups=new Map();
+      allowed.forEach(r=>{
+        const key=[r.student_id||'',r.student_id_ref||'',String(r.student_name||'').toLowerCase(),r.subject||''].join('|');
+        if(!groups.has(key))groups.set(key,{student_id:r.student_id||'',student_id_ref:r.student_id_ref||'',student_name:r.student_name||'',class:r.class||ctx.class||'',subject:r.subject||'Subject',term:r.term||ctx.term||'',session:r.session||ctx.session||'',scores:new Map()});
+        groups.get(key).scores.set(String(r.column_id),this.n(r.score));
+      });
+      const token=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'_');
+      return [...groups.values()].map(g=>{
+        // Prefer the modern global template; otherwise use this subject's legacy columns.
+        const globals=cols.filter(c=>c.subject==='*' && (!c.class||c.class===g.class));
+        const specific=cols.filter(c=>String(c.subject||'')===String(g.subject||''));
+        const applicable=(globals.length?globals:specific).filter(c=>g.scores.has(String(c.id)) || globals.length);
+        const out={student_id:g.student_id,student_id_ref:g.student_id_ref,student_name:g.student_name,class:g.class,subject:g.subject,term:g.term,session:g.session,project:0,ca1:0,ca2:0,cbt:0,paper:0,total:0,max:0,_assessmentMax:{project:0,ca1:0,ca2:0,cbt:0,paper:0},_assessmentValues:{}};
+        const used=new Set();
+        applicable.forEach((c,index)=>{
+          const value=g.scores.has(String(c.id))?this.n(g.scores.get(String(c.id))):0, max=this.n(c.max_mark)||0, t=token(c.name); let field='';
+          if(/project|practical|assignment/.test(t))field='project';
+          else if(/(^|_)ca_?1($|_)|first_ca|first_test|test_?1/.test(t))field='ca1';
+          else if(/(^|_)ca_?2($|_)|second_ca|second_test|test_?2/.test(t))field='ca2';
+          else if(/(^|_)ca_?3($|_)|third_ca|third_test|cbt|mid_?term/.test(t))field='cbt';
+          else if(/exam|terminal|paper/.test(t))field='paper';
+          else field=['ca1','ca2','cbt','project','paper'].find(x=>!used.has(x))||'project';
+          used.add(field); out[field]+=value; out._assessmentMax[field]+=max; out._assessmentValues[c.name]=value; out.total+=value; out.max+=max;
+        });
+        const st=(students||[]).find(s=>(s.id&&String(s.id)===String(g.student_id))||(s.admission_no&&s.admission_no===g.student_id_ref)||(s.full_name&&String(s.full_name).toLowerCase()===String(g.student_name).toLowerCase()));
+        if(st){out.student_id=out.student_id||st.id;out.student_name=out.student_name||st.full_name;out.admission_no=st.admission_no||g.student_id_ref;out.gender=st.gender||'';out.photo_url=st.photo_url||'';}
+        else out.admission_no=g.student_id_ref;
+        return out;
+      }).filter(r=>r.max>0);
+    }catch(e){console.warn('Assessment-score adapter failed:',e);return [];}
+  },
+
   async loadContext(ctx={}){
     const db = this.sb || (typeof sb !== 'undefined' ? sb : null);
     if (!db) throw new Error('Database not configured. Add Supabase keys in assets/js/config.js.');
@@ -99,7 +148,14 @@ const ReportEngine = {
     const { data: students } = await sq;
 
     const baseRows = (scope.family ? (rows || []).filter(r => familyFilter(r)) : (rows || []));
-    const normalized = baseRows.concat(extraRows.filter(r => (!klass || r.class===klass) && (!subject || r.subject===subject) && (!term || r.term===term) && (!session || r.session===session))).map(r => this.normalizeResult(r, students || []));
+    let normalized = baseRows.concat(extraRows.filter(r => (!klass || r.class===klass) && (!subject || r.subject===subject) && (!term || r.term===term) && (!session || r.session===session))).map(r => this.normalizeResult(r, students || []));
+    const assessmentRows=await this.loadAssessmentRows({class:klass,subject,term,session,student:studentText},students||[],scope);
+    // Assessment rows are the source of truth for matching learner+subject rows;
+    // retain Results-only rows for backward compatibility and other assessments.
+    const key=r=>[r.student_id||'',String(r.student_name||'').toLowerCase(),r.subject||'',r.class||'',r.term||'',r.session||''].join('|');
+    const assessmentNormalized=assessmentRows.map(r=>this.normalizeResult(r,students||[]));
+    const assessmentKeys=new Set(assessmentNormalized.map(key));
+    normalized=normalized.filter(r=>!assessmentKeys.has(key(r))).concat(assessmentNormalized);
     return { ctx:{class:klass,subject,term,session,student:studentText}, rows:normalized, students:students||[], school:this.school(), feeBalances: await this.loadFeeBalances(students||[], term, session) };
   },
 
@@ -181,7 +237,8 @@ const ReportEngine = {
       admission_no:r.admission_no || r.student_id_ref || (st&&st.admission_no) || '', class:r.class || (st&&st.class) || '',
       gender:r.gender || (st&&st.gender) || '', photo_url:r.photo_url || (st&&st.photo_url) || '',
       subject:r.subject || 'Subject', term:r.term || '', session:r.session || '',
-      project, ca1, ca2, cbt, paper, total, max: this.n(r.max_score || r.obtainable || 100) || 100
+      project, ca1, ca2, cbt, paper, total, max: this.n(r.max ?? r.max_score ?? r.obtainable ?? 100) || 100,
+      _assessmentMax:r._assessmentMax||null,_assessmentValues:r._assessmentValues||null
     };
   },
 
@@ -213,6 +270,12 @@ const ReportEngine = {
     </div>`;
   },
 
+  sealSvg(id='doc',office='EXAMINATIONS OFFICE'){
+    const sc=this.school(),st=window.SC_SETTINGS||{},color=st.stamp_color||'#7f1d1d',safe=String(id).replace(/[^a-z0-9_-]/gi,'');
+    if(st.stamp_enabled===false)return '<div style="height:90px"></div>';
+    return `<div class="stamp-wrap re-stamp-wrap"><svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><defs><path id="${safe}TopArc" d="M 16,60 A 44,44 0 0,1 104,60" fill="none"/><path id="${safe}BotArc" d="M 18,62 A 42,42 0 0,0 102,62" fill="none"/></defs><circle cx="60" cy="60" r="55" fill="none" stroke="${color}" stroke-width="3"/><circle cx="60" cy="60" r="48" fill="none" stroke="${color}" stroke-width="1.5"/><text font-family="Georgia,serif" font-size="8" letter-spacing="1.5" font-weight="800" fill="${color}"><textPath href="#${safe}TopArc" startOffset="50%" text-anchor="middle">★ ${this.esc(String(sc.name||'SCHOOL').toUpperCase())} ★</textPath></text><text font-family="Georgia,serif" font-size="5.5" font-style="italic" fill="${color}"><textPath href="#${safe}BotArc" startOffset="50%" text-anchor="middle">${this.esc(office)}</textPath></text><text x="60" y="54" font-family="Georgia,serif" font-size="13" font-weight="900" fill="${color}" text-anchor="middle">${this.esc((sc.shortName||'SC').toUpperCase())}</text><text x="60" y="66" font-family="Georgia,serif" font-size="5" fill="${color}" text-anchor="middle">— OFFICIAL SEAL —</text><line x1="35" y1="76" x2="85" y2="76" stroke="${color}" stroke-width="0.6"/><text x="60" y="86" font-family="Georgia,serif" font-size="5.2" font-weight="700" fill="${color}" text-anchor="middle">★ AUTHENTICATED ★</text></svg></div>`;
+  },
+
   async renderStudent(ctx){
     const data = await this.loadContext(ctx); const rows = data.rows;
     if (!rows.length) return this.empty('No result records found for this student/filter.');
@@ -227,20 +290,21 @@ const ReportEngine = {
     const subjectClassAvg = (sub) => {
       const subRows = rows.filter(r => r.class === first.class && r.subject === sub);
       if (!subRows.length) return '—';
-      const sum = subRows.reduce((acc, r) => acc + Number(r.total || 0), 0);
+      const sum = subRows.reduce((acc, r) => acc + (this.n(r.max)?this.n(r.total)/this.n(r.max)*100:0), 0);
       return (sum / subRows.length).toFixed(1);
     };
     // Compute per-subject positions within the class
     const subjectPositions = {};
     const allSubjects = [...new Set(list.map(r => r.subject))];
     allSubjects.forEach(sub => {
-      const subRows = rows.filter(r => r.subject === sub && r.class === first.class).sort((a,b) => this.n(b.total) - this.n(a.total));
+      const subRows = rows.filter(r => r.subject === sub && r.class === first.class).sort((a,b) => (this.n(b.max)?this.n(b.total)/this.n(b.max):0) - (this.n(a.max)?this.n(a.total)/this.n(a.max):0));
       subRows.forEach((r, idx) => { subjectPositions[r.student_name + '|' + sub] = idx + 1; });
     });
     const scoreRows = list.map(r => {
       const subPos = subjectPositions[r.student_name + '|' + r.subject];
       const subPosStr = subPos ? this.ordinal(subPos) : '—';
-      return `<tr><td class="left">${this.esc(r.subject)}</td><td>${this.fmt(r.ca1)}</td><td>${this.fmt(r.ca2)}</td><td>${this.fmt(r.cbt)}</td><td>${this.fmt(r.project)}</td><td>${this.fmt(r.paper)}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade">${this.grade(r.total)}</td><td>${subPosStr}</td><td>${this.remark(r.total)}</td></tr>`;
+      const subjectPct=this.n(r.max)?this.n(r.total)/this.n(r.max)*100:0;
+      return `<tr><td class="left">${this.esc(r.subject)}</td><td>${this.fmt(r.ca1)}</td><td>${this.fmt(r.ca2)}</td><td>${this.fmt(r.cbt)}</td><td>${this.fmt(r.project)}</td><td>${this.fmt(r.paper)}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade">${this.grade(subjectPct)}</td><td>${subPosStr}</td><td>${this.remark(subjectPct)}</td></tr>`;
     }).join('');
 
     // v5: Compute class position
@@ -289,14 +353,18 @@ const ReportEngine = {
     const affectiveRows = Object.entries(affective).map(([k,v]) => `<tr><td class="left">${this.esc(k)}</td><td>${ratingCell(v)}</td></tr>`).join('');
     const psychomotorRows = Object.entries(psychomotor).map(([k,v]) => `<tr><td class="left">${this.esc(k)}</td><td>${ratingCell(v)}</td></tr>`).join('');
 
-    // v5: Get attendance for the term
+    // Attendance stores dates (not term/session columns). Resolve the academic
+    // period first; the former query referenced non-existent columns and always
+    // printed an em dash on otherwise complete report cards.
     let attendanceStr = '—';
     try{
-      const {data: att} = await this.sb.from('attendance').select('*').eq('student_id', first.student_id).eq('term', first.term||'').eq('session', first.session||'');
-      if(att && att.length){
-        const present = att.filter(a => String(a.status).toLowerCase()==='present').length;
-        attendanceStr = `${present} / ${att.length} days`;
-      }
+      let aq=this.sb.from('attendance').select('date,status').eq('student_id',first.student_id).order('date');
+      try{
+        const pr=await this.sb.from('academic_periods').select('starts_on,ends_on').eq('term',first.term||ctx.term||'').eq('session',first.session||ctx.session||'').maybeSingle();
+        if(pr.data&&pr.data.starts_on)aq=aq.gte('date',pr.data.starts_on); if(pr.data&&pr.data.ends_on)aq=aq.lte('date',pr.data.ends_on);
+      }catch(_){}
+      const {data:att}=await aq;
+      if(att&&att.length){const present=att.filter(a=>['present','late'].includes(String(a.status).toLowerCase())).length;attendanceStr=`${present} / ${att.length} days`;}
     }catch(_){}
 
     // V2.1 Issue #17: Load next term fees bill for report card
@@ -333,6 +401,12 @@ const ReportEngine = {
     const stampColor = settings.stamp_color || sc.stamp_color || '#1e3a8a';
     const stampText = settings.stamp_text || sc.stamp_text || 'OFFICIAL SCHOOL SEAL';
 
+    const maxBands=list.find(r=>r._assessmentMax)?list.find(r=>r._assessmentMax)._assessmentMax:{ca1:10,ca2:10,cbt:10,project:10,paper:60};
+    const classLearnerAverages={};
+    rows.filter(r=>r.class===first.class).forEach(r=>{const k=r.student_name;(classLearnerAverages[k]||(classLearnerAverages[k]={got:0,max:0}));classLearnerAverages[k].got+=this.n(r.total);classLearnerAverages[k].max+=this.n(r.max);});
+    const classAvgValues=Object.values(classLearnerAverages).map(x=>x.max?x.got/x.max*100:0);
+    const classAverage=classAvgValues.length?classAvgValues.reduce((a,b)=>a+b,0)/classAvgValues.length:0;
+
     const stampSvg = `<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" class="re-stamp" style="position:relative">
       <defs>
         <path id="stampTopArc_${first.student_id||'r'}" d="M 16,60 A 44,44 0 0,1 104,60" fill="none"/>
@@ -355,28 +429,41 @@ const ReportEngine = {
       <text x="60" y="88" text-anchor="middle" font-family="Arial, sans-serif" font-size="4" font-weight="700" fill="${stampColor}">${new Date().toLocaleDateString()}</text>
     </svg>`;
 
-    return `<div class="report-sheet sample-report"><div class="head"><img class="logo" src="${logo}" onerror="this.style.display='none'"><div class="school"><h1>${this.esc(sc.name)}</h1><p>📍 ${this.esc(sc.address)} · 📞 ${this.esc(sc.phone)} · ✉️ ${this.esc(sc.email)}</p><p style="font-style:italic;color:#7c2d12">Motto: ${this.esc(sc.motto)}</p></div><div class="photo">${first.photo_url ? `<img src="${this.esc(first.photo_url)}" onerror="this.parentNode.innerHTML='Photo'">` : 'Student<br>Photo'}</div></div><div class="title">TERMINAL REPORT SHEET — ${this.esc(ctx.term||first.term||'TERM')}, ${this.esc(ctx.session||first.session||'SESSION')}</div><table class="info"><tr><td><b>Name:</b> ${this.esc(first.student_name)}</td><td><b>Admission No:</b> ${this.esc(first.admission_no)}</td><td><b>Class:</b> ${this.esc(first.class)}</td></tr><tr><td><b>No. in Class:</b> ${classSize}</td><td><b>Attendance:</b> ${this.esc(attendanceStr)}</td><td><b>Position:</b> <b style="color:#16a34a">${classPosition}</b></td></tr></table><table class="scores" style="margin-top:8px"><thead><tr><th class="left">SUBJECT</th><th>CA1<br>(10)</th><th>CA2<br>(10)</th><th>CA3<br>(10)</th><th>PROJECT<br>(10)</th><th>EXAM<br>(60)</th><th>TOTAL<br>(100)</th><th>GRADE</th><th>POSITION</th><th>REMARK</th></tr></thead><tbody>${scoreRows}</tbody></table><table class="info" style="margin-top:8px"><tr><td><b>Total Score:</b> ${this.fmt(total)} / ${this.fmt(obtainable)}</td><td><b>Average:</b> ${this.fmt(avg,1)}%</td><td><b>Fees Balance:</b> ${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</td><td><b>Grade:</b> <span class="grade">${this.grade(avg)}</span></td></tr></table>
-<table class="info" style="margin-top:6px;background:#fffbeb;border:1px solid #fcd34d"><tr><td><b>Previous School Fees Owed:</b> <span style="color:${bal>0?'#b91c1c':'#16a34a'};font-weight:900">${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</span></td><td><b>Next Term School Bill:</b> <span style="color:#b45309;font-weight:900">${nextTermBill.fees ? (nextTermBill.currency + Number(nextTermBill.fees).toLocaleString()) : '—'} </span> <small style="color:#92400e">(${this.esc(nextTermBill.note||'Payable before resumption')})</small></td><td><b>Next Term Begins:</b> ${this.esc(nextTermBill.begins ? this.fmtDMY(nextTermBill.begins) : (nextTermBegins||'—'))}</td></tr></table><div class="traits re-traits"><div><table><tr><th colspan="2">⭐ AFFECTIVE DOMAIN</th></tr>${affectiveRows}</table></div><div><table><tr><th colspan="2">🏃 PSYCHOMOTOR DOMAIN</th></tr>${psychomotorRows}</table></div></div><table class="comments" style="margin-top:10px"><tr><td>Class Teacher's Comment</td><td>${this.esc(classTeacherComment)}</td></tr><tr><td>Principal's Comment</td><td>${this.esc(principalComment)}</td></tr><tr><td>Next Term Begins</td><td>${this.esc(nextTermBegins || sc.next_term_begins || 'See school calendar')} &nbsp;·&nbsp; <b>Fees Balance:</b> ${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</td></tr></table><div class="sig re-sig"><div><div class="re-sig-script">${this.signatureBlock('teacher')}</div><div class="re-sig-line">Class Teacher's Signature</div></div><div style="position:relative">${stampEnabled ? '<div class="re-stamp-wrap">'+stampSvg+'</div><div class="re-sig-line" style="margin-top:6px">Principal\'s Signature &amp; Official Stamp</div>' : '<div class="re-sig-line">Principal\'s Signature</div>'}</div></div><p class="note">This is an official computer-generated report sheet. It carries the school stamp with embedded verification code and is valid without physical seal. Verify at the school portal.</p></div>`;
+    return `<div class="report-sheet sample-report"><div class="head"><img class="logo" src="${logo}" onerror="this.style.display='none'"><div class="school"><h1>${this.esc(sc.name)}</h1><p>📍 ${this.esc(sc.address)} · 📞 ${this.esc(sc.phone)} · ✉️ ${this.esc(sc.email)}</p><p style="font-style:italic;color:#7c2d12">Motto: ${this.esc(sc.motto)}</p></div><div class="photo">${first.photo_url ? `<img src="${this.esc(first.photo_url)}" onerror="this.parentNode.innerHTML='Photo'">` : 'Student<br>Photo'}</div></div><div class="title">TERMINAL REPORT SHEET — ${this.esc(ctx.term||first.term||'TERM')}, ${this.esc(ctx.session||first.session||'SESSION')}</div><table class="info"><tr><td><b>Name:</b> ${this.esc(first.student_name)}</td><td><b>Admission No:</b> ${this.esc(first.admission_no)}</td><td><b>Class:</b> ${this.esc(first.class)}</td></tr><tr><td><b>No. in Class:</b> ${classSize}</td><td><b>Attendance:</b> ${this.esc(attendanceStr)}</td><td><b>Position:</b> <b style="color:#16a34a">${classPosition}</b></td></tr></table><table class="scores" style="margin-top:8px"><thead><tr><th class="left">SUBJECT</th><th>CA1<br>(${this.fmt(maxBands.ca1||10)})</th><th>CA2<br>(${this.fmt(maxBands.ca2||10)})</th><th>CA3 / CBT<br>(${this.fmt(maxBands.cbt||10)})</th><th>PROJECT<br>(${this.fmt(maxBands.project||10)})</th><th>EXAM<br>(${this.fmt(maxBands.paper||60)})</th><th>TOTAL<br>(100)</th><th>GRADE</th><th>POSITION</th><th>REMARK</th></tr></thead><tbody>${scoreRows}</tbody></table><table class="info" style="margin-top:8px"><tr><td><b>Total Score:</b> ${this.fmt(total)} / ${this.fmt(obtainable)}</td><td><b>Average:</b> ${this.fmt(avg,1)}%</td><td><b>Class Average:</b> ${this.fmt(classAverage,1)}%</td><td><b>Grade:</b> <span class="grade">${this.grade(avg)}</span></td></tr></table>
+<table class="info" style="margin-top:6px;background:#fffbeb;border:1px solid #fcd34d"><tr><td><b>Previous School Fees Owed:</b> <span style="color:${bal>0?'#b91c1c':'#16a34a'};font-weight:900">${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</span></td><td><b>Next Term School Bill:</b> <span style="color:#b45309;font-weight:900">${nextTermBill.fees ? (nextTermBill.currency + Number(nextTermBill.fees).toLocaleString()) : '—'} </span> <small style="color:#92400e">(${this.esc(nextTermBill.note||'Payable before resumption')})</small></td><td><b>Next Term Begins:</b> ${this.esc(nextTermBill.begins ? this.fmtDMY(nextTermBill.begins) : (nextTermBegins||'—'))}</td></tr></table><div class="traits re-traits"><div><table><tr><th colspan="2">⭐ AFFECTIVE DOMAIN</th></tr>${affectiveRows}</table></div><div><table><tr><th colspan="2">🏃 PSYCHOMOTOR DOMAIN</th></tr>${psychomotorRows}</table></div></div><table class="comments" style="margin-top:10px"><tr><td>Class Teacher's Comment</td><td>${this.esc(classTeacherComment)}</td></tr><tr><td>Principal's Comment</td><td>${this.esc(principalComment)}</td></tr><tr><td>Next Term Begins</td><td>${this.esc(nextTermBegins || sc.next_term_begins || 'See school calendar')} &nbsp;·&nbsp; <b>Fees Balance:</b> ${bal===0?'₦0 (FULLY PAID)':'₦'+Number(bal).toLocaleString()}</td></tr></table><div class="sig re-sig"><div><div class="re-sig-script">${this.signatureInk('teacher')}</div><div class="re-sig-line">Class Teacher's Signature</div></div><div style="position:relative">${stampEnabled ? '<div class="re-stamp-wrap">'+stampSvg+'</div><div class="re-sig-line" style="margin-top:6px">Principal\'s Signature &amp; Official Stamp</div>' : '<div class="re-sig-line">Principal\'s Signature</div>'}</div></div><p class="note">This is an official computer-generated report sheet. It carries the school stamp with embedded verification code and is valid without physical seal. Verify at the school portal.</p></div>`;
   },
 
   async renderSubject(ctx){
     const data=await this.loadContext(ctx); const rows=data.rows; if(!rows.length)return this.empty('No subject score records found.');
-    const sc=data.school; const sorted=rows.slice().sort((a,b)=>this.n(b.total)-this.n(a.total));
-    const avg=sorted.length?sorted.reduce((a,b)=>a+this.n(b.total),0)/sorted.length:0;
-    const body=sorted.map((r,i)=>`<tr${i===0?' class="top"':''}><td>${i+1}</td><td class="left">${this.esc(r.student_name)}</td><td>${this.esc(r.admission_no)}</td><td>${this.fmt(r.ca1)}</td><td>${this.fmt(r.ca2)}</td><td>${this.fmt(r.cbt)}</td><td>${this.fmt(r.project)}</td><td>${this.fmt(r.paper)}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade">${this.grade(r.total)}</td><td>${this.ordinal(i+1)}</td><td>${this.remark(r.total)}</td></tr>`).join('');
-    return `<div class="sheet subject-sheet"><h1>${this.esc(sc.name)} — SUBJECT BROADSHEET</h1><p class="meta">${this.esc(ctx.term||'TERM')} · ${this.esc(ctx.session||'SESSION')} · CLASS: ${this.esc(ctx.class||'')} · SUBJECT: ${this.esc(ctx.subject||rows[0].subject)} · Class Average: ${this.fmt(avg,1)}%</p><table><thead><tr><th>S/N</th><th class="left">FULL NAME</th><th>ADM NO.</th><th>CA1 (10)</th><th>CA2 (10)</th><th>CA3 (10)</th><th>PROJECT (10)</th><th>EXAM (60)</th><th>TOTAL (100)</th><th>GRADE</th><th>POS</th><th>REMARK</th></tr></thead><tbody>${body}</tbody></table><div class="stat"><div><b>${sorted.length}</b>Candidates</div><div><b>${this.fmt(avg,1)}%</b>Average</div><div><b>${this.fmt((sorted[0]||{}).total||0)}</b>Highest</div><div><b>${this.fmt((sorted[sorted.length-1]||{}).total||0)}</b>Lowest</div></div><div class="sig"><div>Subject Teacher</div><div>Head of Department</div></div><p class="note">SAMPLE-style subject broadsheet. Licensed Platform · HMG Technologies.</p></div>`;
+    const sc=data.school; const pct=r=>this.n(r.max)?this.n(r.total)/this.n(r.max)*100:0;
+    const sorted=rows.slice().sort((a,b)=>pct(b)-pct(a));
+    const avg=sorted.length?sorted.reduce((a,b)=>a+pct(b),0)/sorted.length:0;
+    const highest=sorted.length?pct(sorted[0]):0,lowest=sorted.length?pct(sorted[sorted.length-1]):0,passRate=sorted.length?sorted.filter(r=>pct(r)>=50).length/sorted.length*100:0;
+    let teacher=''; try{const tr=await this.sb.from('subjects').select('teacher').eq('name',ctx.subject||rows[0].subject).maybeSingle();teacher=(tr.data&&tr.data.teacher)||'';}catch(_){}
+    const maxBands=(sorted.find(r=>r._assessmentMax)||{})._assessmentMax||{ca1:10,ca2:10,cbt:10,project:10,paper:60};
+    const body=sorted.map((r,i)=>`<tr${i===0?' class="top"':''}><td>${i+1}</td><td class="left">${this.esc(r.student_name)}</td><td>${this.esc(r.admission_no)}</td><td>${this.fmt(r.ca1)}</td><td>${this.fmt(r.ca2)}</td><td>${this.fmt(r.cbt)}</td><td>${this.fmt(r.project)}</td><td>${this.fmt(r.paper)}</td><td><b>${this.fmt(r.total)}</b></td><td class="grade ${this.grade(pct(r))}">${this.grade(pct(r))}</td><td>${this.ordinal(i+1)}</td><td>${this.remark(pct(r))}</td></tr>`).join('');
+    return `<div class="sheet subject-sheet"><h1>${this.esc(sc.name)} — SUBJECT BROADSHEET</h1><p class="meta">SUBJECT: ${this.esc(ctx.subject||rows[0].subject)} · CLASS: ${this.esc(ctx.class||rows[0].class||'')} · ${this.esc(ctx.term||rows[0].term||'TERM')}, ${this.esc(ctx.session||rows[0].session||'SESSION')} · Subject Teacher: ${this.esc(teacher||'—')} · ${sorted.length} students</p><table><thead><tr><th>S/N</th><th class="left">FULL NAME</th><th>ADM NO.</th><th>CA1 (${this.fmt(maxBands.ca1||10)})</th><th>CA2 (${this.fmt(maxBands.ca2||10)})</th><th>CA3/CBT (${this.fmt(maxBands.cbt||10)})</th><th>PROJECT (${this.fmt(maxBands.project||10)})</th><th>EXAM (${this.fmt(maxBands.paper||60)})</th><th>TOTAL (100)</th><th>GRADE</th><th>POS</th><th>REMARK</th></tr></thead><tbody>${body}</tbody></table><div class="stat"><div><b>${this.fmt(avg,1)}%</b>Subject Average</div><div><b>${this.fmt(highest,1)}</b>Highest Score</div><div><b>${this.fmt(lowest,1)}</b>Lowest Score</div><div><b>${this.fmt(passRate,1)}%</b>Pass Rate (≥50)</div></div><div class="grading-scale"><b>Grading scale:</b> A (80–100) Excellent · B (70–79) Very Good · C (60–69) Good · D (50–59) Credit · E (40–49) Pass · F (0–39) Fail</div><div class="sig"><div><div class="sig-script">${this.signatureInk('teacher')}</div><div class="sig-line">Subject Teacher's Signature</div></div><div>${this.sealSvg('subjectSeal','EXAMINATIONS OFFICE')}<div class="sig-line">Head of Department's Signature &amp; Stamp</div></div></div><p class="note">Official per-subject scoresheet. Automatic totals, grades, positions and subject statistics. Licensed Platform · HMG Technologies.</p></div>`;
   },
 
   async renderClass(ctx){
     const data=await this.loadContext(ctx); const rows=data.rows; if(!rows.length)return this.empty('No class score records found.');
     const sc=data.school; const subjects=this.subjects(rows); const students=this.studentsFromRows(rows);
-    const aggregates=students.map(st=>{ const sr=rows.filter(r=>r.student_name===st); const total=sr.reduce((a,b)=>a+this.n(b.total),0); const max=subjects.length*100; const avg=max?total/subjects.length:0; return {st,sr,total,max,avg}; }).sort((a,b)=>b.avg-a.avg);
+    const aggregates=students.map(st=>{const sr=rows.filter(r=>r.student_name===st),total=sr.reduce((a,b)=>a+this.n(b.total),0),max=sr.reduce((a,b)=>a+this.n(b.max),0)||subjects.length*100,avg=max?total/max*100:0;return{st,sr,total,max,avg};}).sort((a,b)=>b.avg-a.avg);
     const classAvg=aggregates.reduce((a,b)=>a+b.avg,0)/(aggregates.length||1);
-    const body=aggregates.map((x,i)=>`<tr${i===0?' class="top"':''}><td>${i+1}</td><td class="left"><b>${this.esc(x.st)}</b></td><td>${this.esc((x.sr[0]||{}).admission_no||'')}</td>${subjects.map(s=>{const r=x.sr.find(y=>y.subject===s);return '<td>'+(r?this.fmt(r.total):'-')+'</td>';}).join('')}<td><b>${this.fmt(x.total)}</b></td><td>${this.fmt(x.avg,1)}</td><td>${this.ordinal(i+1)}</td><td>${this.grade(x.avg)}</td><td>${this.remark(x.avg)}</td></tr>`).join('');
-    return `<div class="sheet class-sheet"><h1>${this.esc(sc.name)} — CLASS BROADSHEET</h1><p class="meta">${this.esc(ctx.term||'TERM')} · ${this.esc(ctx.session||'SESSION')} · CLASS: ${this.esc(ctx.class||'')} · ${students.length} students · Class Average: ${this.fmt(classAvg,1)}% · Max obtainable per subject: 100</p><table><thead><tr><th>S/N</th><th class="left">FULL NAME</th><th>ADM NO.</th>${subjects.map(s=>'<th class="rot"><span>'+this.esc(s)+'</span></th>').join('')}<th>TOTAL</th><th>AVG %</th><th>POS</th><th>GRADE</th><th>REMARK</th></tr></thead><tbody>${body}</tbody></table><div class="grading-scale" style="margin-top:8px;font-size:9px;color:#475569;display:flex;gap:12px;flex-wrap:wrap;justify-content:center"><b style="color:#0c4a6e">Grading scale:</b> A (80–100) Excellent · B (70–79) Very Good · C (60–69) Good · D (50–59) Credit · E (40–49) Pass · F (0–39) Fail</div><div class="sig" style="display:flex;justify-content:space-between;margin-top:20px;font-size:11px;text-align:center;align-items:flex-end;gap:20px"><div style="width:200px"><div style="font-family:'Segoe Script',cursive;color:#0c4a6e;font-size:1.3rem;height:34px;display:flex;align-items:center;justify-content:center;padding-bottom:4px">&nbsp;</div><div style="border-top:1.5px solid #111;padding-top:6px;font-weight:700">Class Teacher's Signature</div></div><div style="width:200px"><div style="font-family:'Segoe Script',cursive;color:#0c4a6e;font-size:1.3rem;height:34px;display:flex;align-items:center;justify-content:center;padding-bottom:4px">&nbsp;</div><div style="border-top:1.5px solid #111;padding-top:6px;font-weight:700">Principal's Signature &amp; Stamp</div></div></div><p class="note">Official class broadsheet. One row per student, one column per subject, automatic totals/averages/positions/grades. Landscape A4.</p></div>`;
+    const body=aggregates.map((x,i)=>`<tr${i===0?' class="top"':''}><td>${i+1}</td><td class="left"><b>${this.esc(x.st)}</b></td><td>${this.esc((x.sr[0]||{}).admission_no||'')}</td>${subjects.map(s=>{const r=x.sr.find(y=>y.subject===s);return '<td>'+(r?this.fmt(this.n(r.max)?this.n(r.total)/this.n(r.max)*100:r.total):'-')+'</td>';}).join('')}<td><b>${this.fmt(x.total)}</b></td><td>${this.fmt(x.avg,1)}</td><td>${this.ordinal(i+1)}</td><td>${this.grade(x.avg)}</td><td>${this.remark(x.avg)}</td></tr>`).join('');
+    return `<div class="sheet class-sheet"><h1>${this.esc(sc.name)} — CLASS BROADSHEET</h1><p class="meta">${this.esc(ctx.term||rows[0].term||'TERM')} · ${this.esc(ctx.session||rows[0].session||'SESSION')} · CLASS: ${this.esc(ctx.class||rows[0].class||'')} · ${students.length} students · Class Average: ${this.fmt(classAvg,1)}% · Max obtainable per subject: 100</p><table><thead><tr><th>S/N</th><th class="left">FULL NAME</th><th>ADM NO.</th>${subjects.map(s=>'<th class="rot"><span>'+this.esc(s)+'</span></th>').join('')}<th>TOTAL</th><th>AVG %</th><th>POS</th><th>GRADE</th><th>REMARK</th></tr></thead><tbody>${body}</tbody></table><div class="grading-scale"><b>Grading scale:</b> A (80–100) Excellent · B (70–79) Very Good · C (60–69) Good · D (50–59) Credit · E (40–49) Pass · F (0–39) Fail</div><div class="sig"><div><div class="sig-script">${this.signatureInk('teacher')}</div><div class="sig-line">Class Teacher's Signature</div></div><div>${this.sealSvg('classSeal','EXAMINATIONS OFFICE')}<div class="sig-line">Principal's Signature &amp; Stamp</div></div></div><p class="note">Official class broadsheet. One row per student, one column per subject, automatic totals, averages, positions and grades. Landscape A4. Licensed Platform · HMG Technologies.</p></div>`;
   },
 
   empty(msg){ return `<div class="card"><h3>No output generated</h3><p>${this.esc(msg)}</p></div>`; },
+
+  signatureInk(kind){
+    const sc=window.SCHOOL||{},st=window.SC_SETTINGS||{},isTeacher=kind==='teacher';let url='',name='';
+    try{url=localStorage.getItem(isTeacher?'sc-class-teacher-signature-url':'sc-signature-url')||'';name=localStorage.getItem(isTeacher?'sc-class-teacher-name':'sc-principal-name')||'';}catch(_){}
+    url=url||st[isTeacher?'class_teacher_signature_url':'signature_url']||sc[isTeacher?'classTeacherSignature':'signatureUrl']||'';
+    name=name||st[isTeacher?'class_teacher_name':'principal_name']||sc[isTeacher?'classTeacherName':'principalName']||(isTeacher?'Class Teacher':'Principal');
+    if(url){const direct=(window.Super&&Super.idcard&&Super.idcard.driveDirect)?Super.idcard.driveDirect(url):url;return '<img src="'+this.esc(direct)+'" referrerpolicy="no-referrer" style="max-width:170px;max-height:54px;object-fit:contain;mix-blend-mode:multiply;filter:contrast(1.35) brightness(1.06)" onerror="this.style.display=\'none\'">';}
+    return '<span style="font-family:\'Segoe Script\',cursive;color:#1e2a5e;font-size:1.15rem">'+this.esc(name)+'</span>';
+  },
 
   signatureBlock(kind){
     // ENTERPRISE V6 (issue 10): the principal's signature now resolves from
@@ -487,11 +574,13 @@ const ReportEngine = {
     const w=window.open('','_blank'); if(!w){ if(typeof toast==='function')toast('Popup blocked. Please allow popups.','warning'); return; }
     const sig = this.signatureBlock();
     const st=window.SC_SETTINGS||{}, color=st.stamp_color||'#1e3a8a', label=this.esc((st.stamp_text||'OFFICIAL SCHOOL SEAL').toUpperCase());
-    const stamp=st.stamp_enabled===false?'':'<div style="margin:20px auto;text-align:center"><div style="display:inline-flex;width:112px;height:112px;border:3px double '+color+';border-radius:50%;align-items:center;justify-content:center;color:'+color+';font:900 10px Arial;text-align:center;padding:16px;transform:rotate(-6deg)">'+label+'</div><div style="font-size:10px;font-weight:700">Official School Stamp</div></div>';
-    w.document.open(); w.document.write(`<!DOCTYPE html><html><head><title>${this.esc(title)}</title><base href="${document.baseURI.replace(/[^/]*$/,'')}">${this.printCSS(landscape)}</head><body>${html}${stamp}${sig}<script>window.onload=function(){setTimeout(function(){window.print()},400)};<\/script></body></html>`); w.document.close(); w.focus();
+    const embedded=/(re-sig|re-stamp-wrap|stamp-wrap)/.test(String(html||''));
+    const stamp=embedded||st.stamp_enabled===false?'':'<div style="margin:20px auto;text-align:center"><div style="display:inline-flex;width:112px;height:112px;border:3px double '+color+';border-radius:50%;align-items:center;justify-content:center;color:'+color+';font:900 10px Arial;text-align:center;padding:16px;transform:rotate(-6deg)">'+label+'</div><div style="font-size:10px;font-weight:700">Official School Stamp</div></div>';
+    const signature=embedded?'':sig;
+    w.document.open(); w.document.write(`<!DOCTYPE html><html><head><title>${this.esc(title)}</title><base href="${document.baseURI.replace(/[^/]*$/,'')}">${this.printCSS(landscape)}</head><body>${html}${stamp}${signature}<script>window.onload=function(){var imgs=[].slice.call(document.images),left=imgs.length,done=function(){if(--left<=0)setTimeout(function(){window.print()},250)};if(!left)return setTimeout(function(){window.print()},250);imgs.forEach(function(i){if(i.complete)done();else{i.onload=done;i.onerror=done}});setTimeout(function(){window.print()},2500)};<\/script></body></html>`); w.document.close(); w.focus();
   },
   printCSS(landscape=false){ return `<style>
-    @page{size:A4 ${landscape?'landscape':'portrait'};margin:${landscape?'8mm':'10mm'}}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:16px}.sheet,.report-sheet{background:#fff;padding:${landscape?'20px':'24px'};max-width:${landscape?'1100px':'760px'};margin:0 auto}.head{display:flex;align-items:center;gap:12px;border-bottom:3px solid #111;padding-bottom:8px}.logo{width:58px;height:58px;border-radius:12px;object-fit:contain}.school{flex:1;text-align:center}.school h1,h1{font-family:Georgia,serif;color:#008c7a;text-align:center;margin:0;font-size:${landscape?'22px':'21px'}}.school p{margin:2px 0;font-size:11px;color:#334155}.photo{width:82px;height:92px;border:1px dashed #94a3b8;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:#64748b;overflow:hidden}.photo img{width:100%;height:100%;object-fit:cover}.title{text-align:center;background:#008c7a;color:#fff;font-weight:800;margin:8px 0;padding:5px;letter-spacing:.5px}.meta{text-align:center;font-size:11px;margin:6px 0 10px;color:#334155}table{width:100%;border-collapse:collapse}.info td,.scores th,.scores td,.traits th,.traits td,.comments td,th,td{border:1px solid #222;padding:${landscape?'3px 4px':'4px 6px'};font-size:${landscape?'9.5px':'10.5px'};text-align:center}th,.scores th,.traits th{background:#008c7a;color:#fff}.scores tr:nth-child(even),.traits tr:nth-child(even),tr:nth-child(even){background:#e6f7f4}.left{text-align:left!important;white-space:nowrap}.rot{height:96px;vertical-align:bottom}.rot span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-weight:700}.top{background:#fef9c3!important}.grade{font-weight:800;color:#16a34a}.traits{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}.comments td:first-child{width:170px;font-weight:700}.sig,.re-sig{display:flex;justify-content:space-between;margin-top:28px;font-size:11px;text-align:center;align-items:flex-end;gap:20px}.sig div,.re-sig>div{width:210px}.re-sig-script{font-family:'Segoe Script','Lucida Handwriting',cursive;color:#0c4a6e;font-size:1.4rem;height:38px;display:flex;align-items:center;justify-content:center;padding-bottom:4px}.re-sig-line{border-top:1.5px solid #111;padding-top:6px;font-weight:700}.re-stamp-wrap{width:130px;height:130px;display:inline-block;position:relative;margin:0 auto}.re-stamp{width:100%;height:100%;opacity:.92;transform:rotate(-6deg);filter:drop-shadow(2px 4px 6px rgba(0,0,0,0.1))}.re-stamp image{mix-blend-mode:multiply;filter:contrast(1.3) brightness(1.1)}.re-rating{display:inline-block;padding:1px 8px;border-radius:8px;font-weight:800;background:#e0e7ff;color:#3730a3;min-width:24px;text-align:center}.re-rating-a{background:#dcfce7;color:#166a34}.re-rating-b{background:#dbeafe;color:#1e40af}.re-rating-c{background:#fef3c7;color:#92400e}.re-rating-d,.re-rating-e,.re-rating-f{background:#fee2e2;color:#991b1b}.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.stat div{border:1px solid #c7d2fe;border-radius:10px;padding:8px;text-align:center;background:#eef2ff}.stat b{display:block;font-size:16px;color:#4f46e5}.note{margin-top:12px;font-size:9.5px;color:#94a3b8;text-align:center}.doc-signature{text-align:center;margin-top:18px;page-break-inside:avoid}@media print{body{background:#fff;padding:0}.sheet,.report-sheet{box-shadow:none}button{display:none!important}}</style>`; }
+    @page{size:A4 ${landscape?'landscape':'portrait'};margin:${landscape?'8mm':'10mm'}}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;background:#fff;margin:0;padding:16px}.sheet,.report-sheet{background:#fff;padding:${landscape?'20px':'24px'};max-width:${landscape?'1100px':'760px'};margin:0 auto}.head{display:flex;align-items:center;gap:12px;border-bottom:3px solid #111;padding-bottom:8px}.logo{width:58px;height:58px;border-radius:12px;object-fit:contain}.school{flex:1;text-align:center}.school h1,h1{font-family:Georgia,serif;color:#008c7a;text-align:center;margin:0;font-size:${landscape?'22px':'21px'}}.school p{margin:2px 0;font-size:11px;color:#334155}.photo{width:82px;height:92px;border:1px dashed #94a3b8;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:#64748b;overflow:hidden}.photo img{width:100%;height:100%;object-fit:cover}.title{text-align:center;background:#008c7a;color:#fff;font-weight:800;margin:8px 0;padding:5px;letter-spacing:.5px}.meta{text-align:center;font-size:11px;margin:6px 0 10px;color:#334155}table{width:100%;border-collapse:collapse}.info td,.scores th,.scores td,.traits th,.traits td,.comments td,th,td{border:1px solid #222;padding:${landscape?'3px 4px':'4px 6px'};font-size:${landscape?'9.5px':'10.5px'};text-align:center}th,.scores th,.traits th{background:#008c7a;color:#fff}.scores tr:nth-child(even),.traits tr:nth-child(even),tr:nth-child(even){background:#e6f7f4}.left{text-align:left!important;white-space:nowrap}.rot{height:96px;vertical-align:bottom}.rot span{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-weight:700}.top{background:#fef9c3!important}.grade{font-weight:800;color:#16a34a}.traits{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}.comments td:first-child{width:170px;font-weight:700}.sig,.re-sig{display:flex;justify-content:space-between;margin-top:28px;font-size:11px;text-align:center;align-items:flex-end;gap:20px}.sig>div,.re-sig>div{width:210px}.sig-script,.re-sig-script{font-family:'Segoe Script','Lucida Handwriting',cursive;color:#0c4a6e;font-size:1.3rem;min-height:38px;display:flex;align-items:center;justify-content:center;padding-bottom:4px}.sig-line,.re-sig-line{border-top:1.5px solid #111;padding-top:6px;font-weight:700}.re-stamp-wrap{width:130px;height:130px;display:inline-block;position:relative;margin:0 auto}.re-stamp{width:100%;height:100%;opacity:.92;transform:rotate(-6deg);filter:drop-shadow(2px 4px 6px rgba(0,0,0,0.1))}.re-stamp image{mix-blend-mode:multiply;filter:contrast(1.3) brightness(1.1)}.re-rating{display:inline-block;padding:1px 8px;border-radius:8px;font-weight:800;background:#e0e7ff;color:#3730a3;min-width:24px;text-align:center}.re-rating-a{background:#dcfce7;color:#166a34}.re-rating-b{background:#dbeafe;color:#1e40af}.re-rating-c{background:#fef3c7;color:#92400e}.re-rating-d,.re-rating-e,.re-rating-f{background:#fee2e2;color:#991b1b}.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.stat div{border:1px solid #c7d2fe;border-radius:10px;padding:8px;text-align:center;background:#eef2ff}.stat b{display:block;font-size:16px;color:#4f46e5}.grading-scale{margin-top:10px;font-size:9.5px;color:#475569;display:flex;gap:14px;flex-wrap:wrap;justify-content:center}.grading-scale b{color:#4f46e5}.note{margin-top:12px;font-size:9.5px;color:#94a3b8;text-align:center}.doc-signature{text-align:center;margin-top:18px;page-break-inside:avoid}@media print{body{background:#fff;padding:0}.sheet,.report-sheet{box-shadow:none}button{display:none!important}}</style>`; }
 
 };
 if (typeof sb !== 'undefined') ReportEngine.init(sb);

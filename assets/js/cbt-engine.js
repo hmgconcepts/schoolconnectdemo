@@ -30,12 +30,32 @@ const CBT = {
 
   normalizeQuestion(q, idx) {
     q = q || {};
+    const canonKey = k => String(k||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const keyMap = Object.keys(q).reduce((m,k)=>{m[canonKey(k)]=k;return m;},{});
+    const pick = (...names) => { for(const name of names){const k=keyMap[canonKey(name)];if(k!=null&&q[k]!=null)return q[k];} return undefined; };
     // ENTERPRISE V6 (issue 12): normalise every spelling — true/false, true-false,
     // tf, boolean, truefalse — to the canonical 'true_false' so options render.
-    let type = String(q.type || q.question_type || 'mcq').toLowerCase().replace(/[\s\/\\-]+/g,'_');
+    let type = String(pick('type','question_type','questionType') || 'mcq').toLowerCase().replace(/[\s\/\\-]+/g,'_');
     if (['tf','boolean','truefalse','true_or_false','yes_no','yesno'].includes(type)) type = 'true_false';
-    let options = Array.isArray(q.options) ? q.options.slice() : [];
-    if (!options.length) ['a','b','c','d','e','option_a','option_b','option_c','option_d','option_e','opt_a','opt_b','opt_c','opt_d'].forEach(k => { if (q[k] != null && String(q[k]).trim() !== '') options.push(String(q[k])); });
+    if (['multiplechoice','multiple_choice','single_choice','singlechoice','objective'].includes(type)) type = 'mcq';
+    if (['mrq','multiple_response','multiple_responses','multiple_select','multiselect','checkbox','checkboxes'].includes(type)) type = 'multi_select';
+    if (['number','integer','decimal','calculation'].includes(type)) type = 'numeric';
+    if (['short','text','free_text'].includes(type)) type = 'short_answer';
+    const rawOptions=pick('options','choices','alternatives','answers');
+    let options = Array.isArray(rawOptions) ? rawOptions.slice() : [];
+    if (!options.length && rawOptions && typeof rawOptions === 'object') options=Object.values(rawOptions);
+    if (!options.length && typeof rawOptions === 'string' && rawOptions.trim()) {
+      try { const parsed=JSON.parse(rawOptions); if(Array.isArray(parsed)) options=parsed.slice(); }
+      catch(_) { options=rawOptions.split(/\s*[|;]\s*/).filter(Boolean); }
+    }
+    options=options.map(o=>o&&typeof o==='object'?(o.text??o.label??o.value??JSON.stringify(o)):String(o));
+    // Read one naming family at a time. Canonical key lookup accepts A,
+    // Option A, option_a, choiceA and legacy spreadsheet spellings.
+    if (!options.length) {
+      for (const keys of [['a','option_a','opt_a','choice_a','option1'],['b','option_b','opt_b','choice_b','option2'],['c','option_c','opt_c','choice_c','option3'],['d','option_d','opt_d','choice_d','option4'],['e','option_e','opt_e','choice_e','option5']]) {
+        const value=pick(...keys); if(value!=null && String(value).trim()!=='') options.push(String(value));
+      }
+    }
     // FIX V3: If options still empty but answer is a number, try choices/alternatives
     if (!options.length && (q.choices || q.alternatives)) {
       const src = q.choices || q.alternatives;
@@ -47,21 +67,27 @@ const CBT = {
       [1,2,3,4,5].forEach(k => { if (q[k] != null && String(q[k]).trim() !== '') options.push(String(q[k])); });
     }
     if (type === 'true_false') options = ['True','False'];  // always exactly True/False (issue 12)
-    const answer = q.answer != null ? q.answer : (q.correct != null ? q.correct : q.correct_answer);
+    let answer = pick('answer','correct','correct_answer','correctAnswer','correct answer','answer_key','answerKey','correct_option','correctOption','key');
+    if(answer && typeof answer==='object' && !Array.isArray(answer)) answer=answer.value??answer.answer??answer.key??answer.text??answer.label;
+    if(type==='multi_select' && typeof answer==='string') answer=answer.split(/\s*[,;|]\s*/).filter(Boolean);
     return {
-      id: q.id || ('q' + (idx + 1)),
-      _orig_index: q._orig_index != null ? Number(q._orig_index) : (q.orig_index != null ? Number(q.orig_index) : idx),
+      id: pick('id') || ('q' + (idx + 1)),
+      _orig_index: pick('_orig_index','orig_index') != null ? Number(pick('_orig_index','orig_index')) : idx,
       type,
-      question: q.question || q.prompt || q.text || '',
+      question: pick('question','prompt','text','question_text','questionText') || '',
       options,
       answer,
       correct: answer,
-      explanation: q.explanation || '',
-      mark: Number(q.mark || q.score || 1) || 1,
-      section: q.section || q.subject_section || q.subject || '',
-      subject: q.subject || q.section || q.subject_section || '',
-      difficulty: q.difficulty || '',
-      tolerance: q.tolerance || q.accept || ''
+      explanation: pick('explanation','reason','solution') || '',
+      mark: Number(pick('mark','marks','score','points') || 1) || 1,
+      section: pick('section','subject_section','subject','exam_subject') || '',
+      subject: pick('subject','section','subject_section','exam_subject') || '',
+      difficulty: pick('difficulty','level') || '',
+      tolerance: pick('tolerance','accept','margin') || '',
+      accepted_answers: pick('accept','accepted_answers','alternatives') || '',
+      passage: pick('passage','context','case_text','comprehension') || '',
+      media_url: pick('media_url','media','image_url','image','audio_url','video_url') || '',
+      metadata: pick('metadata') || null
     };
   },
 
@@ -131,6 +157,7 @@ const CBT = {
       // FIX V3: More lenient skip detection — only skip if truly empty
       if (given == null || given === undefined) { skipped++; return; }
       if (typeof given === 'string' && given.trim() === '') { skipped++; return; }
+      if (Array.isArray(given) && given.length === 0) { skipped++; return; }
       const ok = this.isCorrect(q, given);
       if (ok) { score += mark; correct++; }
       else { score -= Number(exam.negative_mark || 0) || 0; wrong++; }
@@ -142,9 +169,27 @@ const CBT = {
   },
 
   isCorrect(q, given) {
-    const norm = v => String(v == null ? '' : v).trim().toLowerCase();
-    let g = norm(given);
+    const norm = v => String(v == null ? '' : v).trim().toLowerCase().replace(/\s+/g,' ');
     const ans = q.answer != null ? q.answer : q.correct;
+    const opts = (q.options || []).map(norm);
+    const canonicalOption = v => {
+      const x=norm(v);
+      if (/^[a-z]$/.test(x)) { const i=x.charCodeAt(0)-97; if(opts[i]!=null)return opts[i]; }
+      return x;
+    };
+    const tokens = v => {
+      if (Array.isArray(v)) return v.map(canonicalOption).filter(Boolean);
+      if (v && typeof v === 'object') return Object.values(v).map(canonicalOption).filter(Boolean);
+      let s=String(v==null?'':v).trim();
+      if (/^\s*\[/.test(s)) { try { const p=JSON.parse(s); if(Array.isArray(p))return p.map(canonicalOption).filter(Boolean); } catch(_){} }
+      return s.split(/\s*[,;|]\s*/).map(canonicalOption).filter(Boolean);
+    };
+    if (String(q.type||'').toLowerCase()==='multi_select') {
+      const a=[...new Set(tokens(ans))].sort(), gset=[...new Set(tokens(given))].sort();
+      return a.length>0 && a.length===gset.length && a.every((x,i)=>x===gset[i]);
+    }
+    let g = norm(given);
+    // For non-multi questions an answer array means accepted alternatives.
     if (Array.isArray(ans)) return ans.map(norm).includes(g);
     if (q.type === 'numeric') {
       const tol = Math.abs(Number(q.tolerance)) || 0.0001;
@@ -169,7 +214,6 @@ const CBT = {
     // ENTERPRISE V6 (issue 12 grading): students answer option questions with a
     // LETTER (A/B/C/D) while teachers may store the answer as the option TEXT
     // (e.g. "True") — or vice-versa. Accept both directions.
-    const opts = (q.options || []).map(norm);
     if (opts.length) {
       const letterToText = (x) => (x.length === 1 && x >= 'a' && x <= 'z') ? opts[x.charCodeAt(0) - 97] : undefined;
       const textToLetter = (x) => { const i = opts.indexOf(x); return i >= 0 ? String.fromCharCode(97 + i) : undefined; };
@@ -218,7 +262,7 @@ const CBT = {
   // slim list is a few KB. Full rows are still fetched per-exam whenever the
   // teacher edits, previews, exports or appends questions.
   async listExams() { if (!this._sb) return {data:null,error:{message:'Database not configured'}}; return await this._sb.from('cbt_exams').select('id,code,title,subject,class,term,session,assessment_type,report_column,max_score,duration,duration_min,attempt_limit,select_count,randomise,negative_mark,exam_mode,is_open,is_archived,is_entrance,pass_mark,release_results,anti_cheat_config,certificate_enabled,start_at,close_at,teacher_id,created_at,updated_at').order('created_at',{ascending:false}).limit(100); },
-  async createExam(exam) { if (!this._sb) return {data:null,error:{message:'Database not configured'}}; exam = exam || {}; exam.code = (exam.code || this._generateCode(6)).toUpperCase(); exam.created_at = new Date().toISOString(); if (!exam.teacher_id && window.SC_PROFILE && SC_PROFILE.id) exam.teacher_id = SC_PROFILE.id; exam.anti_cheat_config = Object.assign({tab_switch:true,window_blur:true,copy_paste:true,right_click:true,fullscreen:true,watermark:true,devtools:true,max_violations:5}, exam.anti_cheat_config || {}); return await this._sb.from('cbt_exams').insert(exam).select().single(); },
+  async createExam(exam) { if (!this._sb) return {data:null,error:{message:'Database not configured'}}; exam = exam || {}; exam.code = (exam.code || this._generateCode(6)).toUpperCase(); exam.created_at = new Date().toISOString(); if (!exam.teacher_id && window.SC_PROFILE && SC_PROFILE.id) exam.teacher_id = SC_PROFILE.id; exam.anti_cheat_config = Object.assign({tab_switch:true,window_blur:true,copy_paste:true,right_click:true,fullscreen:true,watermark:true,devtools:true,max_violations:5}, exam.anti_cheat_config || {}); const bank=(Array.isArray(exam.csv_data)&&exam.csv_data.length)?exam.csv_data:((Array.isArray(exam.questions)&&exam.questions.length)?exam.questions:[]); if(bank.length){exam.csv_data=bank;exam.questions=bank;} return await this._sb.from('cbt_exams').insert(exam).select().single(); },
   _generateCode(len) { const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let r=''; for(let i=0;i<len;i++) r+=chars.charAt(Math.floor(Math.random()*chars.length)); return r; },
 
   advancedPromptTemplate(subject, klass, topic, count) {
@@ -226,12 +270,27 @@ const CBT = {
     return `You are an expert examination setter. Generate ${count} high-quality CBT questions for ${subject}, ${klass}, topic: ${topic}.\n\nReturn ONLY a CSV with these headers exactly:\nquestion,type,a,b,c,d,answer,explanation,mark,difficulty,topic,tolerance,section\n\nRules:\n1. Use a balanced mix of question types where appropriate: mcq, true_false, fill_blank, numeric, short_answer, multi_select, matching, ordering, comprehension.\n2. For MCQ, put four options in a,b,c,d and answer as the exact option text or letter.\n3. For numeric, put the numeric answer in answer and tolerance in tolerance.\n4. Keep explanations concise and educational.\n5. Avoid ambiguous questions.\n6. Align difficulty to the class level.\n7. Do not include markdown, numbering outside the CSV, or extra commentary.`;
   },
 
+  validateQuestionBank(questions) {
+    const manualTypes=new Set(['essay','long_answer','file_upload']);
+    const errors=[],warnings=[];
+    (questions||[]).forEach((raw,i)=>{
+      const q=this.normalizeQuestion(raw,i), label='Question '+(i+1);
+      if(!String(q.question||'').trim()) errors.push(label+': question text is missing.');
+      const missing=q.answer==null || (typeof q.answer==='string'&&!q.answer.trim()) || (Array.isArray(q.answer)&&!q.answer.length);
+      if(missing && !manualTypes.has(q.type)) errors.push(label+': correct answer key is missing. Check the CorrectAnswer/Correct Answer column.');
+      if(['mcq','true_false','multi_select'].includes(q.type) && q.options.length<2) errors.push(label+': at least two options are required for '+q.type+'.');
+      if(manualTypes.has(q.type)&&missing) warnings.push(label+': requires manual review and is excluded from automatic percentage.');
+    });
+    return {ok:errors.length===0,errors,warnings,question_count:(questions||[]).length,engine_version:'v5.1'};
+  },
+
   parseCSV(csv) {
     if (!csv || !csv.trim()) return [];
     const rows = this.parseCSVRows(csv);
     if (rows.length < 2) return [];
-    const head = rows[0].map(h => String(h).trim().toLowerCase());
-    const idx = name => head.indexOf(name);
+    const canon = h => String(h==null?'':h).replace(/^\uFEFF/,'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+    const head = rows[0].map(canon);
+    const idx = name => head.indexOf(canon(name));
     const questions = [];
     rows.slice(1).forEach((vals, i) => {
       if (!vals.some(v => String(v||'').trim())) return;
@@ -239,15 +298,17 @@ const CBT = {
       const q = {
         question: get('question','prompt','text') || vals[0] || '',
         a: get('a','option_a','option a') || vals[1] || '', b: get('b','option_b','option b') || vals[2] || '', c: get('c','option_c','option c') || vals[3] || '', d: get('d','option_d','option d') || vals[4] || '',
-        answer: get('answer','correct','correct_answer','correct answer') || vals[5] || 'A',
-        explanation: get('explanation','reason') || vals[6] || '',
-        type: get('type','question_type') || vals[7] || 'mcq',
-        mark: Number(get('mark','score') || 1) || 1,
+        answer: get('answer','correct','correct_answer','correct answer','correctanswer','answer_key','answerkey','correct_option','correctoption','key') || vals[5] || '',
+        explanation: get('explanation','reason','solution') || vals[6] || '',
+        type: get('type','question_type','questiontype') || vals[7] || 'mcq',
+        mark: Number(get('mark','marks','score','points') || 1) || 1,
         difficulty: get('difficulty','level') || '',
         topic: get('topic','lesson') || '',
         tolerance: get('tolerance','accept') || '',
         section: get('section','subject','subject_section','exam_subject') || '',
-        subject: get('subject','section','subject_section','exam_subject') || ''
+        subject: get('subject','section','subject_section','exam_subject') || '',
+        passage: get('passage','context','case_text','comprehension') || '',
+        media_url: get('media_url','media','image_url','image','audio_url','video_url') || ''
       };
       questions.push(this.normalizeQuestion(q, i));
     });

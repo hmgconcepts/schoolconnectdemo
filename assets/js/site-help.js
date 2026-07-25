@@ -36,7 +36,7 @@ const SiteHelp = {
     'leave': '🏖️ **Leave** — Staff leave requests. Approval workflow. Balance tracking.',
     'transport': '🚌 **Transport** — School bus routes. Student allocation. Driver info.',
     'health': '🏥 **Health** — Student medical records. Sick bay visits. Health alerts.',
-    'default': 'ℹ️ **Help** — This is the School Assistant. Ask me about any page or feature. I'll explain what it does and how to use it.'
+    'default': "ℹ️ **Help** — This is the School Assistant. Ask me about any page or feature. I'll explain what it does and how to use it."
   },
   
   init() {
@@ -62,10 +62,11 @@ const SiteHelp = {
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
     modal.innerHTML = '<div style="background:white;border-radius:16px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;padding:24px;position:relative">' +
-      '<button onclick="this.closest('div[style*=fixed]').remove()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b">×</button>' +
+      '<button type="button" data-help-close style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#64748b" aria-label="Close help">×</button>' +
       '<div style="font-size:1.1rem;line-height:1.7">' + desc.replace(/\n/g, '<br>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</div>' +
       '<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:.85rem;color:#64748b">Need more help? Contact your school administrator or visit the Feature Guide.</div>' +
       '</div>';
+    modal.querySelector('[data-help-close]').addEventListener('click',()=>modal.remove());
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     document.body.appendChild(modal);
   },

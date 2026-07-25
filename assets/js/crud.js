@@ -366,9 +366,10 @@ const CRUD = {
       {key:'email',label:'Email',type:'email'},{key:'phone',label:'Phone',type:'tel'}
     ]},
     inventory: { table:'inventory', title:'Inventory item', cols:[
-      {key:'item_name',label:'Item',type:'text',required:true},{key:'category',label:'Category',type:'text'},
-      {key:'quantity',label:'Quantity',type:'number'},{key:'location',label:'Location',type:'text'},
-      {key:'condition',label:'Condition',type:'text'}
+      {key:'item_name',label:'Item',type:'text',required:true},{key:'asset_tag',label:'Asset tag / serial',type:'text'},{key:'category',label:'Category',type:'text'},
+      {key:'quantity',label:'Quantity',type:'number'},{key:'unit_cost',label:'Unit cost',type:'number'},{key:'location',label:'Location',type:'text'},
+      {key:'condition',label:'Condition',type:'select',options:['new','excellent','good','fair','needs repair','retired']},
+      {key:'last_audit',label:'Last audit',type:'date'},{key:'next_audit',label:'Next audit',type:'date'}
     ]},
     lesson_plans: { table:'lesson_plans', title:'Lesson plan', cols:[
       {key:'teacher',label:'Teacher',type:'ref',refTable:'staff',refValue:'full_name',refStore:'value',searchable:true},{key:'subject',label:'Subject',type:'ref',refTable:'subjects',refValue:'name',refStore:'value'},
@@ -398,6 +399,7 @@ const CRUD = {
       {key:'date',label:'Date',type:'date'},{key:'absent_teacher',label:'Absent teacher',type:'text'},
       {key:'substitute_teacher',label:'Substitute',type:'text'},{key:'class',label:'Class',type:'text'},
       {key:'subject',label:'Subject',type:'text'},{key:'period',label:'Period',type:'text'},
+      {key:'reason',label:'Reason / handover note',type:'textarea'},
       {key:'status',label:'Status',type:'select',options:['planned','done','cancelled']}
     ]},
     helpdesk: { table:'helpdesk_tickets', title:'Help-desk ticket', cols:[
