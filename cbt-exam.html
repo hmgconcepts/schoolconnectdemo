@@ -22,7 +22,8 @@ body{font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;backgrou
 .login-shell .hero-card{text-align:center;margin-bottom:18px;background:linear-gradient(135deg,var(--sc-primary),var(--sc-accent));color:white;padding:24px}
 .exam-school-head{display:grid;grid-template-columns:78px minmax(0,1fr);gap:16px;align-items:center;text-align:left;max-width:720px;margin:0 auto}
 .login-shell .hero-card img{width:72px;height:72px;border-radius:14px;object-fit:contain;background:white;padding:7px;box-sizing:border-box;box-shadow:0 3px 12px rgba(0,0,0,.18)}
-.login-shell h1{margin:0;font-size:1.45rem;font-weight:900;line-height:1.2}
+.login-shell h1{display:block!important;margin:0!important;font-size:1.45rem!important;font-weight:900!important;line-height:1.2!important;color:#fff!important;opacity:1!important;visibility:visible!important}
+.exam-school-name-banner{display:block;margin:0 0 10px;padding:8px 12px;border:1px solid rgba(255,255,255,.38);border-radius:10px;background:rgba(0,0,0,.16);color:#fff;font-size:1.05rem;font-weight:900;text-align:center}
 .exam-school-motto{margin:5px 0 0;font-size:.84rem;font-weight:700;opacity:.96}
 .exam-school-contact{margin:5px 0 0;font-size:.76rem;line-height:1.5;opacity:.92}
 .exam-portal-label{margin:10px 0 0;padding-top:9px;border-top:1px solid rgba(255,255,255,.3);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;font-weight:900;text-align:center}
@@ -89,6 +90,7 @@ textarea.form-input{min-height:80px;resize:vertical}
 <main class="login-shell">
   <div style="max-width:840px;margin:0 auto">
     <header class="card hero-card" aria-label="School examination identity">
+      <div class="exam-school-name-banner" id="exam-school-name-banner">School</div>
       <div class="exam-school-head">
         <img id="exam-school-logo" src="assets/img/logo.svg" alt="School logo">
         <div>
@@ -159,6 +161,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     document.documentElement.style.setProperty('--sc-accent', school.accent);
     const set = (id, value) => { const el=$(id); if(el) el.textContent=value; };
     set('exam-school-name', school.name);
+    set('exam-school-name-banner', school.name);
     set('exam-school-motto', school.motto);
     const contact = [school.address, school.phone ? 'Tel: '+school.phone : '', school.email].filter(Boolean).join(' · ');
     set('exam-school-contact', contact || 'Official school CBT examination portal');
@@ -408,7 +411,8 @@ textarea.form-input{min-height:80px;resize:vertical}
     this.root().innerHTML =
       '<div class="card">' +
         '<h2>📝 Enter exam details</h2>' +
-        '<p style="color:#64748b;margin:0 0 16px;font-size:.9rem">Ask your teacher for the exam code. You can sit the exam with or without an account.</p>' +
+        '<p style="margin:0 0 6px;color:var(--sc-primary);font-weight:900">School: '+esc((window.SCHOOL&&SCHOOL.name)||'School')+'</p>'+
+        '<p style="color:#64748b;margin:0 0 16px;font-size:.9rem">Ask your teacher for the exam code. Spaces and hyphens in the code are accepted.</p>' +
         '<div class="form-group"><label>Exam code *</label><input class="form-input" id="e-code" value="' + esc(prefill) + '" placeholder="e.g. ABC123" autofocus></div>' +
         '<div class="form-group"><label>Your full name <span style="color:#94a3b8;font-weight:400">(optional for anonymous exams)</span></label><input class="form-input" id="e-name" placeholder="Surname First-name"></div>' +
         '<div class="form-group"><label>Your student / staff ID (if registered)</label><input class="form-input" id="e-id" placeholder="e.g. SCD/2024/001"></div>' +
@@ -430,6 +434,7 @@ textarea.form-input{min-height:80px;resize:vertical}
       return;
     }
     const code = ($('e-code') || {}).value ? $('e-code').value.toUpperCase().trim() : '';
+    const canonicalCode = code.replace(/[^A-Z0-9]/g,'');
     let nm = ($('e-name') || {}).value ? $('e-name').value.trim() : '';
     if (anon && !nm) nm = 'Anonymous-' + Math.random().toString(36).slice(2, 7).toUpperCase();
     this.student = {
@@ -444,7 +449,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     // repaired multi-subject exam stale for ten minutes, which made “Repair
     // Tabs” appear ineffective on candidate devices.
     let data = null, error = null, cached = null;
-    const cacheKey = 'cbt-exam-cache-' + code;
+    const cacheKey = 'cbt-exam-cache-' + canonicalCode;
     try {
       const c = JSON.parse(localStorage.getItem(cacheKey) || 'null');
       if (c && (Date.now() - Number(c.at||0)) < 86400000) cached = c.exam;
@@ -452,30 +457,38 @@ textarea.form-input{min-height:80px;resize:vertical}
 
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        const r = await window.sb.rpc('cbt_get_public_exam', { p_code: code });
+        const r = await window.sb.rpc('cbt_get_public_exam_v5', { p_code: canonicalCode });
         data = r.data; error = r.error;
       } catch (e) { error = e; }
-      if (data && !error) break;
+      if (data && !error) break; // includes explicit not-open/not-found diagnostics
+      if(error && /cbt_get_public_exam_v5|schema cache|function/i.test(String(error.message||error))) break;
       const wait = Math.min(6000, (400 * Math.pow(2, attempt))) + Math.floor(Math.random() * 500);
-      if (attempt < 4) toast('Busy server — retrying (' + (attempt + 1) + '/5)…', 'info', 1500);
+      if (attempt < 4) toast('Network busy — retrying (' + (attempt + 1) + '/5)…', 'info', 1500);
       await new Promise(r => setTimeout(r, wait));
     }
-    if ((!data || error) && cached) { data=cached; error=null; toast('Network unavailable — using the latest saved exam copy on this device.','warning',5000); }
-    if (data && !error && !data.wait && !data.closed) {
+    const cachedIsV5=cached&&cached.ok!==false&&String(cached.engine_version||'').startsWith('v5.1');
+    if ((!data || error) && cachedIsV5 && !(error&&/cbt_get_public_exam_v5|schema cache|function/i.test(String(error.message||error)))) { data=cached; error=null; toast('Network unavailable — using the latest verified saved exam copy on this device.','warning',5000); }
+    if (data && !error && data.ok!==false && !data.wait && !data.closed) {
       try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), exam: data })); } catch (_) {}
     }
 
     if (error || !data) {
-      this.root().innerHTML = '<div class="card"><div class="notice notice-error">❌ Exam not found or not open. Check the code and try again.</div>' + this.codeEntryHTML(code) + '</div>';
-      $('e-code') && $('e-code').focus();
+      const missingRpc=error&&/cbt_get_public_exam_v5|schema cache|function/i.test(String(error.message||error));
+      const msg=missingRpc?'The V5.1 exam reader is not installed in Supabase. The administrator must run database/cbt-v5.1-zero-score-hotfix.sql.':('Could not contact the exam service. '+esc(error&&error.message||''));
+      this.root().innerHTML = '<div class="card"><div class="notice notice-error"><h2 style="margin-top:0">❌ Exam service unavailable</h2><p>'+msg+'</p><p><b>Code entered:</b> '+esc(code)+'</p></div>' + this.codeEntryHTML(code) + '</div>';
+      return;
+    }
+    if(data.ok===false && !data.wait && !data.closed){
+      const hints={exam_not_found:'Confirm the code in CBT Manager and use Share to copy it.',not_open:'CBT Manager → locate the exam → click Open. Refresh the candidate page afterward.',archived:'Unarchive or recreate this exam.',not_started:'Wait until the configured start time.',closed:'The exam officer must extend the close time or reopen a new attempt.'};
+      this.root().innerHTML='<div class="card"><div class="notice notice-error"><h2 style="margin-top:0">❌ '+esc(data.message||'Exam unavailable')+'</h2><p><b>Code entered:</b> '+esc(code)+' &nbsp; <b>Matched code:</b> '+esc(data.code||'—')+'</p><p>'+esc(hints[data.error]||'Ask the exam officer to check the exam status and schedule.')+'</p><small>Diagnostic: '+esc(data.error||'unknown')+' · Engine '+esc(data.engine_version||'unknown')+'</small></div>'+this.codeEntryHTML(code)+'</div>';
       return;
     }
     if (data.wait) {
-      this.root().innerHTML = '<div class="card"><h2>⏳ Please wait</h2><p>This exam opens at <strong>' + (window.fmtDMYT ? fmtDMYT(data.start_at) : new Date(data.start_at).toLocaleString()) + '</strong>.</p></div>';
+      this.root().innerHTML = '<div class="card"><h2>⏳ Please wait</h2><p>'+esc(data.message||'This exam has not started yet.')+'</p><p>Opens at <strong>' + (window.fmtDMYT ? fmtDMYT(data.start_at) : new Date(data.start_at).toLocaleString()) + '</strong>.</p></div>';
       return;
     }
     if (data.closed) {
-      this.root().innerHTML = '<div class="card"><h2>🚫 Closed</h2><p>This exam is no longer accepting submissions.</p></div>';
+      this.root().innerHTML = '<div class="card"><h2>🚫 Closed</h2><p>'+esc(data.message||'This exam is no longer accepting submissions.')+'</p></div>';
       return;
     }
     if(!String(data.engine_version||'').startsWith('v5.1')){

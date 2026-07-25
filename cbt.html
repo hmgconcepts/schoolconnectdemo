@@ -463,7 +463,7 @@
         <h3 style="margin-top:0">📊 CBT → Report Card Mapping (Mid-Term & Terminal)</h3>
         <p style="color:var(--gray-700)">CBT is used for <strong>mid-term tests (CA1/CA2)</strong> and <strong>terminal examination objectives (Exam)</strong>. After students submit, push scores into Results table with column selection (CA1, CA2, CA3, CBT Exam, Exam, Project, etc). Then generate <strong>class broadsheet, subject broadsheet and report card</strong> from Report Cards page — all automatically.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" onclick="ReportEngine.openCBTExportModal()">🚀 Push CBT Scores → Report Card (choose column)</button>
+          <button class="btn btn-primary btn-sm" onclick="ReportEngine.openBulkCBTExportModal()">🚀 Bulk Push CBT Scores → Official Report Cards</button>
           <a class="btn btn-outline btn-sm" href="report-cards.html">📄 Open Report Cards</a>
           <a class="btn btn-outline btn-sm" href="academic-records.html">📊 Broadsheets</a>
         </div>
@@ -693,7 +693,7 @@ window.CBTUI = {
     if(typeof App!=='undefined' && App.logActivity) App.logActivity('create','cbt_exam', data && data.code);
     closeModal(); toast('✅ Exam created. Code: '+(data&&data.code),'success',6000); CBTUI.refresh();
   },
-  async toggle(id,open){ if(!sb)return; await sb.from('cbt_exams').update({is_open:open}).eq('id',id); CBTUI.refresh(); },
+  async toggle(id,open){ if(!sb)return; const {data,error}=await sb.from('cbt_exams').update({is_open:open,updated_at:new Date().toISOString()}).eq('id',id).select('id,code,is_open').maybeSingle(); if(error){toast('Could not '+(open?'open':'close')+' exam: '+error.message,'danger',9000);return;} if(!data||data.is_open!==open){toast('Exam status was not confirmed. Check your role/RLS permissions.','danger',9000);return;} try{localStorage.removeItem('cbt-exam-cache-'+String(data.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''));}catch(_){} toast('Exam '+(open?'opened':'closed')+' successfully.','success'); CBTUI.refresh(); },
   async preview(id){ const {data:e}=await sb.from('cbt_exams').select('*').eq('id',id).maybeSingle(); const bank=(e&&Array.isArray(e.csv_data)&&e.csv_data.length)?e.csv_data:((e&&Array.isArray(e.questions))?e.questions:[]); const qs=bank.map((q,i)=>CBT.normalizeQuestion(q,i)); openModal('Preview Questions — '+esc(e&&e.title||''), '<p><b>'+qs.length+'</b> question(s). First 20 shown.</p><div class="table-wrap"><table><thead><tr><th>#</th><th>Section</th><th>Type</th><th>Question</th><th>Recognised answer</th></tr></thead><tbody>'+qs.slice(0,20).map((q,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(q.section||q.subject||'')+'</td><td>'+esc(q.type||'mcq')+'</td><td>'+esc(q.question||'')+'</td><td>'+(q.answer==null||String(q.answer)===''?'<span style="color:#dc2626;font-weight:800">MISSING</span>':esc(Array.isArray(q.answer)?q.answer.join(', '):q.answer))+'</td></tr>').join('')+'</tbody></table></div>'); },
   /* ENTERPRISE V8 (issue 8): import an offline exam backup JSON downloaded by a
      candidate whose submission failed. Saves via cbt_import_backup RPC with
