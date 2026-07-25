@@ -254,14 +254,14 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 
       <div class="card" style="margin-bottom:16px" data-staff-only>
         <h3 style="margin-top:0">🛠 Build a report card</h3>
-        <p style="color:var(--gray-600);margin:0 0 12px">Build a report card with <strong>fully custom columns</strong> (e.g. CA1, CA2, Assignment, Project, Exam). Apportion a maximum mark to each column, then enter scores. Columns marked <em>From CBT</em> are filled automatically when students take the matching online exam.</p>
+        <p style="color:var(--gray-600);margin:0 0 12px">Build a report card with <strong>fully custom columns</strong>. Blank cells remain blank and print as <strong>—</strong>; they are never converted to zero. CBT attempts enter official reports only through the explicit <strong>Bulk Push CBT Scores</strong> preview below, preventing phantom or duplicate marks.</p>
         <div class="grid grid-2">
           <div class="form-group"><label>Class</label><select class="form-select" id="rc-class" data-readonly-role="student parent"><option value="">— select class —</option></select></div>
           <div class="form-group"><label>Subject</label><select class="form-select" id="rc-subject" data-readonly-role="student parent"><option value="">— select subject —</option></select></div>
           <div class="form-group"><label>Term</label><select class="form-select" id="rc-term" data-readonly-role="student parent"><option value="">— select term —</option></select></div>
           <div class="form-group"><label>Session</label><select class="form-select" id="rc-session" data-readonly-role="student parent"><option value="">— select session —</option></select></div>
         </div>
-        <button class="btn btn-primary" onclick="RC.load()">Load / Build</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="RC.load()">Load / Build</button><button class="btn btn-outline" onclick="ReportEngine.openBulkCBTExportModal()">🚀 Bulk Push CBT Scores</button><button class="btn btn-outline" onclick="RC.openScoreAudit()">🔎 Audit / Clear Unwanted Scores</button></div>
       </div>
       <div id="rc-cols" data-staff-only></div>
       <div id="rc-grid"></div>
@@ -548,11 +548,11 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       const ids = this.cols.map(c => c.id);
       let scores = [];
       try {
-        const r = await window.sb.from('report_scores').select('*').in('column_id', ids);
+        const r = await window.sb.from('report_scores').select('*').in('column_id', ids).eq('class',this.ctx.class).eq('subject',this.ctx.subject).eq('term',this.ctx.term).eq('session',this.ctx.session);
         scores = r.data || [];
       } catch (e) { console.warn('RC scores load failed', e); }
       const map = {};
-      (scores || []).forEach(s => { map[(s.student_id_ref || s.student_name) + '|' + s.column_id] = s.score; });
+      (scores || []).forEach(s => { map[(s.student_id_ref || s.student_name) + '|' + s.subject + '|' + s.column_id] = s.score; });
       const totalMax = this.cols.reduce((a, c) => a + Number(c.max_mark), 0);
       const canWrite = !this._familyMode;
       let html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h3 style="margin:0">Scores — ' + esc(this.ctx.subject) + ' (' + esc(this.ctx.class) + ')</h3><div style="display:flex;gap:8px">' + (canWrite ? '<button type="button" class="btn btn-sm btn-primary" id="rc-save-all-scores" style="background:var(--gradient);border:none;color:white;font-weight:700">💾 Save All Scores</button>' : '') + '<button type="button" class="btn btn-sm btn-outline" id="rc-export-csv">⬇ Export</button></div></div><div class="table-wrap"><table><thead><tr><th>Student</th>' + this.cols.map(c => '<th>' + esc(c.name) + '<br><small>/' + c.max_mark + '</small></th>').join('') + '<th>Total<br><small>/' + totalMax + '</small></th><th>%</th><th>Grade</th></tr></thead><tbody>';
@@ -563,9 +563,9 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         const ref = st.admission_no || st.full_name;
         let tot = 0;
         const cells = this.cols.map(c => {
-          const v = map[ref + '|' + c.id];
+          const v = map[ref + '|' + this.ctx.subject + '|' + c.id];
           if (v != null) tot += Number(v);
-          return '<td><input style="width:64px" class="form-input" type="number" data-ref="' + esc(ref) + '" data-name="' + esc(st.full_name) + '" data-student-id="' + esc(st.id||'') + '" data-col="' + c.id + '" data-max="' + c.max_mark + '" value="' + (v != null ? v : '') + '"' + (canWrite ? '' : ' readonly') + '></td>';
+          return '<td><input style="width:64px" class="form-input" type="number" data-ref="' + esc(ref) + '" data-name="' + esc(st.full_name) + '" data-student-id="' + esc(st.id||'') + '" data-col="' + c.id + '" data-max="' + c.max_mark + '" data-has-score="'+(v!=null?'1':'0')+'" placeholder="—" value="' + (v != null ? v : '') + '"' + (canWrite ? '' : ' readonly') + '></td>';
         }).join('');
         const pct = totalMax ? ((tot / totalMax) * 100).toFixed(1) : 0;
         const g = RC.grade(pct);
@@ -589,7 +589,13 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 
     async saveScore(el){
       if (this._familyMode) { toast('Read-only: parents and students cannot edit report cards.', 'warning'); return; }
-      const max = Number(el.dataset.max); let v = parseFloat(el.value); if (isNaN(v)) v = 0; if (v > max) { v = max; el.value = max; toast('Capped at max ' + max, 'warning'); }
+      if(String(el.value||'').trim()===''){
+        if(el.dataset.hasScore==='1'){
+          const q=window.sb.from('report_scores').delete().eq('column_id',el.dataset.col).eq('student_id_ref',el.dataset.ref).eq('student_name',el.dataset.name).eq('class',this.ctx.class).eq('subject',this.ctx.subject).eq('term',this.ctx.term).eq('session',this.ctx.session);const {error}=await q;if(error){toast('Could not clear score: '+error.message,'danger');return;}toast('Score cleared — the report will show a dash, not zero.','success');
+        }
+        el.dataset.hasScore='0';this.renderGrid();return;
+      }
+      const max = Number(el.dataset.max); let v = parseFloat(el.value); if (isNaN(v)) {toast('Enter a valid number or leave blank.','warning');return;} if(v<0){v=0;el.value=0;} if (v > max) { v = max; el.value = max; toast('Capped at max ' + max, 'warning'); }
       const row = { column_id: el.dataset.col, student_id: el.dataset.studentId || null, student_id_ref: el.dataset.ref, student_name: el.dataset.name, class: this.ctx.class, subject: this.ctx.subject, term: this.ctx.term, session: this.ctx.session, score: v, source: 'manual', updated_by: (window.SC_PROFILE && SC_PROFILE.id) || null };
       const { error } = await window.sb.from('report_scores').upsert(row, { onConflict: 'column_id,student_id_ref,student_name,class,subject,term,session' });
       if (error) { toast('Score not saved: ' + (error.message || error), 'danger', 8000); return; }
@@ -610,15 +616,18 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       // v12: build all rows first, then ONE batched upsert per 400-row chunk
       // (single round-trip instead of N requests — faster and atomic per chunk).
       // Falls back to row-by-row to isolate any bad row if a chunk is rejected.
-      const entries = [];
+      const entries = [], clears=[];
       for (const el of inputs) {
-        const max = Number(el.dataset.max); let v = parseFloat(el.value); if (isNaN(v)) v = 0; if (v > max) { v = max; el.value = max; }
+        if(String(el.value||'').trim()===''){if(el.dataset.hasScore==='1')clears.push(el);continue;}
+        const max = Number(el.dataset.max); let v = parseFloat(el.value); if (isNaN(v)) continue; if(v<0){v=0;el.value=0;} if (v > max) { v = max; el.value = max; }
         entries.push({
           el,
           v,
           row: { column_id: el.dataset.col, student_id: el.dataset.studentId || null, student_id_ref: el.dataset.ref, student_name: el.dataset.name, class: this.ctx.class, subject: this.ctx.subject, term: this.ctx.term, session: this.ctx.session, score: v, source: 'manual', updated_by: (window.SC_PROFILE && SC_PROFILE.id) || null }
         });
       }
+      let cleared=0;
+      for(const el of clears){const {error}=await window.sb.from('report_scores').delete().eq('column_id',el.dataset.col).eq('student_id_ref',el.dataset.ref).eq('student_name',el.dataset.name).eq('class',this.ctx.class).eq('subject',this.ctx.subject).eq('term',this.ctx.term).eq('session',this.ctx.session);if(!error)cleared++;}
       const ON_CONFLICT_KEY = 'column_id,student_id_ref,student_name,class,subject,term,session';
       let ok = 0, fail = 0, lastError = null;
       let batchOk = true;
@@ -644,7 +653,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       if (fail || lastError) {
         toast(`Saved ${ok} score(s). ${fail || 0} failed. ${lastError ? 'Cause: ' + (lastError.message || lastError) : ''}`, fail ? 'warning' : 'danger', 9000);
       } else {
-        toast(`✅ All ${ok} scores saved successfully! Broadsheet and report cards are updated.`, 'success');
+        toast(`✅ ${ok} entered score(s) saved; ${cleared} cleared. Blank cells remain blank and print as —, never as invented zero.`, 'success',7000);
       }
       if (window.App && App.logActivity) App.logActivity('update-bulk', 'report_score', this.ctx.class + '|' + this.ctx.subject);
       this.renderGrid();
@@ -680,6 +689,14 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       try { const q=window.sb.from('results').select('id').eq('student_name',identity.student_name).eq('subject',identity.subject).eq('class',identity.class).eq('term',identity.term).eq('session',identity.session).limit(1); const {data}=await q; const payload=Object.assign({},identity,{[field]:score,assessment_source:'report_sheet'}); if(data&&data[0]) await window.sb.from('results').update(payload).eq('id',data[0].id); else await window.sb.from('results').insert(payload); }
       catch(e){ console.warn('Results mirror failed; report score was saved safely.',e); }
     },
+
+    async openScoreAudit(){
+      if(this._familyMode){toast('Score audit is staff-only.','warning');return;}if(!window.sb){toast('Database not configured','warning');return;}const c=this.ctx&&this.ctx.class?this.ctx:this.ctxVals();if(!c.class||!c.term||!c.session){toast('Choose class, term and session, then Load / Build first.','warning');return;}
+      const cr=await window.sb.from('assessment_columns').select('id,name,max_mark').eq('class',c.class).eq('term',c.term).eq('session',c.session);const cols=cr.data||[],map=Object.fromEntries(cols.map(x=>[x.id,x]));if(!cols.length){toast('No assessment columns for this context.','info');return;}let q=window.sb.from('report_scores').select('*').in('column_id',cols.map(x=>x.id)).eq('class',c.class).eq('term',c.term).eq('session',c.session).order('student_name');if(c.subject)q=q.eq('subject',c.subject);const rr=await q;if(rr.error){toast(rr.error.message,'danger');return;}this._auditRows=rr.data||[];
+      const rows=this._auditRows.map(r=>'<tr><td><input type="checkbox" class="rc-audit-row" value="'+esc(r.id)+'" data-zero="'+(Number(r.score)===0?'1':'0')+'"></td><td>'+esc(r.student_name||'')+'<br><small>'+esc(r.student_id_ref||'')+'</small></td><td>'+esc(r.subject||'')+'</td><td>'+esc((map[r.column_id]||{}).name||r.column_id)+'</td><td><b>'+Number(r.score||0)+'</b> / '+Number((map[r.column_id]||{}).max_mark||0)+'</td><td>'+esc(r.source||'manual')+'</td><td>'+esc(String(r.updated_at||r.created_at||'').slice(0,16).replace('T',' '))+'</td></tr>').join('');
+      openModal('🔎 Official Score Audit — '+esc(c.class)+' · '+esc(c.term)+' · '+esc(c.session),'<div class="notice" style="background:#fffbeb;border-color:#fcd34d;color:#92400e"><b>Nothing is deleted automatically.</b> Review source, subject and column. Select only records that were created unintentionally. A genuine entered score of zero must be kept.</div><div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-sm btn-outline" onclick="document.querySelectorAll(\'.rc-audit-row[data-zero=1]\').forEach(x=>x.checked=true)">Select zero rows for review</button><button class="btn btn-sm btn-outline" onclick="document.querySelectorAll(\'.rc-audit-row\').forEach(x=>x.checked=false)">Clear selection</button></div><div class="table-wrap"><table><thead><tr><th>Clear</th><th>Student</th><th>Subject</th><th>Column</th><th>Score</th><th>Source</th><th>Updated</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">No official scores in this context.</td></tr>')+'</tbody></table></div>','<button class="btn btn-outline" onclick="closeModal()">Close</button><button class="btn btn-danger" onclick="RC.clearAuditedScores()">Delete selected score records</button>');
+    },
+    async clearAuditedScores(){const ids=[...document.querySelectorAll('.rc-audit-row:checked')].map(x=>x.value);if(!ids.length){toast('Select at least one row.','warning');return;}if(!confirm('Permanently delete '+ids.length+' selected official score record(s)? Genuine zero scores should not be deleted.'))return;const {error}=await window.sb.from('report_scores').delete().in('id',ids);if(error){toast('Delete failed: '+error.message,'danger');return;}closeModal();toast('Deleted '+ids.length+' selected score record(s). Blank report cells will now print as —.','success',8000);this.load();},
 
     exportCSV() {
       const rows = [['Student', ...this.cols.map(c => c.name), 'Total', '%', 'Grade']];
