@@ -10,6 +10,12 @@ keys, policies) without touching your data.
 For an **existing** database where correct CBT attempts are stored as zero, back up
 Supabase and run `cbt-v5.1-zero-score-hotfix.sql`, then deploy the matching V5.1
 `cbt-exam.html`, `cbt.html`, `cbt-multi.html` and `assets/js/cbt-engine.js` files.
+If the V5 getter reports `column "motto" does not exist`, run the small
+`cbt-v5.1.1-getter-school-settings-fix.sql`; the updated main CBT hotfix and
+complete schema already contain it. The getter now reads optional settings through
+`to_jsonb()` so schema
+drift cannot abort an otherwise valid exam.
+
 The hotfix is executed against an embedded PostgreSQL-compatible engine by
 `tools/test-cbt-sql-engine.mjs`: mixed legacy key names score 10/10, retries are
 idempotent, public questions contain no answer aliases, and a missing key fails
