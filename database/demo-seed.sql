@@ -653,3 +653,22 @@ begin
 end $$;
 
 select 'School Connect DEMO ENHANCED data installed - all pages populated.' as status;
+
+-- 25) Library books and book requests
+do $$
+begin
+  if (select count(*) from public.library_books) = 0 then
+    insert into public.library_books (title, author, isbn, category, copies_available, copies_total) values
+      ('New Oxford Secondary English Course','Adebayo A. et al','978-019-823-456','English',8,12),
+      ('Essential Mathematics for SS','A.J.S. Oluwasanmi','978-978-123-789','Mathematics',5,10),
+      ('Modern Biology for SS','S.T. Ramalingam','978-978-456-123','Science',6,10),
+      ('Comprehensive Chemistry','O. Adeniji','978-978-789-456','Science',4,8),
+      ('Things Fall Apart','Chinua Achebe','978-043-527-891','Literature',10,15),
+      ('Purple Hibiscus','Chimamanda N. Adichie','978-000-718-234','Literature',7,10);
+  end if;
+  if (select count(*) from public.book_requests) = 0 then
+    insert into public.book_requests (student_id, book_title, status, request_date) values
+      ((select id from public.students where admission_no='SCD-00014'),'Advanced Calculus for SS3','pending',current_date - 3),
+      ((select id from public.students where admission_no='SCD-00015'),'Past WAEC Questions — Physics','approved',current_date - 7);
+  end if;
+end $$;
