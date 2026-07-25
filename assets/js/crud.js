@@ -1124,31 +1124,30 @@ const CRUD = {
     if (d.table === 'students' && !id && (!payload.admission_no || String(payload.admission_no).trim()==='')) {
       try {
         const ac = getAcronym();
-        const { data: maxRows } = await this.sb.from('students').select('admission_no').ilike('admission_no', ac+'/%').order('admission_no', {ascending:false}).limit(1);
+        // v12: unified with the server-side trigger public.sc_generate_admission_no()
+        // —same <ACR>-NNNNN dash format, same "<ACR>-%" search scope—so UI-created
+        // and DB-triggered (CSV import / SQL) admission numbers share one sequence.
+        const { data: maxRows } = await this.sb.from('students').select('admission_no').ilike('admission_no', ac+'-%').limit(2000);
         let nextNum = 1;
-        if (maxRows && maxRows[0] && maxRows[0].admission_no) {
-          const m = String(maxRows[0].admission_no).match(/\/(\d+)$/);
-          if (m) nextNum = parseInt(m[1],10)+1;
-        } else {
-          const { count } = await this.sb.from('students').select('id', {count:'exact', head:true});
-          nextNum = (count||0)+1;
-        }
-        payload.admission_no = ac + '/' + String(nextNum).padStart(4,'0');
+        (maxRows || []).forEach(r => {
+          const m = String(r.admission_no || '').match(/(\d+)$/);
+          if (m) nextNum = Math.max(nextNum, parseInt(m[1], 10) + 1);
+        });
+        payload.admission_no = ac + '-' + String(nextNum).padStart(5,'0');
       } catch(e) { console.warn('auto-admission failed', e.message); }
     }
     if (d.table === 'staff' && !id && (!payload.staff_no || String(payload.staff_no).trim()==='')) {
       try {
         const ac = getAcronym();
-        const { data: maxRows } = await this.sb.from('staff').select('staff_no').ilike('staff_no', ac+'-%').order('staff_no', {ascending:false}).limit(1);
+        // v12: <ACR>-STF-NNNNN — acronym-prefixed, consistent with the DB trigger.
+        // "<ACR>-%" also matches "<ACR>-STF-%", so one query covers legacy and new formats.
+        const { data: maxRows } = await this.sb.from('staff').select('staff_no').ilike('staff_no', ac+'-%').limit(4000);
         let nextNum = 1;
-        if (maxRows && maxRows[0] && maxRows[0].staff_no) {
-          const m = String(maxRows[0].staff_no).match(/-(\d+)$/);
-          if (m) nextNum = parseInt(m[1],10)+1;
-        } else {
-          const { count } = await this.sb.from('staff').select('id', {count:'exact', head:true});
-          nextNum = (count||0)+1;
-        }
-        payload.staff_no = ac + '-STF-' + String(nextNum).padStart(4,'0');
+        (maxRows || []).forEach(r => {
+          const m = String(r.staff_no || '').match(/(\d+)$/);
+          if (m) nextNum = Math.max(nextNum, parseInt(m[1], 10) + 1);
+        });
+        payload.staff_no = ac + '-STF-' + String(nextNum).padStart(5,'0');
       } catch(e) {}
     }
     // Auto-fill changed_by for role_status_log

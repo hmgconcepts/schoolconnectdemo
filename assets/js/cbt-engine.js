@@ -35,7 +35,17 @@ const CBT = {
     let type = String(q.type || q.question_type || 'mcq').toLowerCase().replace(/[\s\/\\-]+/g,'_');
     if (['tf','boolean','truefalse','true_or_false','yes_no','yesno'].includes(type)) type = 'true_false';
     let options = Array.isArray(q.options) ? q.options.slice() : [];
-    if (!options.length) ['a','b','c','d','e'].forEach(k => { if (q[k] != null && String(q[k]).trim() !== '') options.push(String(q[k])); });
+    if (!options.length) ['a','b','c','d','e','option_a','option_b','option_c','option_d','option_e','opt_a','opt_b','opt_c','opt_d'].forEach(k => { if (q[k] != null && String(q[k]).trim() !== '') options.push(String(q[k])); });
+    // FIX V3: If options still empty but answer is a number, try choices/alternatives
+    if (!options.length && (q.choices || q.alternatives)) {
+      const src = q.choices || q.alternatives;
+      if (Array.isArray(src)) options = src.map(String);
+    }
+    // FIX V3: If type looks like MCQ but no options, force type to mcq and try harder
+    if (!options.length && ['mcq','multiple_choice','multi','choice'].includes(String(q.type||q.question_type||'').toLowerCase())) {
+      // Last resort: check numbered keys 1,2,3,4
+      [1,2,3,4,5].forEach(k => { if (q[k] != null && String(q[k]).trim() !== '') options.push(String(q[k])); });
+    }
     if (type === 'true_false') options = ['True','False'];  // always exactly True/False (issue 12)
     const answer = q.answer != null ? q.answer : (q.correct != null ? q.correct : q.correct_answer);
     return {
@@ -116,9 +126,11 @@ const CBT = {
     const qs = (exam && (exam._questions || exam.questions)) || [];
     let score = 0, total = 0, correct = 0, wrong = 0, skipped = 0;
     qs.forEach((q,i) => {
-      const mark = Number(q.mark || 1) || 1; total += mark;
+      const mark = Number(q.mark || q.score || q.points || 1) || 1; total += mark;
       const given = answers ? answers[i] : null;
-      if (given == null || String(given).trim() === '') { skipped++; return; }
+      // FIX V3: More lenient skip detection — only skip if truly empty
+      if (given == null || given === undefined) { skipped++; return; }
+      if (typeof given === 'string' && given.trim() === '') { skipped++; return; }
       const ok = this.isCorrect(q, given);
       if (ok) { score += mark; correct++; }
       else { score -= Number(exam.negative_mark || 0) || 0; wrong++; }
@@ -140,6 +152,20 @@ const CBT = {
     }
     const a = norm(ans);
     if (a === g) return true;
+    // FIX V3: Handle numeric answer indices (0=A, 1=B, 2=C, 3=D)
+    const ansNum = Number(ans);
+    if (!isNaN(ansNum) && ansNum >= 0 && ansNum <= 9) {
+      const letterFromNum = String.fromCharCode(97 + ansNum); // 0→'a', 1→'b', etc.
+      if (g === letterFromNum) return true;
+      const opts = (q.options || []).map(norm);
+      if (opts[ansNum] && opts[ansNum] === g) return true;
+    }
+    // FIX V3: Handle student giving a number (0-3) as answer
+    const gNum = Number(given);
+    if (!isNaN(gNum) && gNum >= 0 && gNum <= 9) {
+      const letterFromGNum = String.fromCharCode(97 + gNum);
+      if (letterFromGNum === a) return true;
+    }
     // ENTERPRISE V6 (issue 12 grading): students answer option questions with a
     // LETTER (A/B/C/D) while teachers may store the answer as the option TEXT
     // (e.g. "True") — or vice-versa. Accept both directions.
