@@ -3,17 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>CBT / Online Exams • School Connect Demo School</title>
-<meta name="description" content="School Connect Demo School — CBT / Online Exams. Comprehensive school management platform.">
-<meta name="keywords" content="School Connect Demo School, school management, SCD, HMG Concepts">
-<meta name="theme-color" content="#1c72e7">
-<link rel="icon" type="image/png" href="assets/img/logo.svg">
+<title>CBT / Online Exams • God of Seed Academy</title>
+<meta name="description" content="God of Seed Academy — CBT / Online Exams. Free school management platform by HMG Concepts.">
+<meta name="keywords" content="God of Seed Academy, school management, GOSA, HMG Concepts">
+<meta name="theme-color" content="#0506ae">
+<link rel="icon" type="image/png" href="assets/img/logo.png">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-<meta property="og:title" content="CBT / Online Exams • School Connect Demo School">
-<meta property="og:description" content="School Connect Demo School — Free school management by HMG Concepts">
+<meta property="og:title" content="CBT / Online Exams • God of Seed Academy">
+<meta property="og:description" content="God of Seed Academy — Free school management by HMG Concepts">
 <meta property="og:image" content="assets/img/og-cover.svg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -22,7 +24,7 @@
 /* === Critical app-shell CSS (inlined as a safety net) ===
    Guarantees the logged-in dashboard layout renders correctly even if the
    external stylesheet is cached/blocked/fails to load. Mirrors style.css. */
-:root{--sc-primary:#1c72e7;--sc-accent:#5e2174}
+:root{--sc-primary:#0506ae;--sc-accent:#964eec}
 .app-layout{display:flex;min-height:100vh;background:#f8fafc}
 .app-sidebar{width:250px;flex-shrink:0;background:#fff;border-right:1px solid #e2e8f0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:40}
 .app-brand{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid #e2e8f0}
@@ -30,8 +32,8 @@
 .app-brand strong{display:block;font-size:.95rem;font-weight:800;color:#0f172a;line-height:1.2}
 .app-nav{display:flex;flex-direction:column;gap:2px;padding:12px 10px;flex:1}
 .app-nav a{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;color:#475569;text-decoration:none;font-size:.9rem;font-weight:600;line-height:1;white-space:nowrap}
-.app-nav a:hover{background:#f1f5f9;color:#1c72e7}
-.app-nav a.active{background:#1c72e7;color:#fff}
+.app-nav a:hover{background:#f1f5f9;color:#0506ae}
+.app-nav a.active{background:#0506ae;color:#fff}
 .app-nav-icon{width:24px;min-width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0}
 .app-main{flex:1;min-width:0;display:flex;flex-direction:column}
 .app-topbar{display:flex;align-items:center;gap:14px;padding:14px 24px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:30}
@@ -44,12 +46,23 @@
 @media(max-width:900px){.app-sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 20px 25px -5px rgba(0,0,0,.2)}.app-sidebar.open{transform:translateX(0)}.app-layout.topnav .app-sidebar{position:sticky;transform:none}.app-content{padding:16px}.app-topbar .mobile-toggle{display:inline-flex;align-items:center;justify-content:center;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;width:40px;height:40px;font-size:1.2rem;cursor:pointer}}
 @media(min-width:901px){.app-topbar .mobile-toggle{display:none}}
 </style>
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+
+    <meta name="description" content="God of Seed Academy — CBT / Online Exams. Free school management platform by HMG Concepts.">
+    <meta name="keywords" content="God of Seed Academy, school management, GOSA, HMG Concepts">
     <meta name="author" content="HMG Concepts">
+    <meta name="robots" content="index, follow">
     <link rel="canonical" href="./cbt.html">
+    <meta property="og:title" content="CBT / Online Exams • God of Seed Academy">
+    <meta property="og:description" content="God of Seed Academy — CBT / Online Exams. Free school management platform by HMG Concepts.">
     <meta property="og:url" content="./cbt.html">
-</head>
-<body data-theme="theme2" data-school="School Connect Demo School" data-font="raleway">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="School Connect v5 — God of Seed Academy">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="CBT / Online Exams • God of Seed Academy">
+    <meta name="twitter:description" content="God of Seed Academy — CBT / Online Exams. Free school management platform by HMG Concepts.">
+    <link rel="alternate" href="https://hmgconcepts.pages.dev/" title="HMG Concepts Ecosystem">
+  </head>
+<body data-theme="theme2" data-school="God of Seed Academy" data-font="raleway">
 
 <div id="notif-bell" class="notif-bell" title="Notifications" data-chatbot>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -65,7 +78,7 @@
 
 <div id="pwa-install-banner" class="pwa-install">
   <div class="pwa-install-header">
-    <img src="assets/img/logo.svg" alt="" class="pwa-install-icon">
+    <img src="assets/img/logo.png" alt="" class="pwa-install-icon">
     <div style="flex:1">
       <div class="pwa-install-title">📲 Install School Connect</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
@@ -92,16 +105,25 @@
 <div class="app-layout layout1" data-require-role="super_admin admin principal proprietor head_teacher bursar staff teacher">
   <aside class="app-sidebar" id="app-sidebar">
       <div class="app-brand">
-        <img src="assets/img/logo.svg" alt="School Connect Demo School" style="object-fit:contain" onerror="this.onerror=null;this.src='assets/img/logo.svg'">
+        <img src="assets/img/logo.png" alt="God of Seed Academy" style="object-fit:contain" onerror="this.onerror=null;this.src='assets/img/logo.svg'">
         <div>
-          <strong>School Connect Demo School</strong>
-          <div style="font-size:0.7rem;color:var(--gray-500)">SCD</div>
+          <strong>God of Seed Academy</strong>
+          <div style="font-size:0.7rem;color:var(--gray-500)">GOSA</div>
         </div>
       </div>
       <nav class="app-nav">
         <a href="dashboard.html" data-module-id="dashboard" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
           <span class="app-nav-icon">🏠</span>
           <span>Dashboard</span>
+        </a><a href="profile.html" data-module-id="profile" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+          <span class="app-nav-icon">👤</span>
+          <span>My Profile</span>
+        </a><a href="change-password.html" data-module-id="change-password" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+          <span class="app-nav-icon">🔐</span>
+          <span>Change Password</span>
+        </a><a href="cbt-multi.html" data-module-id="cbt-multi" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
+          <span class="app-nav-icon">🧪</span>
+          <span>Multi-Subject CBT</span>
         </a><a href="academic_setup.html" data-module-id="academic_setup" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">⚙️</span>
           <span>Academic Setup</span>
@@ -117,19 +139,16 @@
         </a><a href="subjects.html" data-module-id="subjects" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">◦</span>
           <span>Subjects</span>
-        </a><a href="attendance.html" data-module-id="attendance" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="attendance.html" data-module-id="attendance" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📋</span>
           <span>Attendance</span>
-        </a><a href="punctuality.html" data-module-id="punctuality" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
-          <span class="app-nav-icon">⏱️</span>
-          <span>Punctuality</span>
         </a><a href="cbt-prompts.html" data-module-id="cbt-prompts" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🧩</span>
           <span>AI Question Prompts</span>
         </a><a href="entrance.html" data-module-id="entrance" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🎯</span>
           <span>Entrance &amp; Assessments</span>
-        </a><a href="results.html" data-module-id="results" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="results.html" data-module-id="results" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📊</span>
           <span>Results</span>
         </a><a href="flyer.html" data-module-id="flyer" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
@@ -162,22 +181,25 @@
         </a><a href="checkin-staff.html" data-module-id="checkin-staff" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
           <span class="app-nav-icon">⏰</span>
           <span>Staff Check-In</span>
-        </a><a href="diary.html" data-module-id="diary" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="diary.html" data-module-id="diary" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📔</span>
           <span>Diary</span>
-        </a><a href="surveys.html" data-module-id="surveys" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="surveys.html" data-module-id="surveys" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🗒️</span>
           <span>Surveys</span>
-        </a><a href="menu.html" data-module-id="menu" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="menu.html" data-module-id="menu" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🍽️</span>
           <span>Menu</span>
         </a><a href="settings.html" data-module-id="settings" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">⚙️</span>
           <span>Settings (2FA · Language · A11y)</span>
-        </a><a href="fees.html" data-module-id="fees" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent" class="">
+        </a><a href="fees.html" data-module-id="fees" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">💰</span>
           <span>Fees</span>
-        </a><a href="timetable.html" data-module-id="timetable" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="payment-history.html" data-module-id="payment-history" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
+          <span class="app-nav-icon">🧾</span>
+          <span>Payment History</span>
+        </a><a href="timetable.html" data-module-id="timetable" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🗓️</span>
           <span>Timetable</span>
         </a><a href="cbt.html" data-module-id="cbt" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="active">
@@ -186,25 +208,25 @@
         </a><a href="sow.html" data-module-id="sow" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📋</span>
           <span>Scheme</span>
-        </a><a href="messages.html" data-module-id="messages" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="messages.html" data-module-id="messages" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📱</span>
           <span>Messaging</span>
-        </a><a href="announcements.html" data-module-id="announcements" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="announcements.html" data-module-id="announcements" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📢</span>
           <span>Announcements</span>
-        </a><a href="events.html" data-module-id="events" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="events.html" data-module-id="events" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🎭</span>
           <span>Events</span>
-        </a><a href="gallery.html" data-module-id="gallery" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="gallery.html" data-module-id="gallery" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🖼️</span>
           <span>Gallery</span>
-        </a><a href="library.html" data-module-id="library" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher student" class="">
+        </a><a href="library.html" data-module-id="library" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📖</span>
           <span>Library</span>
-        </a><a href="digital_library.html" data-module-id="digital_library" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher student" class="">
+        </a><a href="digital_library.html" data-module-id="digital_library" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📚</span>
           <span>Digital Library</span>
-        </a><a href="assignments.html" data-module-id="assignments" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="assignments.html" data-module-id="assignments" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📝</span>
           <span>Assignments</span>
         </a><a href="parents.html" data-module-id="parents" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
@@ -219,10 +241,10 @@
         </a><a href="departments.html" data-module-id="departments" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🏢</span>
           <span>Departments</span>
-        </a><a href="broadcast.html" data-module-id="broadcast" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent" class="">
+        </a><a href="broadcast.html" data-module-id="broadcast" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📨</span>
           <span>Result Broadcast</span>
-        </a><a href="complaints.html" data-module-id="complaints" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="complaints.html" data-module-id="complaints" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📨</span>
           <span>Complaints</span>
         </a><a href="leave.html" data-module-id="leave" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
@@ -231,21 +253,24 @@
         </a><a href="visitors.html" data-module-id="visitors" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🚪</span>
           <span>Visitors</span>
-        </a><a href="hostel.html" data-module-id="hostel" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="hostel.html" data-module-id="hostel" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🛏️</span>
           <span>Hostel</span>
-        </a><a href="transport.html" data-module-id="transport" data-role-allow="super_admin admin principal proprietor head_teacher bursar parent student" class="">
+        </a><a href="transport.html" data-module-id="transport" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🚌</span>
           <span>Transport</span>
         </a><a href="alumni.html" data-module-id="alumni" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🤝</span>
           <span>Alumni</span>
-        </a><a href="certificates.html" data-module-id="certificates" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="certificates.html" data-module-id="certificates" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📜</span>
           <span>Certificates</span>
         </a><a href="admissions.html" data-module-id="admissions" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">📝</span>
           <span>Admissions</span>
+        </a><a href="exam-register.html" data-module-id="exam_registrations" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
+          <span class="app-nav-icon">🎓</span>
+          <span>Exam Registrations</span>
         </a><a href="promotion.html" data-module-id="promotion" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🎓</span>
           <span>Promotion</span>
@@ -273,7 +298,7 @@
         </a><a href="rubrics.html" data-module-id="rubrics" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📐</span>
           <span>Grading Rubrics</span>
-        </a><a href="transcripts.html" data-module-id="transcripts" data-role-allow="super_admin admin principal proprietor head_teacher bursar parent student" class="">
+        </a><a href="transcripts.html" data-module-id="transcripts" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🎓</span>
           <span>Academic Transcripts</span>
         </a><a href="transfer_cert.html" data-module-id="transfer_cert" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
@@ -285,28 +310,28 @@
         </a><a href="voting.html" data-module-id="voting" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
           <span class="app-nav-icon">🗳️</span>
           <span>Voting</span>
-        </a><a href="health.html" data-module-id="health" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent" class="">
+        </a><a href="health.html" data-module-id="health" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🩺</span>
           <span>Health</span>
         </a><a href="conduct.html" data-module-id="conduct" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">⚖️</span>
           <span>Conduct</span>
-        </a><a href="eresources.html" data-module-id="eresources" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="eresources.html" data-module-id="eresources" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📁</span>
           <span>E-Resources</span>
         </a><a href="birthdays.html" data-module-id="birthdays" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🎂</span>
           <span>Birthdays</span>
-        </a><a href="lms.html" data-module-id="lms" data-role-allow="super_admin admin principal proprietor head_teacher bursar student" class="">
+        </a><a href="lms.html" data-module-id="lms" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🎓</span>
           <span>LMS</span>
-        </a><a href="gamification.html" data-module-id="gamification" data-role-allow="super_admin admin principal proprietor head_teacher bursar student" class="">
+        </a><a href="gamification.html" data-module-id="gamification" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🏅</span>
           <span>Gamification</span>
-        </a><a href="cafeteria.html" data-module-id="cafeteria" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="cafeteria.html" data-module-id="cafeteria" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🍽️</span>
           <span>Cafeteria</span>
-        </a><a href="financial_aid.html" data-module-id="financial_aid" data-role-allow="super_admin admin principal proprietor head_teacher bursar parent" class="">
+        </a><a href="financial_aid.html" data-module-id="financial_aid" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🎗️</span>
           <span>Financial Aid</span>
         </a><a href="front_desk.html" data-module-id="front_desk" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
@@ -345,64 +370,64 @@
         </a><a href="activity_log.html" data-module-id="activity_log" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">🧮</span>
           <span>Activity Log</span>
-        </a><a href="helpdesk.html" data-module-id="helpdesk" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="helpdesk.html" data-module-id="helpdesk" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🆘</span>
           <span>Help Desk</span>
-        </a><a href="lost_found.html" data-module-id="lost_found" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="lost_found.html" data-module-id="lost_found" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🔍</span>
           <span>Lost &amp; Found</span>
-        </a><a href="school_calendar.html" data-module-id="school_calendar" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="school_calendar.html" data-module-id="school_calendar" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📅</span>
           <span>Calendar</span>
         </a><a href="reports.html" data-module-id="reports" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📈</span>
           <span>Reports</span>
-        </a><a href="book_request.html" data-module-id="book_request" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher student" class="">
+        </a><a href="book_request.html" data-module-id="book_request" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📖</span>
           <span>Book Request</span>
         </a><a href="donations.html" data-module-id="donations" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">💝</span>
           <span>Donations</span>
-        </a><a href="payments_online.html" data-module-id="payments_online" data-role-allow="super_admin admin principal proprietor head_teacher bursar parent" class="">
+        </a><a href="payments_online.html" data-module-id="payments_online" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">💳</span>
           <span>Online Pay</span>
-        </a><a href="parent_meeting.html" data-module-id="parent_meeting" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent" class="">
+        </a><a href="parent_meeting.html" data-module-id="parent_meeting" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">👥</span>
           <span>PTA Meeting</span>
-        </a><a href="inbox.html" data-module-id="inbox" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="inbox.html" data-module-id="inbox" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">💬</span>
           <span>Inbox</span>
-        </a><a href="student-profile.html" data-module-id="student-profile" data-role-allow="super_admin admin principal proprietor head_teacher bursar parent student" class="">
+        </a><a href="student-profile.html" data-module-id="student-profile" data-role-allow="super_admin admin principal proprietor head_teacher bursar" class="">
           <span class="app-nav-icon">👤</span>
           <span>Student Profile</span>
-        </a><a href="cbt-exam.html" data-module-id="cbt-exam" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student any all public" class="">
+        </a><a href="cbt-exam.html" data-module-id="cbt-exam" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher any all public" class="">
           <span class="app-nav-icon">🧪</span>
           <span>Take Exam</span>
-        </a><a href="verify-certificate.html" data-module-id="verify-certificate" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student any all public" class="">
+        </a><a href="verify-certificate.html" data-module-id="verify-certificate" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher any all public" class="">
           <span class="app-nav-icon">🔎</span>
           <span>Verify Certificate</span>
         </a><a href="teacher-overview.html" data-module-id="teacher-overview" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">👨‍🏫</span>
           <span>Teacher Overview</span>
-        </a><a href="feature-guide.html" data-module-id="feature-guide" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="feature-guide.html" data-module-id="feature-guide" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">📘</span>
           <span>Feature Guide</span>
-        </a><a href="about.html" data-module-id="about" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student any all public" class="">
+        </a><a href="about.html" data-module-id="about" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher any all public" class="">
           <span class="app-nav-icon">🏫</span>
           <span>About</span>
-        </a><a href="contact.html" data-module-id="contact" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student any all public" class="">
+        </a><a href="contact.html" data-module-id="contact" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher any all public" class="">
           <span class="app-nav-icon">☎️</span>
           <span>Contact</span>
-        </a><a href="apply.html" data-module-id="apply" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student any all public" class="">
+        </a><a href="apply.html" data-module-id="apply" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher any all public" class="">
           <span class="app-nav-icon">📝</span>
           <span>Apply</span>
-        </a><a href="notifications.html" data-module-id="notifications" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="">
+        </a><a href="notifications.html" data-module-id="notifications" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher" class="">
           <span class="app-nav-icon">🔔</span>
           <span>Notifications</span>
         </a>
       </nav>
       <div style="margin-top:auto;padding:16px;border-top:1px solid var(--gray-200);font-size:0.78rem;color:var(--gray-500)">
-        Licensed by <a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">HMG Technologies</a>
+        Powered by <a href="https://hmgconcepts.pages.dev/" target="_blank" rel="noopener">HMG Concepts</a>
       </div>
     </aside>
   <main class="app-main">
@@ -423,7 +448,6 @@
         <button class="btn btn-outline" onclick="CBTUI.downloadTemplate()">⬇ CSV Template</button>
         <button class="btn btn-outline" onclick="CBTUI.refresh()">↻ Refresh</button>
         <button class="btn btn-outline" onclick="CBTUI.importBackup()">📥 Import offline backup (JSON)</button>
-        <button class="btn btn-outline" onclick="CBTUI.exportExamListCSV()">⬇ Export exam list</button>
       </div>
       <div class="card" style="margin-bottom:18px">
         <p style="color:var(--gray-600);margin:0">
@@ -448,21 +472,21 @@
 
     </div>
     <footer style="padding:20px 28px;border-top:1px solid var(--gray-200);font-size:0.82rem;color:var(--gray-500);text-align:center">
-      © 2026 School Connect Demo School · Licensed by <a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">HMG Technologies</a>
+      © 2026 God of Seed Academy · Built by <a href="https://cssadewale.pages.dev" target="_blank" rel="noopener">Adewale Samson Adeagbo</a> · Powered by <a href="https://hmgconcepts.pages.dev/" target="_blank" rel="noopener">HMG Concepts</a> · <a href="developer.html">About the developer</a>
     </footer>
   </main>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="assets/js/config.js"></script>
-<script src="assets/js/license.js"></script>
-<script src="assets/js/demo.js"></script>
 <script src="assets/js/notifications.js"></script>
 <script src="assets/js/voting.js"></script>
 <script src="assets/js/pwa-install.js"></script>
 <script src="assets/js/super.js"></script>
 <script src="assets/js/enterprise.js"></script>
 <script src="assets/js/crud.js"></script>
+<script src="assets/js/report-engine.js"></script>
+<script src="assets/js/analytics.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(reg => { Notifications.init(sb, reg); Voting.init(sb); });
@@ -530,14 +554,11 @@ window.CBTUI = {
         '<td style="white-space:nowrap">'+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.toggle(\''+e.id+'\','+(!e.is_open)+')">'+(e.is_open?'Close':'Open')+'</button> '+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.share(\''+esc(e.code)+'\')">Share</button> '+
-          '<button class="btn btn-sm btn-outline" onclick="CBTUI.exportExamCSV(\''+e.id+'\')">Exam CSV</button> '+
-          '<button class="btn btn-sm btn-outline" onclick="CBTUI.exportExamPDF(\''+e.id+'\')">Exam PDF</button> '+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.results(\''+e.id+'\',\''+esc(e.code)+'\')">Results</button> '+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.preview(\''+e.id+'\')">Preview</button> '+
           (CBTUI.canManageExam(e) ? '<button class="btn btn-sm btn-primary" onclick="CBTUI.edit(\''+e.id+'\')">✏️ Edit</button> '+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.editQuestions(\''+e.id+'\')">Edit Questions</button> '+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.appendCSV(\''+e.id+'\')">Attach CSV</button> '+
-          '<button class="btn btn-sm btn-outline" onclick="CBTUI.importExamCSV(\''+e.id+'\')">Import CSV</button> '+
           '<button class="btn btn-sm btn-outline" onclick="CBTUI.repairTabs(\''+e.id+'\')">Repair Tabs</button> '+
           '<button class="btn btn-sm btn-outline" data-admin-only onclick="CBTUI.del(\''+e.id+'\')">Delete</button>' : '<span class="badge" title="Only the creator teacher or an admin can edit this exam">Read-only</span>')+
         '</td></tr>').join('')+'</tbody></table></div>';
@@ -622,8 +643,9 @@ window.CBTUI = {
     if(!ans){toast('Enter the correct answer.','warning');return;}
     const csvEl=document.getElementById('ex-csv');
     const existing=csvEl.value.trim();
-    const esc2=v=>'"'+String(v||'').replace(/"/g,'""')+'"';
-    const row=[esc2(q),esc2(type),esc2(a),esc2(b),esc2(c),esc2(d),esc2(ans),esc2(explain),mark].join(',');
+    // Build CSV row: question,type,a,b,c,d,answer,explanation,mark
+    const esc=v=>'"'+String(v||'').replace(/"/g,'""')+'"';
+    const row=[esc(q),esc(type),esc(a),esc(b),esc(c),esc(d),esc(ans),esc(explain),mark].join(',');
     if(!existing || !existing.includes('question')){
       csvEl.value='question,type,a,b,c,d,answer,explanation,mark\n'+row;
     } else {
@@ -631,6 +653,7 @@ window.CBTUI = {
     }
     this._manualCount++;
     document.getElementById('mq-count').textContent=this._manualCount+' question(s) added manually';
+    // Clear inputs for next question
     document.getElementById('mq-question').value='';
     ['mq-a','mq-b','mq-c','mq-d','mq-answer','mq-explain'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     document.getElementById('mq-mark').value='1';
@@ -782,17 +805,8 @@ window.CBTUI = {
     if(!sb)return;
     const { data } = await sb.from('cbt_results').select('*').eq('exam_id',id).order('score',{ascending:false});
     const rows=(data||[]).map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(r.student_name)+'</td><td>'+esc(r.student_id_ref||'-')+'</td><td>'+r.score+'/'+r.total+'</td><td>'+(r.percent||0)+'%</td><td>'+esc(r.cert_code||'-')+'</td></tr>').join('');
-    openModal('Results — '+code, '<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-outline" onclick="CBTUI.exportCSV(\''+id+'\')">⬇ Export CSV</button><button class="btn btn-sm btn-outline" onclick="CBTUI.exportResultsPDF(\''+id+'\',\''+esc(code)+'\')">📄 Export PDF</button><button class="btn btn-sm btn-outline" onclick="CBTUI.exportResultsJSON(\''+id+'\')">⬇ Export JSON</button></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>ID</th><th>Score</th><th>%</th><th>Cert</th></tr></thead><tbody>'+(rows||'<tr><td colspan=6>No submissions yet.</td></tr>')+'</tbody></table></div>');
+    openModal('Results — '+code, '<div style="margin-bottom:10px"><button class="btn btn-sm btn-outline" onclick="CBTUI.exportCSV(\''+id+'\')">⬇ Export CSV</button></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>ID</th><th>Score</th><th>%</th><th>Cert</th></tr></thead><tbody>'+(rows||'<tr><td colspan=6>No submissions yet.</td></tr>')+'</tbody></table></div>');
   },
-  _download(name, body, type){ const blob=new Blob([body],{type:type||'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); },
-  _csvCell(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; },
-  _questionCSV(q){ const get=(...ks)=>{for(const k of ks){if(q&&q[k]!=null)return q[k];}return '';}; return [get('question','Question'),get('a','A'),get('b','B'),get('c','C'),get('d','D'),get('answer','correct','correct_answer'),get('explanation'),get('type'),get('tolerance'),get('unit'),get('accept'),get('mrq_aon'),get('pairs'),get('items'),get('difficulty'),get('tags'),get('section','subject')].map(this._csvCell).join(','); },
-  async exportExamCSV(id){ const {data:e,error}=await sb.from('cbt_exams').select('*').eq('id',id).maybeSingle(); if(error||!e){toast('Could not load exam: '+(error?.message||'not found'),'danger');return;} const qs=e.csv_data||e.questions||[]; const head='Question,Option A,Option B,Option C,Option D,Correct Answer,Explanation,Type,Tolerance,Unit,Accept,MRQ_AON,Pairs,Items,Difficulty,Tags,Section\n'; this._download('exam-'+(e.code||id)+'.csv',head+qs.map(q=>this._questionCSV(q)).join('\n'),'text/csv'); toast('Exam question bank exported as CSV.','success'); },
-  async exportExamPDF(id){ const {data:e,error}=await sb.from('cbt_exams').select('*').eq('id',id).maybeSingle(); if(error||!e){toast('Could not load exam: '+(error?.message||'not found'),'danger');return;} const qs=e.csv_data||e.questions||[]; const rows=qs.map((q,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(q.question||'')+'</td><td>'+esc(q.type||'')+'</td><td>'+esc(q.answer||q.correct||q.correct_answer||'')+'</td><td>'+esc(q.mark||1)+'</td></tr>').join(''); const w=window.open('','_blank'); if(!w){toast('Allow popups to export PDF.','warning');return;} w.document.write('<!doctype html><html><head><title>Exam '+esc(e.code)+'</title><style>body{font-family:Arial;padding:24px}h1{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:6px;text-align:left}th{background:#eef2ff}@media print{button{display:none}}</style></head><body><h1>'+esc(e.title||'CBT Exam')+'</h1><p><b>Code:</b> '+esc(e.code)+' &nbsp; <b>Subject:</b> '+esc(e.subject)+' &nbsp; <b>Class:</b> '+esc(e.class||'')+'</p><table><thead><tr><th>#</th><th>Question</th><th>Type</th><th>Answer</th><th>Mark</th></tr></thead><tbody>'+rows+'</tbody></table><p>Powered by HMG Concepts School Connect</p><script>window.onload=function(){window.print()}<\/script></body></html>'); w.document.close(); },
-  async importExamCSV(id){ const input=document.createElement('input'); input.type='file'; input.accept='.csv,text/csv'; input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;const txt=await file.text();const qs=CBT.parseCSV(txt);if(!qs.length){toast('No valid questions found in CSV.','warning');return;}const {data:e}=await sb.from('cbt_exams').select('csv_data').eq('id',id).maybeSingle();const old=(e&&e.csv_data)||[];const {error}=await sb.from('cbt_exams').update({csv_data:old.concat(qs),updated_at:new Date().toISOString()}).eq('id',id);if(error){toast(error.message,'danger');return;}toast('CSV imported and appended to the exam.','success');CBTUI.refresh();}; input.click(); },
-  async exportExamListCSV(){ const {data,error}=await sb.from('cbt_exams').select('code,title,subject,class,term,session,exam_mode,is_open,report_column,created_at').order('created_at',{ascending:false}); if(error){toast(error.message,'danger');return;} const head='Code,Title,Subject,Class,Term,Session,Mode,Open,ReportColumn,CreatedAt\n'; const body=(data||[]).map(e=>[e.code,e.title,e.subject,e.class,e.term,e.session,e.exam_mode,e.is_open,e.report_column,e.created_at].map(this._csvCell).join(',')).join('\n'); this._download('school-connect-exams.csv',head+body,'text/csv'); },
-  async exportResultsJSON(id){ const {data,error}=await sb.from('cbt_results').select('*').eq('exam_id',id).order('score',{ascending:false}); if(error){toast(error.message,'danger');return;} this._download('cbt-results-'+id+'.json',JSON.stringify(data||[],null,2),'application/json'); },
-  async exportResultsPDF(id,code){ const {data,error}=await sb.from('cbt_results').select('*').eq('exam_id',id).order('score',{ascending:false}); if(error){toast(error.message,'danger');return;} const rows=(data||[]).map((r,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(r.student_name)+'</td><td>'+esc(r.student_id_ref||'')+'</td><td>'+esc(r.student_class||'')+'</td><td>'+esc(r.score)+'/'+esc(r.total)+'</td><td>'+esc(r.percent||0)+'%</td><td>'+esc(r.cert_code||'')+'</td></tr>').join(''); const w=window.open('','_blank');if(!w){toast('Allow popups to export PDF.','warning');return;}w.document.write('<!doctype html><html><head><title>CBT Results '+esc(code||'')+'</title><style>body{font-family:Arial;padding:24px}h1{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:6px}th{background:#eef2ff}</style></head><body><h1>CBT Results — '+esc(code||'')+'</h1><table><thead><tr><th>#</th><th>Name</th><th>ID</th><th>Class</th><th>Score</th><th>Percent</th><th>Certificate</th></tr></thead><tbody>'+rows+'</tbody></table><script>window.onload=function(){window.print()}<\/script></body></html>');w.document.close(); },
   async exportCSV(id){
     const { data } = await sb.from('cbt_results').select('*').eq('exam_id',id);
     const head='Name,StudentID,Class,Score,Total,Percent,Correct,Wrong,Skipped,Cert,SubmittedAt\n';
@@ -800,7 +814,7 @@ window.CBTUI = {
     const blob=new Blob([head+body],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='cbt-results.csv'; a.click();
   },
   downloadTemplate(){
-    const csv='Question,Option A,Option B,Option C,Option D,Correct Answer,Explanation,Type,Tolerance,Unit,Accept,MRQ_AON,Pairs,Items,Difficulty,Tags,Section\n"What is 5 + 7?",10,11,12,13,C,"Addition.",mcq,,,,,,,Easy,Arithmetic,Numbers\n"Capital of Nigeria?",,,,,Abuja,"FCT.",short,,,FCT,,,,Easy,Geography,Nigeria\n';
+    const csv='Question,A,B,C,D,CorrectAnswer,Explanation,Type,Tolerance,Unit,Accept,MRQ_AON,Pairs,Items,Difficulty,Tags,Section\n"What is 5 + 7?",10,11,12,13,C,"Addition.",mcq,,,,,,,Easy,Arithmetic,Numbers\n"Capital of Nigeria?",,,,,Abuja,"FCT.",short,,,FCT,,,,Easy,Geography,Nigeria\n';
     const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='cbt-template.csv'; a.click();
   }
 };
@@ -885,11 +899,11 @@ document.addEventListener('DOMContentLoaded', CBTUI.refresh); CBTUI.refresh();
   };
   CBTUI.save = async function(){
     if(!sb){ toast('Database not configured.','warning'); return; }
-    let questions=[]; let subject_breakdown=[]; const blocks=[...document.querySelectorAll('#ex-ms-subjects .card')];
+    let questions=[]; const subject_breakdown=[]; const blocks=[...document.querySelectorAll('#ex-ms-subjects .card')];
     blocks.forEach((b,idx)=>{ const sub=b.querySelector('.ms-subject')?.value || ('Subject '+(idx+1)); const csv=b.querySelector('.ms-csv')?.value.trim()||''; if(csv){ const qs=CBT.parseCSV(csv); qs.forEach(q=>{q.section=sub;q.subject=sub;q.subject_section=sub;q.exam_subject=sub;}); subject_breakdown.push({name:sub,start:questions.length,count:qs.length,end:questions.length+qs.length-1}); questions=questions.concat(qs); } });
-    if(!questions.length){ const csv=document.getElementById('ex-csv').value.trim(); questions=csv?CBT.parseCSV(csv):[]; const sub=document.getElementById('ex-subject').value; questions.forEach(q=>{ if(!q.section){ q.section=sub; q.subject=sub; q.subject_section=sub; q.exam_subject=sub; } }); if(sub && questions.length) subject_breakdown=[{name:sub,start:0,count:questions.length,end:questions.length-1}]; }
+    if(!questions.length){ const csv=document.getElementById('ex-csv').value.trim(); questions=csv?CBT.parseCSV(csv):[]; const sub=document.getElementById('ex-subject').value; questions.forEach(q=>{ if(!q.section) q.section=sub; }); }
     if(!questions.length){ toast('Add at least one question CSV.','warning'); return; }
-    const multiSubjects=[...new Set(questions.map(q=>q.section||q.subject).filter(Boolean))];
+    const multiSubjects=[...new Set(questions.map(q=>q.section).filter(Boolean))];
     const exam={ title:document.getElementById('ex-title').value, subject:multiSubjects.length>1?('MULTI-SUBJECT: '+multiSubjects.join(', ')):(document.getElementById('ex-subject').value||multiSubjects[0]||'General'), class:document.getElementById('ex-class').value, term:document.getElementById('ex-term').value, session:document.getElementById('ex-session').value, assessment_type:document.getElementById('ex-type').value, exam_mode:document.getElementById('ex-mode')?.value||'registered', topic:document.getElementById('ex-package').value || (multiSubjects.length>1?multiSubjects.join(', '):''), report_column:document.getElementById('ex-col').value, max_score:parseFloat(document.getElementById('ex-max').value)||0, duration:parseInt(document.getElementById('ex-dur').value)||45, negative_mark:parseFloat(document.getElementById('ex-neg').value)||0, select_count:parseInt(document.getElementById('ex-sel').value)||0, instructions:document.getElementById('ex-instr').value, is_open:true, anti_cheat_config:{tab_switch:document.getElementById('ac-tab')?.checked!==false,window_blur:document.getElementById('ac-blur')?.checked!==false,copy_paste:document.getElementById('ac-copy')?.checked!==false,right_click:document.getElementById('ac-right')?.checked!==false,fullscreen:document.getElementById('ac-full')?.checked!==false,watermark:document.getElementById('ac-watermark')?.checked!==false,devtools:true,max_violations:parseInt(document.getElementById('ac-max')?.value||'5'),subject_breakdown:subject_breakdown,subjects:multiSubjects,multi_subject:multiSubjects.length>1}, csv_data:questions };
     const {data,error}=await CBT.createExam(exam); if(error){toast('Could not create: '+error.message,'danger');return;} if(typeof App!=='undefined'&&App.logActivity)App.logActivity('create','cbt_exam',data&&data.code); closeModal(); toast('✅ Exam created. Code: '+(data&&data.code),'success',6000); CBTUI.refresh();
   };
