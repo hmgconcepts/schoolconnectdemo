@@ -142,3 +142,9 @@ Run `database/complete-schema.sql` once in Supabase SQL Editor for a fresh deplo
 > eliminating all "table not found in schema cache" and "ON CONFLICT" errors permanently.
 > The former merged file is kept for reference as `database/complete-schema-v11-LEGACY-MERGED.sql`.
 > Do not run legacy/migration SQL files after the v12 schema — they are superseded.
+
+## V5.5 authentication/report setup
+After deployment, add `https://YOUR-DOMAIN/change-password.html?recovery=1` to Supabase Authentication Redirect URLs. Registered CBT exams use admission number only and resolve official learner identity. Report headings/maxima come directly from Report Cards assessment-column settings; review/edit unusual maxima before publishing reports.
+
+## V5.6 daily fees / CBT reset / teacher permissions
+Run the full updated `database/complete-schema.sql` to add Lagos daily fee dates, controlled CBT-result reset and strict teacher subject/class RLS. Review Staff→login links plus Subjects→teacher and Classes→class teacher assignments before teacher testing. Run the expanded demo seed only in the demo project.

@@ -5,21 +5,21 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Sign in • School Connect Demonstration College</title>
 <meta name="description" content="School Connect Demonstration College — Sign in. Comprehensive school management platform.">
-<meta name="keywords" content="$1">
+<meta name="keywords" content="School Connect Demonstration College, school management, SCD, HMG Concepts">
 <meta name="theme-color" content="#0506ae">
 <link rel="canonical" href="./login.html">
 <meta property="og:url" content="./login.html">
 <meta name="twitter:url" content="./login.html">
-<link rel="icon" type="image/png" href="assets/img/logo.png">
+<link rel="icon" type="image/png" href="assets/img/logo.svg">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="assets/img/logo.png">
+<link rel="apple-touch-icon" href="assets/img/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
 <meta property="og:title" content="Sign in • School Connect Demonstration College">
-<meta property="og:description" content="$1 — Comprehensive school management platform">
-<meta property="og:image" content="assets/img/logo.png">
+<meta property="og:description" content="School Connect Demonstration College — Free school management by HMG Concepts">
+<meta property="og:image" content="assets/img/logo.svg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="assets/css/style.css">
@@ -82,7 +82,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 
 <div id="pwa-install-banner" class="pwa-install">
   <div class="pwa-install-header">
-    <img src="assets/img/logo.png" alt="" class="pwa-install-icon">
+    <img src="assets/img/logo.svg" alt="" class="pwa-install-icon">
     <div style="flex:1">
       <div class="pwa-install-title">📲 Install School Connect</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
@@ -109,7 +109,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <div class="login-shell" style="min-height:100vh;background:var(--gradient);display:flex;align-items:center;justify-content:center;padding:40px 20px">
   <div class="login-card" style="background:white;padding:40px;border-radius:24px;box-shadow:var(--shadow-xl);max-width:440px;width:100%">
     <div style="text-align:center;margin-bottom:32px">
-      <img src="assets/img/logo.png" alt="School Connect Demonstration College logo" style="width:64px;height:64px;margin:0 auto 16px;border-radius:14px;object-fit:contain">
+      <img src="assets/img/logo.svg" alt="School Connect Demonstration College logo" style="width:64px;height:64px;margin:0 auto 16px;border-radius:14px;object-fit:contain">
       <h1 style="font-size:1.8rem;font-weight:900;color:var(--dark);margin-bottom:4px">School Connect Demonstration College</h1>
       <p style="color:var(--gray-600);font-size:0.95rem">A fully simulated school — explore every feature</p>
     </div>
@@ -121,6 +121,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       <div class="form-group"><label>Email or Student/Staff ID</label><input class="form-input" type="text" name="email" placeholder="you@example.com or SCD/2026/0001" autocapitalize="none" required></div>
       <div class="form-group"><label>Password</label><input class="form-input" type="password" name="password" required minlength="8"></div>
       <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
+      <p style="text-align:right;margin:10px 0 0"><a href="forgot-password.html">Forgot password?</a></p>
     </form>
     <form id="signup-form" onsubmit="App.handleSignUp(event)" class="form" style="display:none">
       <div class="form-group"><label>Full name</label><input class="form-input" name="full_name" required></div>
