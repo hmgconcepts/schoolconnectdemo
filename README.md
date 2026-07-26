@@ -166,3 +166,7 @@ Run `database/complete-schema.sql` once in Supabase SQL Editor for a fresh deplo
 ## School Connect V5.1 definitive CBT repair
 
 The maintained V5.1 repair documentation is in `docs/v5/`. Before deployment read `BUG-FIX-REPORT.md` and `DEPLOYMENT-GUIDE-V5.md`. For an existing database, the CBT zero-score fix requires `database/cbt-v5.1-zero-score-hotfix.sql` (the full new schema already includes it); frontend-only deployment is insufficient. No paid AI API is used.
+
+## School Connect V5.3 update
+
+V5.3 adds teacher-owned profile signatures on assigned class reports, controlled full CBT editing, adaptive CBT-only report cards, a four-step timetable wizard and the demo numeric-amount correction. Back up and run the latest `database/complete-schema.sql`, then deploy all files and hard-refresh. See `docs/v5/V5.3-TEACHER-CBT-TIMETABLE-DEMO.md`.
