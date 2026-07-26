@@ -245,7 +245,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <div class="card" style="background:#f0f9ff;border:1px solid #0ea5e9;margin-bottom:20px">
       <h3 style="color:#0369a1;margin-top:0">ℹ️ Report Card Columns Are Global</h3>
       <p style="margin:0;font-size:.9rem;line-height:1.6">Report card columns (CA1, CA2, CBT, Project, Exam, etc.) are defined <strong>once for all subjects</strong>. You do not need to set up columns separately for each subject. All subjects use the same column structure.</p>
-      <p style="margin:8px 0 0;font-size:.85rem;color:#64748b"><strong>Default columns:</strong> CA1 (10 marks), CA2 (10 marks), CA3/CBT (10 marks), Project (10 marks), Exam (60 marks) = Total 100 marks</p>
+      <p style="margin:8px 0 0;font-size:.85rem;color:#64748b"><strong>Flexible structure:</strong> create or edit any heading and maximum—e.g. CA1 (20), CA2 (10), Project (10), Exam (60), or CBT-only (100). Printed headings and CBT destinations follow these exact settings; no hard-coded CA maximum is used.</p>
     </div>
 
       <div class="card" style="background:#eef2ff;border-color:#c7d2fe;margin-bottom:14px"><b>👀 See samples first:</b> <a href="sample-report-card.html" target="_blank">Report Card</a> · <a href="sample-class-broadsheet.html" target="_blank">Class Broadsheet</a> · <a href="sample-subject-broadsheet.html" target="_blank">Subject Broadsheet</a> · <a href="sample-e-receipt.html" target="_blank">Fee E-Receipt</a></div>
@@ -511,15 +511,18 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
     },
 
     renderCols(){
+      const configuredTotal=this.cols.reduce((a,c)=>a+Number(c.max_mark||0),0),suspicious=this.cols.filter(c=>!(Number(c.max_mark)>0)||Number(c.max_mark)>100),keys=this.cols.map(c=>String(c.name||'').toLowerCase().replace(/[^a-z0-9]/g,'')),duplicates=keys.filter((x,i)=>keys.indexOf(x)!==i);
+      const audit='<div class="notice" style="margin:8px 0;background:'+(suspicious.length||duplicates.length?'#fef2f2':'#f0fdf4')+';border-color:'+(suspicious.length||duplicates.length?'#fca5a5':'#86efac')+';color:'+(suspicious.length||duplicates.length?'#991b1b':'#166534')+'"><b>Configured maximum: '+configuredTotal+'</b>. Printed headings use these exact names/maxima. '+(suspicious.length?'Review unusual maximum: '+suspicious.map(c=>esc(c.name)+' ('+Number(c.max_mark)+')').join(', ')+'. ':'')+(duplicates.length?'Duplicate-like headings detected; rename or delete duplicates.':'Structure looks consistent.')+'</div>';
       $('rc-cols').innerHTML =
-        '<div class="card"><h3>School-wide assessment columns</h3><p style="color:var(--gray-600);font-size:.86rem">Create CA1, CA2, CBT, project and examination columns once. The same template is reused for every subject; scores stay separated by subject.</p>' +
+        '<div class="card"><h3>School-wide assessment columns</h3><p style="color:var(--gray-600);font-size:.86rem">Create CA1, CA2, CBT, project and examination columns once. The same template is reused for every subject; scores stay separated by subject.</p>' +audit+
         '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Max mark</th><th>Source</th><th></th></tr></thead><tbody>' +
-        (this.cols.length ? this.cols.map(c => '<tr><td>' + esc(c.name) + '</td><td>' + c.max_mark + '</td><td>' + (c.source === 'cbt' ? '<span class="badge">From CBT</span>' : 'Manual') + '</td><td><button type="button" class="btn btn-sm btn-outline" data-del-col="' + c.id + '">✕</button></td></tr>').join('') : '<tr><td colspan="4">No columns yet — add your first one below.</td></tr>') +
+        (this.cols.length ? this.cols.map(c => '<tr><td>' + esc(c.name) + '</td><td>' + c.max_mark + '</td><td>' + (c.source === 'cbt' ? '<span class="badge">From CBT</span>' : 'Manual') + '</td><td><button type="button" class="btn btn-sm btn-outline" data-edit-col="' + c.id + '">Edit</button> <button type="button" class="btn btn-sm btn-outline" data-del-col="' + c.id + '">✕</button></td></tr>').join('') : '<tr><td colspan="4">No columns yet — add your first one below.</td></tr>') +
         '</tbody></table></div>' +
         '<div class="grid grid-2" style="margin-top:10px"><div class="form-group"><label>New column name</label><input class="form-input" id="rc-cn" placeholder="CA1"></div>' +
         '<div class="form-group"><label>Max mark</label><input class="form-input" type="number" id="rc-cm" value="10"></div></div>' +
         '<button type="button" class="btn btn-primary" id="rc-add-col">+ Add column</button></div>';
       $('rc-add-col').addEventListener('click', () => this.addCol());
+      $('rc-cols').querySelectorAll('[data-edit-col]').forEach(btn=>btn.addEventListener('click',()=>this.editCol(btn.dataset.editCol)));
       $('rc-cols').querySelectorAll('[data-del-col]').forEach(btn => btn.addEventListener('click', () => this.delCol(btn.dataset.delCol)));
     },
 
@@ -533,6 +536,9 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       toast('School-wide column added once for every subject in this class, term and session.', 'success');
       this.load();
     },
+
+    editCol(id){const c=this.cols.find(x=>String(x.id)===String(id));if(!c)return;openModal('Edit assessment column','<div class="form-group"><label>Heading shown on reports</label><input class="form-input" id="rc-ec-name" value="'+esc(c.name)+'"></div><div class="form-group"><label>Maximum mark</label><input class="form-input" type="number" min="0.5" step="0.5" id="rc-ec-max" value="'+Number(c.max_mark||0)+'"></div><p>Example: CA1 max 20, CA2 max 10, Project max 10. Report headings and mappings update from these settings.</p>','<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="RC.saveColEdit(\''+id+'\')">Save column</button>');},
+    async saveColEdit(id){const name=document.getElementById('rc-ec-name').value.trim(),max=Number(document.getElementById('rc-ec-max').value);if(!name||!(max>0)){toast('Enter a heading and maximum mark greater than zero.','warning');return;}const old=this.cols.find(x=>String(x.id)===String(id)),r=await window.sb.from('assessment_columns').update({name,max_mark:max}).eq('id',id);if(r.error){toast(r.error.message,'danger');return;}if(old&&old.name!==name){try{await window.sb.from('cbt_exams').update({report_column:name,max_score:max}).eq('class',this.ctx.class).eq('term',this.ctx.term).eq('session',this.ctx.session).eq('report_column',old.name);}catch(_){}}closeModal();toast('Column updated. Report headings and matching CBT mappings now use '+name+' ('+max+').','success');this.load();},
 
     async delCol(id){
       if (!confirm('Delete this column and its scores?')) return;

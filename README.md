@@ -174,3 +174,13 @@ V5.3 adds teacher-owned profile signatures on assigned class reports, controlled
 ## School Connect V5.4 update
 
 V5.4 adds re-importable paginated portable archives, local archive analysis, export-before-purge, an orderly session/term CBT library with archive/restore, adaptive CBT-only reports and beginning-of-term student physical metrics. Back up and run the latest `database/complete-schema.sql`, deploy all files and hard-refresh. See `docs/v5/V5.4-PORTABILITY-CBT-ORGANIZATION-METRICS.md`.
+
+## School Connect V5.5 update
+
+V5.5 adds fully dynamic admin-defined report headings/maxima, admission-only registered CBT identity, password recovery, consistent navigation icons, comprehensive per-page assistant guidance, clearer Rubrics/Transcripts and term/session academic-performance insights. Back up and run the latest `database/complete-schema.sql`, deploy all files, configure the Supabase recovery redirect and hard-refresh. See `docs/v5/V5.5-FLEXIBLE-REPORTS-REGISTERED-CBT-RECOVERY-INSIGHTS.md`.
+
+## School Connect V5.6 update
+
+V5.6 adds an Africa/Lagos daily fee collection dashboard with date, payment-method, class and collector totals; an **Export then clear results** workflow for safely reusing CBT examinations; strict database-enforced teacher subject/class ownership while admin roles retain full control; and verified demo coverage for all 80 CRUD modules plus 16 specialised datasets. Back up Supabase, run the latest `database/complete-schema.sql`, deploy all files and hard-refresh. The focused `database/v5.6-daily-fees-cbt-reset-teacher-scope.sql` is only for a database already fully current on V5.5. See `docs/v5/V5.6-DAILY-FEES-CBT-RESET-TEACHER-SCOPE-DEMO.md`.
+
+**Database deployment is mandatory:** uploading only HTML/JavaScript does not install `payment_date`, the CBT reset RPC or the V5.6 RLS policies.
