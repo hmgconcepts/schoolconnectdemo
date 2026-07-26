@@ -1449,6 +1449,9 @@ function toast(msg, type='info', ms=3500) {
 function handleSignIn(e){ return App.handleSignIn(e); }
 function handleSignUp(e){ return App.handleSignUp(e); }
 
+// Load the portable archive engine on every operational page so any CSV/data
+// export has a single re-import path without uploading source files to Supabase.
+(function(){if(window.DataPortability)return;const s=document.createElement('script');s.src='assets/js/data-portability.js';s.defer=true;document.head.appendChild(s);})();
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', App.init);
 else App.init();
 

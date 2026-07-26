@@ -686,6 +686,7 @@ const CRUD = {
     const key = this.canonicalId(moduleId);
     const tableEl = document.getElementById(moduleId + '-table') || document.getElementById(key + '-table');
     if (!tableEl) return;
+    this.ensurePortableButton(moduleId);
     if (!d) { tableEl.querySelector('thead').innerHTML = '<tr><th>Not available</th></tr>'; return; }
     if (!this.sb) {
       tableEl.querySelector('thead').innerHTML = '<tr><th>Database not configured</th></tr>';
@@ -1543,8 +1544,10 @@ const CRUD = {
     closeModal(); this.renderList('students'); this.renderList('promotion');
   },
 
+  ensurePortableButton(moduleId){const existing=document.querySelector('[data-portable-export="'+moduleId+'"]');if(existing)return;const csv=[...document.querySelectorAll('button')].find(b=>String(b.getAttribute('onclick')||'').includes("CRUD.exportCSV('"+moduleId+"')"));if(!csv)return;const btn=document.createElement('button');btn.className='btn btn-outline';btn.dataset.portableExport=moduleId;btn.textContent='♻️ Portable JSON';btn.title='Re-importable archive with UUIDs, arrays, JSON and dates preserved';btn.addEventListener('click',()=>this.exportPortable(moduleId));csv.insertAdjacentElement('afterend',btn);},
+  async exportPortable(moduleId){const d=this.def(moduleId);if(!d||!this.sb)return;if(!window.DataPortability){toast('Portable engine is loading; try again in a moment.','info');return;}DataPortability.init(this.sb);try{let filter=d.generic?{column:'module',value:d.module}:null,n=await DataPortability.exportTable(d.table,filter);toast('✅ '+n+' row(s) exported as re-importable portable JSON.','success',7000);}catch(e){toast(e.message||e,'danger');}},
   exportCSV(moduleId) {
-    const d = this.def(moduleId); if (!d || !this.sb) return;
+    this.ensurePortableButton(moduleId);const d = this.def(moduleId); if (!d || !this.sb) return;
     let q = this.sb.from(d.table).select('*');
     if (d.generic) q = q.eq('module', d.module);
     q.then(({ data }) => {
