@@ -170,3 +170,7 @@ The maintained V5.1 repair documentation is in `docs/v5/`. Before deployment rea
 ## School Connect V5.3 update
 
 V5.3 adds teacher-owned profile signatures on assigned class reports, controlled full CBT editing, adaptive CBT-only report cards, a four-step timetable wizard and the demo numeric-amount correction. Back up and run the latest `database/complete-schema.sql`, then deploy all files and hard-refresh. See `docs/v5/V5.3-TEACHER-CBT-TIMETABLE-DEMO.md`.
+
+## School Connect V5.4 update
+
+V5.4 adds re-importable paginated portable archives, local archive analysis, export-before-purge, an orderly session/term CBT library with archive/restore, adaptive CBT-only reports and beginning-of-term student physical metrics. Back up and run the latest `database/complete-schema.sql`, deploy all files and hard-refresh. See `docs/v5/V5.4-PORTABILITY-CBT-ORGANIZATION-METRICS.md`.
