@@ -1,12 +1,12 @@
-# School Connect V5.3 — Test and Audit Report
+# School Connect V5.4 — Test and Audit Report
 
-**Audit date:** 2026-07-25 (Africa/Lagos)
+**Audit date:** 2026-07-26 (Africa/Lagos)
 
 ## Automated results
 
 | Suite | Result |
 |---|---:|
-| V5.3 SQL/link/parity/security contract audit | 53 passed, 0 failed |
+| V5.4 SQL/link/parity/security contract audit | 58 passed, 0 failed |
 | CBT UTME tab simulation | 9 passed, 0 failed |
 | CBT browser scoring/parser unit tests | 11 passed, 0 failed |
 | Executed V5.1 SQL grading engine (PGlite) | 10/10, 100%, 5 correct; idempotence, historical regrade, redaction and missing-key guard passed |
@@ -14,12 +14,13 @@
 | Bulk CBT → canonical report_scores tests | 4 passed, 0 failed |
 | Timetable PostgreSQL-compatible engine test | 5/5 demands placed; restricted days and cross-class teacher conflicts passed |
 | Exact demo numeric `amount` insert test | 12 module rows inserted into numeric column; passed |
+| Data portability JSON/CSV round-trip | 5 passed, 0 failed |
 | Sample/receipt/fee workflow regression | 12 passed, 0 failed |
 | Role-navigation regression | passed |
 | Generator packaging contract | passed |
-| Traditional real JSZip build | 185 entries; 0 broken links; 0 orphans |
-| Modern real JSZip build | 391 entries; 0 broken links; 0 orphans |
-| PostgreSQL parsing | complete schema 1,057 statements; demo seed 36 top-level statements |
+| Traditional real JSZip build | 187 entries; 0 broken links; 0 orphans |
+| Modern real JSZip build | 395 entries; 0 broken links; 0 orphans |
+| PostgreSQL parsing | complete schema 1,067 statements; demo seed 38 top-level statements |
 | Demo seed/schema column contract | 0 missing tables/columns |
 | Shared runtime parity across generator/GOSA/demo | passed |
 

@@ -14,13 +14,13 @@
 
 Do **not** run `demo-seed.sql` on a real school database.
 
-## B. Existing deployment upgrade (complete V5.3)
+## B. Existing deployment upgrade (complete V5.4)
 
 If the only current error is `column "motto" does not exist`, run the small
 `database/cbt-v5.1.1-getter-school-settings-fix.sql`, deploy the updated candidate
 page/service worker and hard-refresh. For the complete V5.2 release use the full schema.
 
-For teacher signatures, full CBT editing support, adaptive CBT-only reports, promotion identity and the robust timetable engine, run the **full updated `complete-schema.sql`**. `v5.3-platform-enhancements.sql` is available only when an existing project needs the focused teacher-signature/timetable upgrade. The CBT hotfixes do not install all V5.3 features.
+For portable archives, ordered CBT management, student term metrics, teacher signatures, adaptive reports and the robust timetable engine, run the **full updated `complete-schema.sql`**. `v5.3-platform-enhancements.sql` is available only when an existing project needs the focused teacher-signature/timetable upgrade. The CBT hotfixes do not install all V5.3 features.
 
 1. Supabase → Database → Backups/export: create a restorable backup. Export `cbt_exams`, `cbt_results`, `assessment_columns`, `report_scores`, `results`, payments and identities.
 2. Put the site in a short maintenance window; do not begin an examination during the database upgrade.
