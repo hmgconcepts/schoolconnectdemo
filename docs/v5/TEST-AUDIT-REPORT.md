@@ -1,4 +1,4 @@
-# School Connect V5 — Test and Audit Report
+# School Connect V5.3 — Test and Audit Report
 
 **Audit date:** 2026-07-25 (Africa/Lagos)
 
@@ -6,18 +6,20 @@
 
 | Suite | Result |
 |---|---:|
-| V5.2.1 SQL/link/parity/security contract audit | 45 passed, 0 failed |
+| V5.3 SQL/link/parity/security contract audit | 53 passed, 0 failed |
 | CBT UTME tab simulation | 9 passed, 0 failed |
 | CBT browser scoring/parser unit tests | 11 passed, 0 failed |
 | Executed V5.1 SQL grading engine (PGlite) | 10/10, 100%, 5 correct; idempotence, historical regrade, redaction and missing-key guard passed |
-| Report-output unit tests | 5 passed, 0 failed |
+| Report output, teacher signature and CBT-only adaptive tests | 6 passed, 0 failed |
 | Bulk CBT → canonical report_scores tests | 4 passed, 0 failed |
+| Timetable PostgreSQL-compatible engine test | 5/5 demands placed; restricted days and cross-class teacher conflicts passed |
+| Exact demo numeric `amount` insert test | 12 module rows inserted into numeric column; passed |
 | Sample/receipt/fee workflow regression | 12 passed, 0 failed |
 | Role-navigation regression | passed |
 | Generator packaging contract | passed |
-| Traditional real JSZip build | 184 entries; 0 broken links; 0 orphans |
-| Modern real JSZip build | 389 entries; 0 broken links; 0 orphans |
-| PostgreSQL parsing | complete schema 970 statements; demo seed 34 top-level statements |
+| Traditional real JSZip build | 185 entries; 0 broken links; 0 orphans |
+| Modern real JSZip build | 391 entries; 0 broken links; 0 orphans |
+| PostgreSQL parsing | complete schema 1,057 statements; demo seed 36 top-level statements |
 | Demo seed/schema column contract | 0 missing tables/columns |
 | Shared runtime parity across generator/GOSA/demo | passed |
 
@@ -43,7 +45,8 @@ Run everything from the generator repository:
 ## Tested document cases
 
 - Grade thresholds match the supplied samples.
-- Student report includes school identity, score table, affective and psychomotor domains, comments, signatures and stamp.
+- Student report includes school identity, score table, affective and psychomotor domains, comments, assigned class-teacher name/signature and stamp.
+- CBT-only report uses only the active CBT maximum; absent manual CA/exam cells print as dashes.
 - Class broadsheet has rotated subject headings, totals, averages, positions and grading legend.
 - Subject broadsheet has average, high, low and pass-rate statistics plus sign-off.
 - Receipt has header/logo/contact, reference/date/student/term/method, total, amount paid, remaining/full-paid state and authorised signature.

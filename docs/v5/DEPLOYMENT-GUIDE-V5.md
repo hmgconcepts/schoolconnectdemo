@@ -14,17 +14,17 @@
 
 Do **not** run `demo-seed.sql` on a real school database.
 
-## B. Existing deployment upgrade (CBT V5.1.1 + report/bulk/access V5.2)
+## B. Existing deployment upgrade (complete V5.3)
 
 If the only current error is `column "motto" does not exist`, run the small
 `database/cbt-v5.1.1-getter-school-settings-fix.sql`, deploy the updated candidate
 page/service worker and hard-refresh. For the complete V5.2 release use the full schema.
 
-For the complete V5.2 correction, run the **full updated `complete-schema.sql`**. The focused CBT hotfix repairs only the CBT engine/getter and does not install the cumulative promotion/report integrity additions.
+For teacher signatures, full CBT editing support, adaptive CBT-only reports, promotion identity and the robust timetable engine, run the **full updated `complete-schema.sql`**. `v5.3-platform-enhancements.sql` is available only when an existing project needs the focused teacher-signature/timetable upgrade. The CBT hotfixes do not install all V5.3 features.
 
 1. Supabase → Database → Backups/export: create a restorable backup. Export `cbt_exams`, `cbt_results`, `assessment_columns`, `report_scores`, `results`, payments and identities.
 2. Put the site in a short maintenance window; do not begin an examination during the database upgrade.
-3. Run the full new `database/complete-schema.sql` for V5.2. If you intentionally need only the earlier CBT repair, use `cbt-v5.1-zero-score-hotfix.sql` instead. Do not run both; the full schema includes it.
+3. Run the full new `database/complete-schema.sql` for V5.3. It already includes the CBT getter/scorer repairs, report/promotion additions, teacher signatures and timetable generator. Do not run the smaller packs afterward.
 4. Confirm SQL functions exist:
    ```sql
    select routine_name from information_schema.routines
