@@ -724,36 +724,51 @@ window.CBTUI = {
      question bank — at any time after creation.
      ============================================================ */
   async edit(id){
-    if(!sb) return;
-    const {data:e}=await sb.from('cbt_exams').select('*').eq('id',id).maybeSingle();
-    if(!e){ toast('Exam not found','warning'); return; }
-    openModal('✏️ Edit Exam — '+esc(e.title||''), `
-      <div class="form-group"><label>Title</label><input class="form-input" id="ed-title" value="${esc(e.title||'')}"></div>
+    if(!sb)return;if(this.loadPickers)await this.loadPickers();
+    const [{data:e,error},{data:cols}]=await Promise.all([sb.from('cbt_exams').select('*').eq('id',id).maybeSingle(),sb.from('assessment_columns').select('id,class,subject,term,session,name,max_mark,position').order('position').limit(2000)]);
+    if(error||!e){toast('Exam not found: '+(error&&error.message||''),'warning');return;}this._editExam=e;this._editColumns=cols||[];
+    const opts=(arr,current,label)=>{const vals=[...new Set([current].concat(arr||[]).map(x=>String(x||'').trim()).filter(Boolean))];return '<option value="">— '+label+' —</option>'+vals.map(x=>'<option value="'+esc(x)+'" '+(x===String(current||'')?'selected':'')+'>'+esc(x)+'</option>').join('');};
+    const isMulti=String(e.subject||'').toUpperCase().startsWith('MULTI-SUBJECT');
+    openModal('✏️ Full Edit Exam — '+esc(e.code||''), `
+      <div class="notice" style="background:#eff6ff;border-color:#93c5fd;color:#1e3a8a"><b>Controlled edit:</b> school-defined values use dropdowns to prevent spelling differences. All candidate, scoring, schedule and security settings can be updated here.</div>
+      <div class="form-group"><label>Exam title *</label><input class="form-input" id="ed-title" value="${esc(e.title||'')}"></div>
       <div class="grid grid-2">
-        <div class="form-group"><label>Subject</label><input class="form-input" id="ed-subject" value="${esc(e.subject||'')}"></div>
-        <div class="form-group"><label>Class</label><input class="form-input" id="ed-class" value="${esc(e.class||'')}"></div>
-        <div class="form-group"><label>Duration (minutes)</label><input class="form-input" type="number" id="ed-dur" value="${e.duration||45}"></div>
-        <div class="form-group"><label>Report column</label><input class="form-input" id="ed-col" value="${esc(e.report_column||'')}"></div>
-        <div class="form-group"><label>Max score contribution</label><input class="form-input" type="number" id="ed-max" value="${e.max_score||0}"></div>
-        <div class="form-group"><label>Negative mark / wrong</label><input class="form-input" type="number" step="0.25" id="ed-neg" value="${e.negative_mark||0}"></div>
-        <div class="form-group"><label>Select N questions (0=all)</label><input class="form-input" type="number" id="ed-sel" value="${e.select_count||0}"></div>
-        <div class="form-group"><label>Attempt limit (0=unlimited)</label><input class="form-input" type="number" id="ed-att" value="${e.attempt_limit||0}"></div>
+        <div class="form-group"><label>Subject *</label><select class="form-select" id="ed-subject" ${isMulti?'disabled title="Edit multi-subject names through Edit Questions / Repair Tabs"':''}>${opts(this._subjects,e.subject,'select subject')}</select>${isMulti?'<small>Multi-subject identity is controlled by its question sections. Use Edit Questions or Repair Tabs.</small>':''}</div>
+        <div class="form-group"><label>Class *</label><select class="form-select" id="ed-class" onchange="CBTUI.refreshEditReportColumns()">${opts(this._classes,e.class,'select class')}</select></div>
+        <div class="form-group"><label>Term *</label><select class="form-select" id="ed-term" onchange="CBTUI.refreshEditReportColumns()">${opts(this._terms,e.term,'select term')}</select></div>
+        <div class="form-group"><label>Session *</label><select class="form-select" id="ed-session" onchange="CBTUI.refreshEditReportColumns()">${opts(this._sessions,e.session,'select session')}</select></div>
+        <div class="form-group"><label>Assessment type</label><select class="form-select" id="ed-type">${['exam','test','ca','assignment','project','quiz','practical'].map(x=>'<option value="'+x+'" '+(String(e.assessment_type||'exam')===x?'selected':'')+'>'+x.toUpperCase()+'</option>').join('')}</select></div>
+        <div class="form-group"><label>Candidate mode</label><select class="form-select" id="ed-mode"><option value="registered" ${e.exam_mode!=='open'?'selected':''}>Registered students</option><option value="open" ${e.exam_mode==='open'?'selected':''}>Open / anonymous</option></select></div>
+        <div class="form-group"><label>Report-card destination</label><select class="form-select" id="ed-col" onchange="CBTUI.syncEditMax()"></select><small>Loaded from Report Card columns for the selected class/term/session.</small></div>
+        <div class="form-group"><label>Maximum report contribution</label><input class="form-input" type="number" id="ed-max" value="${Number(e.max_score||0)}" min="0" step="0.5" readonly><small>Automatically follows the selected report column.</small></div>
+        <div class="form-group"><label>Duration (minutes) *</label><input class="form-input" type="number" id="ed-dur" value="${Number(e.duration_min||e.duration||45)}" min="1"></div>
+        <div class="form-group"><label>Attempt limit (0 = unlimited)</label><input class="form-input" type="number" id="ed-att" value="${Number(e.attempt_limit||0)}" min="0"></div>
+        <div class="form-group"><label>Select N questions (0 = all)</label><input class="form-input" type="number" id="ed-sel" value="${Number(e.select_count||0)}" min="0"></div>
+        <div class="form-group"><label>Negative mark per wrong answer</label><input class="form-input" type="number" step="0.25" min="0" id="ed-neg" value="${Number(e.negative_mark||0)}"></div>
+        <div class="form-group"><label>Pass mark (%)</label><input class="form-input" type="number" min="0" max="100" id="ed-pass" value="${Number(e.pass_mark||50)}"></div>
+        <div class="form-group"><label>Topic / package label</label><input class="form-input" id="ed-topic" value="${esc(e.topic||'')}"></div>
+        <div class="form-group"><label>Starts at (optional)</label><input class="form-input" type="datetime-local" id="ed-start" value="${e.start_at?String(e.start_at).slice(0,16):''}"></div>
+        <div class="form-group"><label>Closes at (optional)</label><input class="form-input" type="datetime-local" id="ed-close" value="${e.close_at?String(e.close_at).slice(0,16):''}"></div>
       </div>
-      <div class="form-group"><label>Candidate instructions</label><textarea class="form-input" id="ed-instr" rows="2">${esc(e.instructions||'')}</textarea></div>
-      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ed-open" ${e.is_open?'checked':''}> Open for candidates</label>
-      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ed-rand" ${e.randomise?'checked':''}> Randomise questions</label>
-      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ed-rel" ${e.release_results!==false?'checked':''}> Release results instantly</label>`,
-      '<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="CBTUI.saveEdit(\''+id+'\')">Save changes</button>');
+      <div class="form-group"><label>Candidate instructions</label><textarea class="form-input" id="ed-instr" rows="3">${esc(e.instructions||'')}</textarea></div>
+      <div class="card" style="background:#f8fafc"><b>Status & behaviour</b><div class="grid grid-2" style="margin-top:8px">
+       <label><input type="checkbox" id="ed-open" ${e.is_open?'checked':''}> Open for candidates</label><label><input type="checkbox" id="ed-arch" ${e.is_archived?'checked':''}> Archived</label>
+       <label><input type="checkbox" id="ed-rand" ${e.randomise?'checked':''}> Randomise within subject</label><label><input type="checkbox" id="ed-rel" ${e.release_results!==false?'checked':''}> Release results instantly</label>
+       <label><input type="checkbox" id="ed-cert" ${e.certificate_enabled!==false?'checked':''}> Certificate enabled</label><label><input type="checkbox" id="ed-ent" ${e.is_entrance?'checked':''}> Entrance examination</label>
+      </div></div>`,
+      '<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="CBTUI.saveEdit(\''+id+'\')">Save all changes</button>');
+    this.refreshEditReportColumns();
   },
+  refreshEditReportColumns(){
+    const val=id=>(document.getElementById(id)||{}).value||'',e=this._editExam||{},cls=val('ed-class'),term=val('ed-term'),sess=val('ed-session'),sel=document.getElementById('ed-col');if(!sel)return;
+    const rows=(this._editColumns||[]).filter(c=>c.class===cls&&c.term===term&&c.session===sess&&(c.subject==='*'||c.subject===val('ed-subject')));const names=[];rows.forEach(c=>{if(!names.some(x=>x.name===c.name))names.push(c);});const current=e.report_column||'';if(current&&!names.some(c=>c.name===current))names.unshift({name:current,max_mark:e.max_score||0});sel.innerHTML='<option value="">— not linked to report card —</option>'+names.map(c=>'<option value="'+esc(c.name)+'" data-max="'+Number(c.max_mark||0)+'" '+(c.name===current?'selected':'')+'>'+esc(c.name)+' (max '+Number(c.max_mark||0)+')</option>').join('');this.syncEditMax();
+  },
+  syncEditMax(){const s=document.getElementById('ed-col'),m=document.getElementById('ed-max');if(!s||!m)return;const o=s.options[s.selectedIndex];m.value=o&&o.value?Number(o.dataset.max||0):0;},
   async saveEdit(id){
-    const v=(x)=>document.getElementById(x).value, c=(x)=>document.getElementById(x).checked;
-    const patch={ title:v('ed-title'), subject:v('ed-subject'), class:v('ed-class'), duration:parseInt(v('ed-dur'))||45,
-      report_column:v('ed-col'), max_score:parseFloat(v('ed-max'))||0, negative_mark:parseFloat(v('ed-neg'))||0,
-      select_count:parseInt(v('ed-sel'))||0, attempt_limit:parseInt(v('ed-att'))||0, instructions:v('ed-instr'),
-      is_open:c('ed-open'), randomise:c('ed-rand'), release_results:c('ed-rel') };
-    const {error}=await sb.from('cbt_exams').update(patch).eq('id',id);
-    if(error){ toast(error.message,'danger'); return; }
-    toast('✅ Exam updated.','success'); closeModal(); CBTUI.refresh();
+    const v=x=>(document.getElementById(x)||{}).value||'',c=x=>!!(document.getElementById(x)||{}).checked,e=this._editExam||{};const subject=v('ed-subject')||e.subject,className=v('ed-class'),term=v('ed-term'),session=v('ed-session'),title=v('ed-title').trim();
+    if(!title||!subject||!className||!term||!session){toast('Title, subject, class, term and session are required. Pick each from the supplied controls.','warning',9000);return;}const start=v('ed-start'),close=v('ed-close');if(start&&close&&new Date(close)<=new Date(start)){toast('Closing time must be after starting time.','warning');return;}
+    const patch={title,subject,class:className,term,session,assessment_type:v('ed-type'),exam_mode:v('ed-mode'),report_column:v('ed-col'),max_score:Number(v('ed-max'))||0,duration:Number(v('ed-dur'))||45,duration_min:Number(v('ed-dur'))||45,negative_mark:Number(v('ed-neg'))||0,select_count:Number(v('ed-sel'))||0,attempt_limit:Number(v('ed-att'))||0,pass_mark:Number(v('ed-pass'))||0,topic:v('ed-topic'),instructions:v('ed-instr'),start_at:start||null,close_at:close||null,is_open:c('ed-open'),is_archived:c('ed-arch'),randomise:c('ed-rand'),release_results:c('ed-rel'),certificate_enabled:c('ed-cert'),is_entrance:c('ed-ent'),updated_at:new Date().toISOString()};
+    const {data,error}=await sb.from('cbt_exams').update(patch).eq('id',id).select().maybeSingle();if(error){toast('Could not save exam: '+error.message,'danger',10000);return;}if(!data){toast('Exam update was not confirmed. Check teacher ownership/RLS.','danger',10000);return;}toast('✅ Full exam settings updated. Candidate and report-card values are uniform.','success',7000);closeModal();CBTUI.refresh();
   },
   async editQuestions(id){
     if(!sb) return;
@@ -834,11 +849,11 @@ document.addEventListener('DOMContentLoaded', CBTUI.refresh); CBTUI.refresh();
   CBTUI._subjects=[]; CBTUI._classes=[]; CBTUI._terms=[]; CBTUI._sessions=[];
   CBTUI.loadPickers = async function(){
     if(!sb) return; try{
-      const [sub,cls,term,ses]=await Promise.all([
+      const [sub,cls,term,ses,periods]=await Promise.all([
         sb.from('subjects').select('name').order('name'), sb.from('classes').select('name').order('name'),
-        sb.from('lookups').select('value').eq('kind','term').order('position'), sb.from('lookups').select('value').eq('kind','session').order('position')]);
+        sb.from('lookups').select('value').eq('kind','term').order('position'), sb.from('lookups').select('value').eq('kind','session').order('position'),sb.from('academic_periods').select('term,session').order('starts_on',{ascending:false})]);
       const uniq=(a)=>{const s=new Set();return (a||[]).filter(v=>{const k=String(v==null?'':v).trim().toLowerCase();if(!k||s.has(k))return false;s.add(k);return true;});};
-      this._subjects=uniq((sub.data||[]).map(x=>x.name)); this._classes=uniq((cls.data||[]).map(x=>x.name)); this._terms=uniq((term.data||[]).map(x=>x.value)); this._sessions=uniq((ses.data||[]).map(x=>x.value));
+      this._subjects=uniq((sub.data||[]).map(x=>x.name)); this._classes=uniq((cls.data||[]).map(x=>x.name)); this._terms=uniq([...(term.data||[]).map(x=>x.value),...(periods.data||[]).map(x=>x.term)]); this._sessions=uniq([...(ses.data||[]).map(x=>x.value),...(periods.data||[]).map(x=>x.session)]);
       const fill=(id,arr)=>{const el=document.getElementById(id); if(el) el.innerHTML='<option value="">— select —</option>'+arr.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');};
       fill('ex-subject',this._subjects); fill('ex-class',this._classes); fill('ex-term',this._terms); fill('ex-session',this._sessions);
       ;['ex-subject','ex-class','ex-term','ex-session'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>CBTUI.loadReportColumns?.()));
@@ -851,8 +866,8 @@ document.addEventListener('DOMContentLoaded', CBTUI.refresh); CBTUI.refresh();
     out.innerHTML='<option value="">— select a report-card column —</option>';
     if(!window.sb || !cls || !sub || !term || !session) return;
     try { const {data,error}=await window.sb.from('assessment_columns').select('name,max_mark,position').eq('class',cls).in('subject',['*',sub]).eq('term',term).eq('session',session).order('position'); if(error) throw error;
-      (data||[]).forEach(c=>{const o=document.createElement('option');o.value=String(c.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_');o.textContent=c.name+(c.max_mark!=null?' (max '+c.max_mark+')':'');out.appendChild(o);});
-      if(!(data||[]).length) out.innerHTML+='<option value="" disabled>No report-card columns yet — create them in Report Cards first</option>';
+      (data||[]).forEach(c=>{const o=document.createElement('option');o.value=String(c.name||'');o.dataset.max=Number(c.max_mark||0);o.textContent=c.name+(c.max_mark!=null?' (max '+c.max_mark+')':'');out.appendChild(o);});
+      if(!(data||[]).length) out.innerHTML+='<option value="" disabled>No report-card columns yet — create them in Report Cards first</option>';out.onchange=()=>{const m=document.getElementById('ex-max'),o=out.options[out.selectedIndex];if(m&&o&&o.value)m.value=Number(o.dataset.max||0);};
     } catch(e){ console.warn('Report-card column lookup failed',e); }
   };
   CBTUI._oldNewExam = CBTUI.newExam;

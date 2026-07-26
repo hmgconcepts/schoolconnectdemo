@@ -7,6 +7,8 @@ This guide has **two parts**:
 
 Everything uses **free tools only**. No credit card, no monthly fees, no AI APIs.
 
+> **V5.3:** existing deployments should back up and rerun `database/complete-schema.sql` to enable teacher profile signatures on class reports, full controlled CBT editing, adaptive CBT-only reports and the robust timetable wizard. The focused `v5.3-platform-enhancements.sql` is provided only for a narrow upgrade.
+
 > ## CBT V5.1 existing-database requirement
 > If correct attempts currently record zero, stop new sittings, back up Supabase,
 > run **`database/cbt-v5.1-zero-score-hotfix.sql`**, then deploy the matching V5.1
