@@ -1,4 +1,4 @@
-# School Connect V5.4 — Test and Audit Report
+# School Connect V5.6 — Test and Audit Report
 
 **Audit date:** 2026-07-26 (Africa/Lagos)
 
@@ -6,21 +6,24 @@
 
 | Suite | Result |
 |---|---:|
-| V5.4 SQL/link/parity/security contract audit | 58 passed, 0 failed |
+| V5.6 SQL/link/parity/security contract audit | 72 passed, 0 failed |
 | CBT UTME tab simulation | 9 passed, 0 failed |
 | CBT browser scoring/parser unit tests | 11 passed, 0 failed |
+| Registered CBT admission-only identity | admission required; official name/class enforced in getter and saved result |
 | Executed V5.1 SQL grading engine (PGlite) | 10/10, 100%, 5 correct; idempotence, historical regrade, redaction and missing-key guard passed |
-| Report output, teacher signature and CBT-only adaptive tests | 6 passed, 0 failed |
+| Report output, flexible headings, teacher signature and CBT-only adaptive tests | 7 passed, 0 failed |
 | Bulk CBT → canonical report_scores tests | 4 passed, 0 failed |
 | Timetable PostgreSQL-compatible engine test | 5/5 demands placed; restricted days and cross-class teacher conflicts passed |
 | Exact demo numeric `amount` insert test | 12 module rows inserted into numeric column; passed |
 | Data portability JSON/CSV round-trip | 5 passed, 0 failed |
+| Teacher subject/class scope SQL test | own subject/class allowed; foreign records denied; non-owner CBT clear denied |
+| Demo coverage audit | 80/80 CRUD modules plus 16 specialised datasets covered |
 | Sample/receipt/fee workflow regression | 12 passed, 0 failed |
 | Role-navigation regression | passed |
 | Generator packaging contract | passed |
-| Traditional real JSZip build | 187 entries; 0 broken links; 0 orphans |
-| Modern real JSZip build | 395 entries; 0 broken links; 0 orphans |
-| PostgreSQL parsing | complete schema 1,067 statements; demo seed 38 top-level statements |
+| Traditional real JSZip build | 190 entries; 0 broken links; 0 orphans |
+| Modern real JSZip build | 401 entries; 0 broken links; 0 orphans |
+| PostgreSQL parsing | complete schema 1,205 statements; demo seed 40 top-level statements |
 | Demo seed/schema column contract | 0 missing tables/columns |
 | Shared runtime parity across generator/GOSA/demo | passed |
 

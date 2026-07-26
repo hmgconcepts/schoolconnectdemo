@@ -41,6 +41,20 @@
 
 The generic CRUD engine stores modules such as `financial_aid`, `parent_meeting`, `career_counseling`, `facility_booking`, `rubrics`, `transcripts` and `transfer_cert` in `module_records`. V5 seeds those exact module identifiers. This fixes the former failure where the seed referenced nonexistent plural tables while the page queried `module_records`.
 
+
+## V5.6 automated coverage result
+
+`tools/audit-demo-coverage.py` verifies **80/80 CRUD modules plus 16 specialised datasets covered**. In addition to the generic module contract, the seed includes dedicated examples for:
+
+- e-resources and QR attendance check-ins
+- CBT candidate roster and admission letters
+- certificate designs
+- teacher availability, timetable configuration and timetable runs
+- punctuality awards and activity logs
+- fee structures and published reports
+- LMS courses, lessons and submissions
+- security preferences, login audit and translated interface strings
+
 ## Safe demo use
 
 All names/data are synthetic. Do not enter real personal data. Use a Supabase project separate from production, review the five demo roles and reset periodically. See `demo-site/DEMO-SETUP.md`.

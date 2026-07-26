@@ -14,28 +14,32 @@
 
 Do **not** run `demo-seed.sql` on a real school database.
 
-## B. Existing deployment upgrade (complete V5.4)
+## B. Existing deployment upgrade (complete V5.6)
 
 If the only current error is `column "motto" does not exist`, run the small
 `database/cbt-v5.1.1-getter-school-settings-fix.sql`, deploy the updated candidate
-page/service worker and hard-refresh. For the complete V5.2 release use the full schema.
+page/service worker and hard-refresh. For the complete V5.6 release use the full schema.
 
-For portable archives, ordered CBT management, student term metrics, teacher signatures, adaptive reports and the robust timetable engine, run the **full updated `complete-schema.sql`**. `v5.3-platform-enhancements.sql` is available only when an existing project needs the focused teacher-signature/timetable upgrade. The CBT hotfixes do not install all V5.3 features.
+For daily fee collection, controlled CBT result resets, strict teacher subject/class ownership, complete demo coverage and all earlier V5.5 features, run the **full updated `complete-schema.sql`**. `v5.3-platform-enhancements.sql` is available only when an existing project needs the focused teacher-signature/timetable upgrade. The CBT hotfixes do not install all V5.3 features.
 
 1. Supabase → Database → Backups/export: create a restorable backup. Export `cbt_exams`, `cbt_results`, `assessment_columns`, `report_scores`, `results`, payments and identities.
 2. Put the site in a short maintenance window; do not begin an examination during the database upgrade.
-3. Run the full new `database/complete-schema.sql` for V5.3. It already includes the CBT getter/scorer repairs, report/promotion additions, teacher signatures and timetable generator. Do not run the smaller packs afterward.
+3. Run the full new `database/complete-schema.sql` for V5.6. It includes every V5.1–V5.6 CBT/report repair, daily fee dates, the controlled result-reset RPC, strict teacher RLS, teacher signatures, metrics and timetable generator. Do not run the smaller packs afterward.
 4. Confirm SQL functions exist:
    ```sql
    select routine_name from information_schema.routines
    where routine_schema='public'
-     and routine_name in ('cbt_get_public_exam','cbt_submit_v5','cbt_diagnose_exam','cbt_repair_exam_scoring','sc_cbt_answer_matches');
+     and routine_name in ('cbt_get_public_exam_v6','cbt_submit_v6','cbt_diagnose_exam','cbt_repair_exam_scoring','sc_cbt_answer_matches','cbt_clear_exam_results','teacher_can_manage_subject_class','teacher_can_manage_student');
    ```
 5. Deploy all updated files, especially the critical list in `BUG-FIX-REPORT.md`. Do not deploy only `cbt-engine.js`.
-6. Wait for hosting deployment completion. The new service-worker literal purges the former cache. On a test device, close all portal tabs, reopen and perform one hard refresh.
-7. Create a disposable exam whose correct answers mix `B`, exact option text, `True`, numeric tolerance and multi-select. Submit and inspect `cbt_results.score`, `total`, `percent`, counts and `subject_scores`.
-8. For old multi-subject exams, open CBT Manager → **Repair Tabs**. Verify each subject and count. Candidate reload is network-first, so the tabs should appear immediately.
-9. Reopen normal operations only after report/receipt and role-scope smoke tests pass.
+6. Supabase Authentication → URL Configuration: set the production Site URL and add `https://YOUR-DOMAIN/change-password.html?recovery=1` to Redirect URLs so password-recovery emails return safely.
+7. Wait for hosting deployment completion. The new service-worker literal purges the former cache. On a test device, close all portal tabs, reopen and perform one hard refresh.
+8. Create a disposable exam whose correct answers mix `B`, exact option text, `True`, numeric tolerance and multi-select. Submit and inspect `cbt_results.score`, `total`, `percent`, counts and `subject_scores`.
+9. For old multi-subject exams, open CBT Manager → **Repair Tabs**. Verify each subject and count. Candidate reload is network-first, so the tabs should appear immediately.
+10. In Fees, compare today, the previous day and month-to-date; export the selected-day CSV and reconcile it with the ledger.
+11. As the exam creator/admin, export then clear a disposable exam and confirm another teacher is denied; remember that official `report_scores` are intentionally not deleted.
+12. Test a teacher’s assigned subject/class and an unassigned subject/class. Confirm the first succeeds, the second is denied, and admin still has full access.
+13. Reopen normal operations only after report/receipt, CBT reset and role-scope smoke tests pass.
 
 ## C. Demo deployment
 
@@ -90,13 +94,16 @@ For portable archives, ordered CBT management, student term metrics, teacher sig
 ## I. Required acceptance checklist
 
 - [ ] No console syntax errors.
-- [ ] `complete-schema.sql` final V5 status is visible.
+- [ ] `complete-schema.sql` final V5.6 status is visible.
 - [ ] Admin, teacher, parent, student and bursar scope tested.
 - [ ] Correct CBT answers produce nonzero marks.
 - [ ] Randomised questions grade by original index.
 - [ ] Multi-subject tabs switch both ways and retain answers.
 - [ ] School logo/name/motto/contact appear on exam page.
 - [ ] Report card, class broadsheet, subject broadsheet and receipt visually match samples.
-- [ ] Demo seed completes and all pages show synthetic data.
+- [ ] Demo seed completes; the audit reports 80/80 CRUD modules plus 16 specialised datasets.
+- [ ] Selected-day fee total/ledger/CSV reconcile; previous-day and month-to-date totals load.
+- [ ] CBT export-then-clear works for owner/admin and is denied to a non-owner.
+- [ ] Assigned teacher writes succeed; foreign subject/class writes fail; admin override succeeds.
 - [ ] PWA update removes old cached runtime.
 - [ ] No service-role key or real student data is committed.
