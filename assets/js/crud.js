@@ -13,18 +13,18 @@ const CRUD = {
   WRITE_RULES: {
     // Admin/Super Admin is always full read/write in canWrite(). These rules define
     // non-admin write capability only; read access is controlled by app.js + RLS.
-    students:['staff','teacher'],
+    students:[],
     staff:[], parents:[], parent_child:[],
-    classes:['staff','teacher'], subjects:['staff','teacher'], attendance:['staff','teacher'],
+    classes:[], subjects:[], attendance:['staff','teacher'],
     results:['staff','teacher'], academic_records:['staff','teacher'], report_cards:['staff','teacher'],
     cbt:['staff','teacher'], cbt_prompts:['staff','teacher'], assignments:['staff','teacher'],
-    timetable:['staff','teacher'], timetable_generator:['staff','teacher'], sow:['staff','teacher'],
-    lesson_plans:['staff','teacher'], announcements:['staff','teacher'], events:['staff','teacher'],
-    gallery:['staff','teacher'], library:['staff','teacher'], digital_library:['staff','teacher'],
-    eresources:['staff','teacher'], directory:['staff','teacher'], broadcast:['staff','teacher'],
+    timetable:[], timetable_generator:[], sow:['staff','teacher'],
+    lesson_plans:['staff','teacher'], announcements:[], events:[],
+    gallery:[], library:[], digital_library:['staff','teacher'],
+    eresources:['staff','teacher'], directory:[], broadcast:[],
     complaints:['staff','teacher','parent','student'], inbox:['staff','teacher','parent'],
     messages:['staff','teacher','parent','student'], leave:['staff','teacher'], visitors:['staff','teacher'],
-    hostel:['staff','teacher'], transport:['staff','teacher'], certificates:['staff','teacher'],
+    hostel:[], transport:[], certificates:[],
     behaviour:['staff','teacher'], conduct:['staff','teacher'], health:['staff','teacher'],
     support_plans:['staff','teacher'], diary:['staff','teacher'], checkin:['staff','teacher'],
     rubrics:['staff','teacher'], counselling:['staff','teacher'], substitutions:['staff','teacher'],
@@ -663,8 +663,11 @@ const CRUD = {
     const allow = this.WRITE_RULES[key];
     const adminAliases = ['super_admin','superadmin','admin','administrator','owner','director','principal','proprietor','head_teacher','headteacher','bursar'];
     if (adminAliases.includes(role) || (window.App && App.isAdminRole && App.isAdminRole(role))) return true;
+    // An explicit empty rule is a hard admin-only boundary and cannot be opened
+    // accidentally by a stale/custom browser access map. Database RLS mirrors it.
+    if (Array.isArray(allow) && allow.length===0) return false;
     if (window.App && App.canWriteByAccess) { const mapped = App.canWriteByAccess(key, role); if (mapped !== null) return mapped; }
-    if (!allow) return ['staff','teacher'].includes(role);
+    if (!allow) return false;
     return allow.includes(role);
   },
 
@@ -957,7 +960,7 @@ const CRUD = {
     if (!row) return true;
     const uid = window.SC_PROFILE?.id || '';
     const uname = String(window.SC_PROFILE?.full_name || '').toLowerCase();
-    const checks = [row.teacher_id, row.posted_by, row.recorded_by_id, row.created_by, row.submitted_by, row.generated_by, row.assignee];
+    const checks = [row.teacher_id, row.posted_by, row.recorded_by_id, row.created_by, row.submitted_by, row.generated_by, row.assignee, row.uploaded_by, row.awarded_by, row.updated_by, row.recorded_by];
     if (checks.some(v => v && uid && String(v) === String(uid))) return true;
     if (row.teacher && uname && String(row.teacher).toLowerCase() === uname) return true;
     if (row.recorded_by && uname && String(row.recorded_by).toLowerCase() === uname) return true;
@@ -967,7 +970,7 @@ const CRUD = {
 
   hasOwnershipMarker(row) {
     if (!row) return false;
-    return !!(row.teacher_id || row.posted_by || row.recorded_by_id || row.created_by || row.submitted_by || row.generated_by || row.assignee || row.teacher || row.recorded_by || (row.data && row.data.created_by));
+    return !!(row.teacher_id || row.posted_by || row.recorded_by_id || row.created_by || row.submitted_by || row.generated_by || row.assignee || row.uploaded_by || row.awarded_by || row.updated_by || row.teacher || row.recorded_by || (row.data && row.data.created_by));
   },
 
   async openForm(moduleId, id) {
@@ -976,7 +979,7 @@ const CRUD = {
     if (!this.canWrite(moduleId)) { toast('Read-only for your role on this page.', 'warning', 5000); return; }
     if (!this.sb) { toast('Database not configured (add Supabase keys in assets/js/config.js).', 'warning', 6000); return; }
     let row = {};
-    if (id) { const { data } = await this.sb.from(d.table).select('*').eq('id', id).maybeSingle(); row = data || {}; }
+    if (id) { const { data,error } = await this.sb.from(d.table).select('*').eq('id', id).maybeSingle();if(error||!data){toast('Access denied or record unavailable. Teachers can edit only records assigned to their subject/class and owned by them.','danger',8000);return;}row=data; }
     if (window.App && !App.isAdminRole(App.currentRole) && row && this.hasOwnershipMarker(row) && !this.isOwnedByCurrent(row)) {
       toast('Access Denied: You can read this record, but only the creator/assigned owner or an admin can edit it.', 'danger', 7000);
       return;
@@ -1080,9 +1083,10 @@ const CRUD = {
     if (!id && ['complaints','helpdesk_tickets'].includes(d.table) && window.SC_PROFILE && SC_PROFILE.id) payload.submitted_by = SC_PROFILE.id;
     if (!id && d.table === 'health' && window.SC_PROFILE && SC_PROFILE.id) { payload.recorded_by_id = SC_PROFILE.id; if (!payload.recorded_by && SC_PROFILE.full_name) payload.recorded_by = SC_PROFILE.full_name; }
     if (!id && ['academic_print_records','reports'].includes(d.table) && window.SC_PROFILE && SC_PROFILE.id) payload.generated_by = SC_PROFILE.id;
+    if(window.SC_PROFILE&&SC_PROFILE.id){if(d.table==='digital_library')payload.teacher_id=SC_PROFILE.id;if(d.table==='eresources')payload.uploaded_by=SC_PROFILE.id;if(d.table==='conduct')payload.recorded_by_id=SC_PROFILE.id;if(d.table==='behaviour_points')payload.awarded_by=SC_PROFILE.id;if(d.table==='support_plans')payload.created_by=SC_PROFILE.id;if(d.table==='student_diary')payload.created_by=SC_PROFILE.id;if(['affective_traits','psychomotor_traits','report_comments'].includes(d.table))payload.teacher_id=SC_PROFILE.id;}
     // V6/V4: teacher-owned academic records. Admin can supervise all, but subject teachers
     // should not edit/delete another teacher's records.
-    if (!id && window.SC_PROFILE && SC_PROFILE.id && !(window.App && App.isAdminRole && App.isAdminRole(App.currentRole))) {
+    if (window.SC_PROFILE && SC_PROFILE.id && !(window.App && App.isAdminRole && App.isAdminRole(App.currentRole))) {
       const ownedTables = ['results','assignments','scheme_of_work','lesson_plans','cbt_exams','attendance','health','helpdesk_tickets','reports'];
       if (ownedTables.includes(d.table)) {
         if (!payload.teacher_id) payload.teacher_id = SC_PROFILE.id;
@@ -1099,6 +1103,7 @@ const CRUD = {
     // trigger). Sending it caused: cannot insert a non-DEFAULT value into
     // column "net_pay". We now NEVER send it — the database computes it.
     if (d.table === 'payroll') { delete payload.net_pay; }
+    if(d.table==='fee_payments'&&window.SC_PROFILE){if(!id&&!payload.received_by)payload.received_by=SC_PROFILE.id||null;if(!payload.received_by_name)payload.received_by_name=SC_PROFILE.full_name||SC_PROFILE.email||'';if(!payload.payment_date)payload.payment_date=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'});}
     // ENTERPRISE V11 (issue 13): auto-compute fee balance when blank
     if (d.table === 'fee_payments' && payload.balance == null && payload.fee_total != null) {
       payload.balance = Math.max(0, (Number(payload.fee_total) || 0) - (Number(payload.amount_paid) || 0));
@@ -1165,7 +1170,7 @@ const CRUD = {
       const ex = await this.sb.from('parent_child').select('id').eq('parent_id', payload.parent_id).eq('student_id', payload.student_id).maybeSingle().then(r=>r, ()=>({data:null}));
       if (ex.data) { toast('This parent is already linked to this child. Choose another child or update the existing link.', 'warning', 7000); return; }
     }
-    const sharedTables = ['library', 'digital_library', 'gallery', 'eresources', 'events', 'announcements'];
+    const sharedTables = []; // Shared visibility never implies shared edit/delete ownership.
     if (id && window.App && !App.isAdminRole(App.currentRole) && !sharedTables.includes(d.table)) {
       const { data: row } = await this.sb.from(d.table).select('*').eq('id', id).maybeSingle();
       if (row && this.hasOwnershipMarker(row) && !this.isOwnedByCurrent(row)) {
@@ -1173,7 +1178,7 @@ const CRUD = {
         return;
       }
     }
-    const runSave = async (pl) => id ? await this.sb.from(d.table).update(pl).eq('id', id) : await this.sb.from(d.table).insert(pl);
+    const runSave = async (pl) => id ? await this.sb.from(d.table).update(pl).eq('id', id).select('id').maybeSingle() : await this.sb.from(d.table).insert(pl);
     let res = await runSave(payload);
     // ENTERPRISE V6 (issues 16, 26, 32, 35): self-healing writes. If the target
     // database is missing a column (older schema), strip the unknown column —
@@ -1381,7 +1386,7 @@ const CRUD = {
     // ENTERPRISE V6 (issue 15): library books are SHARED resources — any staff
     // member with write access may delete them; ownership lock only applies to
     // personal academic records (results, lesson plans, CBT…).
-    const sharedTables = ['library', 'digital_library', 'gallery', 'eresources', 'events', 'announcements'];
+    const sharedTables = []; // Shared visibility never implies shared edit/delete ownership.
     if (window.App && !App.isAdminRole(App.currentRole) && !sharedTables.includes(d.table)) {
       const { data: row } = await this.sb.from(d.table).select('*').eq('id', id).maybeSingle();
       if (row && this.hasOwnershipMarker(row) && !this.isOwnedByCurrent(row)) {
@@ -1390,8 +1395,8 @@ const CRUD = {
       }
     }
     if (!confirm('Delete this ' + d.title.toLowerCase() + '?')) return;
-    const { error } = await this.sb.from(d.table).delete().eq('id', id);
-    if (error) { toast(error.message, 'danger'); return; }
+    const { data:deleted,error } = await this.sb.from(d.table).delete().eq('id', id).select('id');
+    if (error) { toast(error.message, 'danger'); return; }if(!deleted||!deleted.length){toast('Nothing was deleted. You may not own this subject/class record.','danger',7000);return;}
     if (window.App && App.logActivity) App.logActivity('delete', d.table, id);
     toast('Deleted.', 'info'); this.renderList(moduleId);
   },
