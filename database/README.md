@@ -28,18 +28,24 @@ loudly instead of saving a false zero. Fresh projects only need the complete sch
 > (all 16, machine-enumerated) is inside it. The standalone packs below exist
 > **only** to bring *already-live* older projects up to date without a full re-run.
 
-Files:
-- `complete-schema.sql` — **fresh install / cumulative full repair**; includes CBT V5.1 and ends with PostgREST cache reload.
-- `cbt-v5.1-zero-score-hotfix.sql` — focused existing-database CBT repair; do not use instead of the full schema on a fresh project.
-- `v5.3-platform-enhancements.sql` — focused upgrade for teacher profile signatures, class-report identity, promotion lookup and the robust timetable generator. The full schema already includes it.
-- `complete-schema-v12-clean.sql` — identical named copy (kept byte-in-sync with `complete-schema.sql`).
-- `complete-schema-v11-LEGACY-MERGED.sql` — historical reference only; do NOT run on new projects.
-- `*.csv` — import templates & sample question banks.
+# School Connect database files
 
-- `demo-users.sql` / `demo-seed.sql` — demo-deployment guest accounts + simulated school (see DEMO-SETUP.md in a demo ZIP).
-- `cbt-1000-scale.sql` — **optional additive pack** for projects already on v12.x: idempotent CBT submissions (client_ref), the v2 exam-fetch/submit functions and hot-path indexes so **1000 students can write one exam simultaneously**. Included inside `complete-schema.sql` from v12.3 onward, so fresh installs already have it.
-- `punctuality-points.sql` — **optional additive pack** for projects already on v12.1–v12.3: the **Punctuality Points engine** (daily punctuality awards from student check-in/out data, plus the optional one-click push of term points into `results`). Included inside `complete-schema.sql` from v12.4 onward, so fresh installs already have it.
-- `runtime-helper-rpcs.sql` — **optional additive pack** for projects already on ≤v12.4: the nine runtime helper RPCs the client references (`sc_current_role`, `lookup_login_email`, `notif_mark_read`, `table_sizes`, `purge_old`, `submit_admission`, `extract_admission`, `generate_timetable`, `cbt_import_backup`) plus the `admissions` `photo_url/data/extracted` column-gap fix. Included inside `complete-schema.sql` from v12.5 onward, so fresh installs already have it. Safe to re-run any number of times (pure no-op on v12.5+).
+## Authoritative V5.6 deployment rule
+
+Back up the project, then run **`complete-schema.sql`** for a fresh install or any cumulative upgrade. It contains all V5.1–V5.6 changes and reloads the PostgREST schema cache. Do not run demo data in production, and do not deploy the V5.6 frontend without its SQL.
+
+Files:
+- `complete-schema.sql` — authoritative fresh install and cumulative V5.6 upgrade.
+- `cbt-v5.1-zero-score-hotfix.sql` — focused legacy CBT scoring repair only.
+- `cbt-v5.1.1-getter-school-settings-fix.sql` — focused getter repair for databases lacking `school_settings.motto`.
+- `v5.3-platform-enhancements.sql` — focused teacher-signature/timetable upgrade.
+- `v5.4-portability-cbt-metrics.sql` — focused student term-metrics upgrade.
+- `v5.5-registered-cbt-identity.sql` — focused admission-only registered CBT identity upgrade.
+- `v5.6-daily-fees-cbt-reset-teacher-scope.sql` — focused V5.6 pack, only for an otherwise fully current V5.5 database.
+- `demo-users.sql` / `demo-seed.sql` — synthetic demo accounts/data for a separate demo project only.
+- `*.csv` — import templates and sample question banks.
+
+The concurrency, punctuality and runtime-helper functionality described below is already incorporated into `complete-schema.sql`; this V5.6 package does not require separate SQL packs for those features.
 
 ## v12.5 patch — runtime-RPC contract completion + self-sufficiency (2026-07-23)
 Section 18 ships every RPC the client code can call, so **no deployment ever needs a
@@ -65,9 +71,7 @@ questions-only exams now render and grade correctly end-to-end. Grants are
 least-privilege (`revoke … from public, anon` / `grant … to authenticated`;
 `lookup_login_email` additionally granted to `anon` because login happens pre-auth).
 All client call sites keep their graceful fallbacks, so these functions are pure
-hardening on older client builds and instantly live on new ones. For live projects
-already on ≤v12.4, run `database/runtime-helper-rpcs.sql` once — same content,
-standalone, idempotent.
+hardening on older client builds and instantly live on new ones. For current deployments, use the cumulative `database/complete-schema.sql`; no separate helper pack is required.
 
 ## v12.4 patch — Punctuality Points engine + results-columns fix (2026-07-23)
 Section 17 of the schema ships the punctuality engine: `punctuality_config`
@@ -80,8 +84,7 @@ information_schema-validated numeric column, manual rows never matched). This
 run also force-adds the four enhanced `results` columns (`student_id_ref`,
 `student_name`, `assessment_source`, `assessment_ref`) + `results_assessment_uidx`,
 fixing a latent 42703 the punctuality/CTB pushes could hit on databases installed
-fresh from earlier v12.x builds. For live projects already on v12.1–v12.3, run
-`database/punctuality-points.sql` once — same content, standalone.
+fresh from earlier v12.x builds. For current deployments, use the cumulative `database/complete-schema.sql`; no separate punctuality pack is required.
 
 ## v12.3 patch — CBT 1000-concurrent scale pack (2026-07-23)
 Section 16 of the schema now ships the scale pack: submissions are IDEMPOTENT
@@ -90,8 +93,7 @@ duplicate), grading stays 100% server-side and is shuffle-safe (graded by each
 question's `_orig_index`, not screen position), attempt limits and the exam
 close-window are enforced by the database, and the exam page syncs its clock to
 the server. The client needs no changes and falls back to the v1 functions on
-older schemas. For live projects already on v12.1/v12.2, run
-`database/cbt-1000-scale.sql` once — same content, standalone.
+older schemas. For current deployments, use the cumulative `database/complete-schema.sql`; no separate scale pack is required.
 
 ## v12.1 patch — 42703 "column student_id does not exist" (2026-07-22)
 If you saw `ERROR: 42703: column "student_id" does not exist` while running
