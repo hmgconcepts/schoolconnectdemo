@@ -943,3 +943,12 @@ begin
 end $$;
 
 select 'School Connect DEMO V5 page-coverage pack installed — every operational module now has interconnected sample data ✅' as status;
+
+-- V5.4 beginning-of-term physical metrics (synthetic demo values).
+insert into public.student_term_metrics(student_id,student_id_ref,student_name,class,term,session,height_cm,weight_kg,blood_pressure,vision,blood_group,genotype,medical_note,measured_on)
+select s.id,s.admission_no,s.full_name,s.class,'Third Term','2025/2026',
+  150+(substring(s.admission_no from 5)::int%18),42+(substring(s.admission_no from 5)::int%20),
+  case when substring(s.admission_no from 5)::int%2=0 then'110/70'else'108/68'end,'Normal','O+','AA','Synthetic demonstration measurement','2026-04-28'
+from public.students s where s.admission_no in('SCD-00014','SCD-00015','SCD-00016')
+on conflict(student_id_ref,student_name,class,term,session)do update set height_cm=excluded.height_cm,weight_kg=excluded.weight_kg,blood_pressure=excluded.blood_pressure,vision=excluded.vision,blood_group=excluded.blood_group,genotype=excluded.genotype,measured_on=excluded.measured_on,updated_at=now();
+select 'School Connect demo V5.4 metrics installed ✅'as status;
