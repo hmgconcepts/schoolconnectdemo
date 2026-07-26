@@ -58,7 +58,7 @@ const CRUD = {
     ]},
     staff: { table:'staff', title:'Staff', cols:[
       {key:'full_name',label:'Full name',type:'text',required:true},
-      {key:'user_id',label:'Staff login account (optional)',type:'ref',refTable:'profiles',refValue:'full_name',refExtra:['email'],refStore:'id',refFilter:{role:'staff'},searchable:true,help:'Link this staff record to the staff/teacher login so Teacher Overview works.'},
+      {key:'user_id',label:'Staff/teacher login account (optional)',type:'ref',refTable:'profiles',refValue:'full_name',refExtra:['email','role'],refStore:'id',searchable:true,help:'Link this staff record to the correct staff or teacher login. This link is required for the teacher profile signature to appear on assigned class report cards.'},
       {key:'staff_no',label:'Staff No',type:'text',readonly:true,help:'AUTO-GENERATED on save — leave blank',placeholder:'(auto)'},
       {key:'email',label:'Email',type:'email'},
       {key:'phone',label:'Phone',type:'tel'},
