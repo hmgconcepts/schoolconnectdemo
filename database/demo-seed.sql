@@ -205,6 +205,11 @@ begin
   end loop;
 end $$;
 
+-- Demo teacher-owned signature (synthetic SVG; proves class-teacher report signing).
+update public.profiles set signature_url='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMTAwIj48cGF0aCBkPSJNMTUgNjUgUTU1IDEwIDg1IDYwIFQxNTAgNDUgUTE4MCAyMCAyMDUgNjUgVDI4NSAzNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMWUzYThhIiBzdHJva2Utd2lkdGg9IjUiLz48dGV4dCB4PSI5NSIgeT0iOTIiIGZvbnQtZmFtaWx5PSJjdXJzaXZlIiBmb250LXNpemU9IjE4IiBmaWxsPSIjMWUzYThhIj5GdW5rZSBBbGFiaTwvdGV4dD48L3N2Zz4='
+where email='teacher@scdemo.school';
+update public.staff set signature_url=(select signature_url from public.profiles where email='teacher@scdemo.school' limit 1)where staff_no='SCD-STF-00001';
+
 -- 6) Parent-child links: demo parent (a3) → Adanna (SS 2A) & Chiamaka (JSS 1A)
 do $$
 begin
@@ -919,7 +924,7 @@ begin
   -- Generic CRUD modules all use module_records. One insert statement makes the
   -- population contract explicit and keeps each public demo page non-empty.
   insert into public.module_records (module,title,body,status,audience,ref_date,amount,data)
-  select x.module,x.title,x.body,x.status,x.audience,x.ref_date,x.amount,x.data
+  select x.module,x.title,x.body,x.status,x.audience,x.ref_date,x.amount::numeric,x.data
   from (values
     ('messages','Welcome message','Your School Connect demo inbox is active.','sent','all',current_date,null,'{"channel":"inapp"}'::jsonb),
     ('inbox','Parent enquiry thread','A parent asked about next-term resumption and received a reply.','open','private',current_date,null,'{"from":"Mr. Adewale Okafor","to":"Admin"}'::jsonb),

@@ -30,7 +30,8 @@ loudly instead of saving a false zero. Fresh projects only need the complete sch
 
 Files:
 - `complete-schema.sql` — **fresh install / cumulative full repair**; includes CBT V5.1 and ends with PostgREST cache reload.
-- `cbt-v5.1-zero-score-hotfix.sql` — focused existing-database repair; do not use instead of the full schema on a fresh project.
+- `cbt-v5.1-zero-score-hotfix.sql` — focused existing-database CBT repair; do not use instead of the full schema on a fresh project.
+- `v5.3-platform-enhancements.sql` — focused upgrade for teacher profile signatures, class-report identity, promotion lookup and the robust timetable generator. The full schema already includes it.
 - `complete-schema-v12-clean.sql` — identical named copy (kept byte-in-sync with `complete-schema.sql`).
 - `complete-schema-v11-LEGACY-MERGED.sql` — historical reference only; do NOT run on new projects.
 - `*.csv` — import templates & sample question banks.
