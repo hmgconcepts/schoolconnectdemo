@@ -1,12 +1,18 @@
-# School Connect V5.6 — Test and Audit Report
+# School Connect V5.6.1 — Test and Audit Report
 
-**Audit date:** 2026-07-26 (Africa/Lagos)
+**Audit date:** 2026-07-27 (Africa/Lagos)
 
 ## Automated results
 
 | Suite | Result |
 |---|---:|
-| V5.6 SQL/link/parity/security contract audit | 72 passed, 0 failed |
+| V5.6.1 SQL/link/parity/security contract audit | 79 passed, 0 failed |
+| Complete schema executed twice | passed; same database, no re-run failure |
+| Complete-schema focused RPC coverage | every retained focused-upgrade RPC included; one authoritative definition per function |
+| Focused DDL coverage | every retained focused-upgrade table, column and index included |
+| Static client RPC coverage | all 19 named RPC calls exist in complete schema |
+| Open multi-subject V6 getter | blank admission accepted; `ok=true`, `candidate=null`, questions returned |
+| Full demo users + seed executed twice | passed; no ambiguous `exam_id`; roster/admission letters populated |
 | CBT UTME tab simulation | 9 passed, 0 failed |
 | CBT browser scoring/parser unit tests | 11 passed, 0 failed |
 | Registered CBT admission-only identity | admission required; official name/class enforced in getter and saved result |
@@ -21,9 +27,9 @@
 | Sample/receipt/fee workflow regression | 12 passed, 0 failed |
 | Role-navigation regression | passed |
 | Generator packaging contract | passed |
-| Traditional real JSZip build | 190 entries; 0 broken links; 0 orphans |
-| Modern real JSZip build | 401 entries; 0 broken links; 0 orphans |
-| PostgreSQL parsing | complete schema 1,205 statements; demo seed 40 top-level statements |
+| Traditional real JSZip build | 184 entries; 0 broken links; 0 orphans |
+| Modern real JSZip build | 389 entries; 0 broken links; 0 orphans |
+| PostgreSQL parsing | complete schema 1,156 statements; demo seed 40 top-level statements |
 | Demo seed/schema column contract | 0 missing tables/columns |
 | Shared runtime parity across generator/GOSA/demo | passed |
 
@@ -63,6 +69,8 @@ Run everything from the generator repository:
 - Candidate exam is network-first after tab repair and retains offline fallback.
 - Service-worker/cache headers force updated grading code to replace old cached assets.
 - Demo records cover core, academic, finance, communication and enterprise pages.
+- Complete schema and complete demo seed are each executed twice by the maintained harness.
+- Generated clients expose one production SQL path; demo mode adds only the two demo-only SQL files.
 
 ## Security audit notes
 

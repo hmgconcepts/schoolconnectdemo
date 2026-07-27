@@ -1,34 +1,14 @@
 -- ============================================================================
--- HMG SCHOOL CONNECT v12.4 — ONE CLEAN PRODUCTION DATABASE SCHEMA
--- ----------------------------------------------------------------------------
--- v12.4 (2026-07-23): PUNCTUALITY POINTS ENGINE (Section 17, additive): on-time
---   check-in + closing-time check-out earn daily points; term totals can be
---   pushed into any Results column at the school's discretion. Also standalone
---   as database/punctuality-points.sql. CBT scale pack (Section 16) included.
--- v12.3 (2026-07-23): CBT 1000-CONCURRENT SCALE PACK (Section 16, additive):
---   hot-path indexes, idempotent exam submissions (client_ref), and the v2
---   exam-fetch / submit functions preferred by cbt-exam.html. The very same
---   pack also ships standalone as database/cbt-1000-scale.sql for projects
---   already running v12.x. v12.2's site-license engine is untouched.
--- v12.1 (2026-07-22): extended the 42703 drift-hardening block so EVERY
--- column referenced by any policy / view / SQL function / constraint / index
--- is force-added on pre-existing old-generation tables (support_plans,
--- certificates, lms_submissions, push_subscriptions, security_prefs, idcards,
--- module_records, results.teacher_id, eresources, parent_child.parent_id,
--- students.guardian_email, poll_votes.candidate_id, cbt_results.student_id_ref,
--- profiles.role/status). Purely additive — nothing is dropped.
--- Rebuilt from the merged v11 file. Guarantees:
---   (1) zero duplicate definitions      (2) strict dependency order
---   (3) tables exist before anything references them
---   (4) columns exist before any policy / index / function uses them
---   (5) every statement is idempotent (IF NOT EXISTS / drop-if-exists / OR REPLACE)
---   (6) works on a brand-new Supabase project AND repairs existing
---       School Connect databases (missing tables, columns, unique keys)
---   (7) reloads the PostgREST schema cache at the end so the API sees the
---       new tables immediately (kills "not found in the schema cache")
---
--- HOW TO USE: paste this whole file into Supabase SQL Editor and run once.
--- Safe to re-run any number of times. No other SQL file is required.
+-- SCHOOL CONNECT V5.6.1 — COMPLETE CUMULATIVE PRODUCTION SCHEMA
+-- ============================================================================
+-- The ONLY production SQL to run. Includes every V5.1–V5.6.1 table, column,
+-- repair, constraint, index, trigger, view, RLS policy, grant and client RPC.
+-- Safe for new or existing School Connect projects and safe to run repeatedly.
+-- Automated verification executes this whole file twice on the same database.
+-- demo-users.sql and demo-seed.sql are the only exceptions and are DEMO-ONLY.
+-- Do not run any focused/versioned SQL after this complete schema.
+-- Back up Supabase, run this file, wait for the final V5.6.1 success row,
+-- deploy matching frontend files, then close old tabs and hard-refresh.
 -- ============================================================================
 create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
@@ -37,7 +17,6 @@ create extension if not exists "pgcrypto";
 -- ============================================================================
 -- SECTION 1: UTILITY FUNCTION (updated_at trigger helper)
 -- ============================================================================
-DROP FUNCTION IF EXISTS public.sc_set_updated_at() CASCADE;
 create or replace function public.sc_set_updated_at()
 returns trigger language plpgsql security invoker as $$
 begin
@@ -47,7 +26,7 @@ end;
 $$;
 
 -- ============================================================================
--- SECTION 2: CORE + FEATURE TABLES (94 tables, dependency-ordered, full columns)
+-- SECTION 2: CORE + FEATURE TABLES (98 tables, dependency-ordered, full columns)
 -- ============================================================================
 create table if not exists public.schools (
   id uuid primary key default gen_random_uuid(),
@@ -1492,17 +1471,9 @@ returns boolean language sql security definer stable as $$
   );
 $$;
 
-DROP FUNCTION IF EXISTS public.compute_fee_payment_balance() CASCADE;
 create or replace function public.compute_fee_payment_balance()
-returns trigger language plpgsql as $$
-begin
-  if new.fee_total is not null then
-    new.balance := greatest(0, coalesce(new.fee_total,0) - coalesce(new.amount_paid,0));
-  elsif new.balance is null then
-    new.balance := 0;
-  end if;
-  return new;
-end $$;
+returns trigger language plpgsql set search_path=public as $$
+begin if coalesce(new.fee_total,0)>0 then new.balance:=greatest(coalesce(new.fee_total,0)-coalesce(new.amount_paid,0),0);else new.balance:=greatest(coalesce(new.balance,0),0);end if;return new;end$$;
 
 DROP FUNCTION IF EXISTS public.compute_payroll_net() CASCADE;
 create or replace function public.compute_payroll_net()
@@ -1590,57 +1561,42 @@ begin
  end loop; return saved;
 end $$;
 
-DROP FUNCTION IF EXISTS public.cbt_get_public_exam() CASCADE;
-create or replace function public.cbt_get_public_exam(p_code text)
-returns jsonb language plpgsql security definer stable set search_path=public as $$
-declare e record; qs jsonb;
-begin
- select * into e from public.cbt_exams where upper(code)=upper(trim(p_code)) and is_open=true and is_archived=false limit 1;
- if not found then return null; end if;
- if e.start_at is not null and now()<e.start_at then return jsonb_build_object('wait',true,'start_at',e.start_at,'title',e.title); end if;
- if e.close_at is not null and now()>e.close_at then return jsonb_build_object('closed',true); end if;
- select coalesce(jsonb_agg((q-'correct'-'correct_answer'-'answer'-'explanation')||jsonb_build_object('_orig_index',ord-1) order by ord),'[]'::jsonb) into qs from jsonb_array_elements((case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)) with ordinality x(q,ord);
- return jsonb_build_object('id',e.id,'code',e.code,'title',e.title,'subject',e.subject,'class',e.class,'term',e.term,'session',e.session,'duration',e.duration,'questions',qs,'_questions',qs,'report_column',e.report_column,'max_score',e.max_score,'exam_mode',e.exam_mode);
-end $$;
+-- CBT getter/submission/import RPCs are installed once in the definitive CBT section.
 
-DROP FUNCTION IF EXISTS public.cbt_submit() CASCADE;
-create or replace function public.cbt_submit(p_payload jsonb)
+-- Conflict-aware timetable generator (single authoritative definition).
+alter table public.timetable_config alter column period_no type numeric using period_no::numeric;
+create or replace function public.generate_timetable(p_class text,p_session text default '',p_term text default '',p_periods_per_day integer default 6)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare e record; rid uuid; sid uuid; n int; score numeric:=0; total numeric:=0; ans jsonb; q jsonb; i int:=0; a text; k text; mark numeric;
+declare req record;occ int;placed int:=0;unplaced int:=0;ppd int:=least(greatest(coalesce(p_periods_per_day,6),1),12);chosen_day text;chosen_period int;allowed text[];unplaced_items jsonb:='[]'::jsonb;required_total int:=0;capacity int:=5*least(greatest(coalesce(p_periods_per_day,6),1),12);
 begin
- select * into e from public.cbt_exams where id=(p_payload->>'exam_id')::uuid; if not found then return jsonb_build_object('saved',false,'error','Exam not found'); end if;
- for ans in select * from jsonb_array_elements(coalesce(p_payload->'answers_data','[]'::jsonb)) loop
-   q := (case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)->i; mark:=coalesce(nullif(q->>'mark','')::numeric,1); total:=total+mark; a:=coalesce(ans->>'answer',ans #>> '{}',''); k:=coalesce(q->>'answer',q->>'correct',q->>'correct_answer',''); if lower(trim(a))=lower(trim(k)) and k<>'' then score:=score+mark; end if; i:=i+1;
+ if not public.is_staff(auth.uid())then return jsonb_build_object('ok',false,'error','Staff/admin role required.');end if;
+ if coalesce(trim(p_class),'')=''then return jsonb_build_object('ok',false,'error','Select a class.');end if;
+ select coalesce(sum(greatest(periods_per_week,0)),0)into required_total from public.timetable_requirements where class=p_class;
+ if required_total=0 then return jsonb_build_object('ok',false,'error','No subject demand exists for '||p_class||'. Add each subject, teacher and periods/week first.');end if;
+ delete from public.timetable where class=p_class and coalesce(session,'')=coalesce(p_session,'')and coalesce(term,'')=coalesce(p_term,'');
+ for req in select * from public.timetable_requirements where class=p_class order by periods_per_week desc,subject loop
+  allowed:=req.available_days;
+  if (allowed is null or array_length(allowed,1)is null)and coalesce(req.teacher,'')<>'' then select available_days into allowed from public.teacher_availability where lower(trim(teacher))=lower(trim(req.teacher))limit 1;end if;
+  for occ in 1..greatest(coalesce(req.periods_per_week,0),0)loop
+   chosen_day:=null;chosen_period:=null;
+   select d.day,p.per into chosen_day,chosen_period
+   from unnest(array['Monday','Tuesday','Wednesday','Thursday','Friday'])with ordinality d(day,dord)
+   cross join generate_series(1,ppd)p(per)
+   where (allowed is null or array_length(allowed,1)is null or exists(select 1 from unnest(allowed)a(x)where left(lower(a.x),3)=left(lower(d.day),3)))
+    and not exists(select 1 from public.timetable t where t.class=p_class and t.day=d.day and t.period=p.per::text and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,''))
+    and (coalesce(req.teacher,'')='' or not exists(select 1 from public.timetable t where lower(trim(coalesce(t.teacher,'')))=lower(trim(req.teacher))and t.day=d.day and t.period=p.per::text and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,'')))
+   order by (select count(*)from public.timetable t where t.class=p_class and t.day=d.day and t.subject=req.subject and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,'')),
+            (select count(*)from public.timetable t where t.class=p_class and t.day=d.day and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,'')),d.dord,p.per limit 1;
+   if chosen_day is null then unplaced:=unplaced+1;unplaced_items:=unplaced_items||jsonb_build_array(jsonb_build_object('subject',req.subject,'teacher',req.teacher,'occurrence',occ,'reason','No free class/teacher slot on an allowed day'));
+   else insert into public.timetable(class,day,period,subject,teacher,session,term)values(p_class,chosen_day,chosen_period::text,req.subject,nullif(req.teacher,''),coalesce(p_session,''),coalesce(p_term,''));placed:=placed+1;end if;
+  end loop;
  end loop;
- sid := nullif(p_payload->>'student_id','')::uuid; n:=case when total>0 then round(score/total*100)::int else 0 end;
- insert into public.cbt_results(exam_id,student_id,student_name,student_class,student_id_ref,student_type,score,total,percent,answers_data,cert_code)
- values(e.id,sid,coalesce(p_payload->>'student_name','Anonymous'),coalesce(p_payload->>'student_class',e.class),coalesce(p_payload->>'student_id_ref',''),coalesce(p_payload->>'student_type',e.exam_mode),score,total::int,n,p_payload->'answers_data',case when e.certificate_enabled then 'CERT-'||upper(substr(md5(random()::text),1,8)) else '' end) returning id into rid;
- return jsonb_build_object('saved',true,'result_id',rid,'score',score,'total',total,'percent',n,'cert_code',(select cert_code from public.cbt_results where id=rid));
-exception when others then return jsonb_build_object('saved',false,'error',sqlerrm); end $$;
-
-DROP FUNCTION IF EXISTS public.generate_timetable() CASCADE;
-create or replace function public.generate_timetable(p_class text,p_session text default '',p_term text default '',p_periods_per_day int default 6)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare d text; p int; r record; days text[]:=array['Monday','Tuesday','Wednesday','Thursday','Friday']; placed int:=0; unplaced int:=0; allowed text[]; done_one boolean;
-begin
- delete from public.timetable where class=p_class and coalesce(session,'')=coalesce(p_session,'') and coalesce(term,'')=coalesce(p_term,'');
- for r in select * from public.timetable_requirements where class=p_class order by periods_per_week desc loop
-   allowed:=r.available_days;
-   if allowed is null or array_length(allowed,1) is null then select available_days into allowed from public.teacher_availability where teacher=r.teacher limit 1; end if;
-   if allowed is null or array_length(allowed,1) is null then allowed:=days; end if;
-   for i in 1..greatest(1,r.periods_per_week) loop
-     done_one:=false;
-     for d in select unnest(allowed) loop for p in 1..greatest(1,p_periods_per_day) loop
-       if exists(select 1 from public.timetable where class=p_class and day=d and period=p::text and coalesce(session,'')=coalesce(p_session,'') and coalesce(term,'')=coalesce(p_term,'')) then continue; end if;
-       if r.teacher is not null and exists(select 1 from public.timetable where teacher=r.teacher and day=d and period=p::text and coalesce(session,'')=coalesce(p_session,'') and coalesce(term,'')=coalesce(p_term,'')) then continue; end if;
-       insert into public.timetable(class,day,period,subject,teacher,session,term) values(p_class,d,p::text,r.subject,r.teacher,p_session,p_term); placed:=placed+1; done_one:=true; exit;
-     end loop; exit when done_one; end loop;
-     if not done_one then unplaced:=unplaced+1; end if;
-   end loop;
- end loop;
- insert into public.timetable_runs(class,session,term,conflicts,notes) values(p_class,p_session,p_term,unplaced,'placed '||placed||' periods; unplaced '||unplaced);
- return jsonb_build_object('ok',true,'placed',placed,'unplaced',unplaced,'class',p_class);
-end $$;
+ insert into public.timetable_runs(class,session,term,generated_at,conflicts,notes)values(p_class,p_session,p_term,now(),unplaced,'Placed '||placed||' of '||required_total||' requested periods') ;
+ return jsonb_build_object('ok',true,'placed',placed,'unplaced',unplaced,'requested',required_total,'capacity',capacity,'periods_per_day',ppd,'unplaced_items',unplaced_items,'message',case when unplaced=0 then'Conflict-free timetable generated.'else'Generated with '||unplaced||' unplaced demand(s). Review teacher days or increase periods/day.'end);
+exception when others then return jsonb_build_object('ok',false,'error',sqlerrm);end$$;
+revoke execute on function public.generate_timetable(text,text,text,integer)from public,anon;
+grant execute on function public.generate_timetable(text,text,text,integer)to authenticated;
+notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
 
 -- ============================================================================
 -- SECTION 7b: DYNAMIC POLICY BLOCKS (2 — run after functions exist)
@@ -2231,8 +2187,6 @@ create policy "uv1_rs_manage" on public.reading_scores for update using (public.
 -- ============================================================================
 grant execute on function public.verify_certificate(text) to anon, authenticated;
 grant execute on function public.sc_push_cbt_to_results(uuid,text,text,text) to authenticated;
-grant execute on function public.cbt_get_public_exam(text) to anon, authenticated;
-grant execute on function public.cbt_submit(jsonb) to anon, authenticated;
 grant execute on function public.generate_timetable(text,text,text,int) to authenticated;
 grant select on public.parent_children to authenticated;
 -- Public certificate verification remains intentionally narrow.
@@ -2345,110 +2299,7 @@ create unique index if not exists cbt_results_client_ref_uidx
   on public.cbt_results (exam_id, client_ref)
   where client_ref is not null and client_ref <> '';
 
-DROP FUNCTION IF EXISTS public.cbt_get_public_exam_v2() CASCADE;
-create or replace function public.cbt_get_public_exam_v2(p_code text)
-returns jsonb language plpgsql security definer stable set search_path=public as $$
-declare e record; qs jsonb;
-begin
-  select * into e from public.cbt_exams
-   where upper(code)=upper(trim(p_code)) and is_open=true and is_archived=false limit 1;
-  if not found then return null; end if;
-  if e.start_at is not null and now()<e.start_at then
-    return jsonb_build_object('wait',true,'start_at',e.start_at,'title',e.title,'server_now',now());
-  end if;
-  if e.close_at is not null and now()>e.close_at then
-    return jsonb_build_object('closed',true,'server_now',now());
-  end if;
-  select coalesce(jsonb_agg((q-'correct'-'correct_answer'-'answer'-'explanation')||jsonb_build_object('_orig_index',ord-1) order by ord),'[]'::jsonb)
-    into qs
-    from jsonb_array_elements((case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)) with ordinality x(q,ord);
-  return jsonb_build_object(
-    'id',e.id,'code',e.code,'title',e.title,'subject',e.subject,'class',e.class,
-    'term',e.term,'session',e.session,'assessment_type',e.assessment_type,
-    'duration',coalesce(nullif(e.duration_min,0),e.duration,45),
-    'questions',qs,'_questions',qs,
-    'report_column',e.report_column,'max_score',e.max_score,'exam_mode',e.exam_mode,
-    'server_now',now(),'start_at',e.start_at,'close_at',e.close_at,
-    'instructions',e.instructions,'anti_cheat_config',e.anti_cheat_config,
-    'attempt_limit',e.attempt_limit,'randomise',e.randomise,'select_count',e.select_count,
-    'pass_mark',e.pass_mark,'release_results',e.release_results,
-    'certificate_enabled',e.certificate_enabled
-  );
-end $$;
-
-DROP FUNCTION IF EXISTS public.cbt_submit_v2() CASCADE;
-create or replace function public.cbt_submit_v2(p_payload jsonb)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare
-  e record; r record; rid uuid; sid uuid; n int; taken int := 0;
-  score numeric := 0; total numeric := 0; cc int := 0; wc int := 0; sc int := 0;
-  ans jsonb; q jsonb; i int := 0; a text; k text; mark numeric;
-  ref text := nullif(p_payload->>'client_ref','');
-begin
-  select * into e from public.cbt_exams where id=(p_payload->>'exam_id')::uuid;
-  if not found then return jsonb_build_object('saved',false,'error','Exam not found'); end if;
-  if e.close_at is not null and now() > e.close_at + interval '120 seconds' then
-    return jsonb_build_object('saved',false,'error','closed','message','This exam has closed. Your answers were not recorded.');
-  end if;
-  if ref is not null then
-    select * into r from public.cbt_results where exam_id=e.id and client_ref=ref limit 1;
-    if found then
-      return jsonb_build_object('saved',true,'duplicate',true,'result_id',r.id,'score',r.score,'total',r.total,'percent',r.percent,
-        'correct_count',r.correct_count,'wrong_count',r.wrong_count,'skipped_count',r.skipped_count,
-        'cert_code',r.cert_code,'release_results',e.release_results,'report_column',e.report_column);
-    end if;
-    if nullif(p_payload->>'student_id_ref','') is not null and coalesce(e.attempt_limit,0) > 0 then
-      select count(*) into taken from public.cbt_results where exam_id=e.id and student_id_ref=p_payload->>'student_id_ref';
-      if taken >= e.attempt_limit then
-        return jsonb_build_object('saved',false,'error','attempts_exhausted','message','Attempt limit ('||e.attempt_limit||') reached for this exam.');
-      end if;
-    end if;
-  end if;
-  for ans in select * from jsonb_array_elements(coalesce(p_payload->'answers_data','[]'::jsonb)) loop
-    q := (case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)
-          -> (case when coalesce(ans->>'index','') ~ '^[0-9]+$' then (ans->>'index')::int else i end);
-    mark := coalesce(nullif(q->>'mark','')::numeric,1); total := total + mark;
-    a := coalesce(ans->>'answer', ans #>> '{}', '');
-    k := coalesce(q->>'answer', q->>'correct', q->>'correct_answer', '');
-    if a is null or trim(a) = '' then sc := sc + 1;
-    elsif k <> '' and lower(trim(a)) = lower(trim(k)) then score := score + mark; cc := cc + 1;
-    else wc := wc + 1; end if;
-    i := i + 1;
-  end loop;
-  sid := nullif(p_payload->>'student_id','')::uuid;
-  n := case when total>0 then round(score/total*100)::int else 0 end;
-  begin
-    insert into public.cbt_results(
-      exam_id,student_id,student_name,student_class,student_id_ref,student_type,
-      score,total,percent,correct_count,wrong_count,skipped_count,
-      attempt_number,time_taken,violations,violation_log,answers_data,cert_code,client_ref
-    ) values (
-      e.id,sid,coalesce(p_payload->>'student_name','Anonymous'),coalesce(p_payload->>'student_class',e.class),
-      coalesce(p_payload->>'student_id_ref',''),coalesce(p_payload->>'student_type',e.exam_mode),
-      score,total::int,n,cc,wc,sc,
-      taken+1,coalesce((p_payload->>'time_taken')::int,0),coalesce((p_payload->>'violations')::int,0),
-      coalesce(p_payload->'violation_log','[]'::jsonb),p_payload->'answers_data',
-      case when e.certificate_enabled then 'CERT-'||upper(substr(md5(random()::text),1,8)) else '' end,
-      ref
-    ) returning id into rid;
-  exception when unique_violation then
-    select * into r from public.cbt_results where exam_id=e.id and client_ref=ref limit 1;
-    if found then
-      return jsonb_build_object('saved',true,'duplicate',true,'result_id',r.id,'score',r.score,'total',r.total,'percent',r.percent,
-        'correct_count',r.correct_count,'wrong_count',r.wrong_count,'skipped_count',r.skipped_count,
-        'cert_code',r.cert_code,'release_results',e.release_results,'report_column',e.report_column);
-    end if;
-    return jsonb_build_object('saved',false,'error','Duplicate submission conflict');
-  end;
-  return jsonb_build_object('saved',true,'result_id',rid,'score',score,'total',total,'percent',n,
-    'correct_count',cc,'wrong_count',wc,'skipped_count',sc,'cert_code',
-    (select cert_code from public.cbt_results where id=rid),
-    'release_results',e.release_results,'report_column',e.report_column);
-exception when others then return jsonb_build_object('saved',false,'error',sqlerrm);
-end $$;
-
-grant execute on function public.cbt_get_public_exam_v2(text) to anon, authenticated;
-grant execute on function public.cbt_submit_v2(jsonb)         to anon, authenticated;
+-- Getter/submission implementations are defined once in the definitive CBT section.
 
 analyze public.cbt_exams;
 analyze public.cbt_results;
@@ -2617,7 +2468,7 @@ grant execute on function public.sc_push_punctuality_to_results(text, text, text
 
 -- ============================================================================
 -- ============================================================================
--- SECTION 18: RUNTIME HELPER RPCs (v12.5 — additive contract completion)
+-- SECTION 18: RUNTIME HELPER RPCs (self-contained application contract)
 -- ============================================================================
 -- Every RPC the CLIENT code references now exists server-side, so a bare
 -- complete-schema install is 100% self-sufficient — no secondary SQL, no
@@ -2792,126 +2643,7 @@ end $$;
 revoke execute on function public.extract_admission(uuid) from public, anon;
 grant  execute on function public.extract_admission(uuid) to authenticated;
 
--- 18.8 generate_timetable(class, session, term, periods/day) — auto weekday planner
-DROP FUNCTION IF EXISTS public.generate_timetable() CASCADE;
-create or replace function public.generate_timetable(p_class text, p_session text default '', p_term text default '', p_periods_per_day integer default 6)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare req record; inserted integer := 0;
-  days text[] := array['Monday','Tuesday','Wednesday','Thursday','Friday'];
-  ppd integer := least(greatest(coalesce(p_periods_per_day,6),1),12);
-  bag text[] := '{}'; idx integer := 0; d integer; per integer; tries integer;
-  candidate text; last_subj text; i integer;
-begin
-  for req in select subject, teacher, periods_per_week
-               from public.timetable_requirements
-              where class = p_class order by periods_per_week desc loop
-    for i in 1..greatest(coalesce(req.periods_per_week,0),0) loop
-      bag := bag || (req.subject || '||' || coalesce(req.teacher,''));
-    end loop;
-  end loop;
-  if array_length(bag,1) is null then
-    return jsonb_build_object('ok',false,'error','No timetable requirements defined for class "'||coalesce(p_class,'')||'" — add subjects on the Timetable Requirements card first.');
-  end if;
-  delete from public.timetable
-   where class = p_class and coalesce(session,'') = coalesce(p_session,'') and coalesce(term,'') = coalesce(p_term,'');
-  while array_length(bag,1) is not null loop
-    for d in 1..5 loop
-      exit when array_length(bag,1) is null;
-      last_subj := '';
-      for per in 1..ppd loop
-        exit when array_length(bag,1) is null;
-        idx := idx % array_length(bag,1) + 1; tries := 0;
-        candidate := bag[idx];
-        -- avoid the same subject in two consecutive periods of a day (when alternatives exist)
-        while split_part(candidate,'||',1) = last_subj and tries < array_length(bag,1) loop
-          idx := idx % array_length(bag,1) + 1; candidate := bag[idx]; tries := tries + 1;
-        end loop;
-        insert into public.timetable (class, day, period, subject, teacher, session, term)
-        values (p_class, days[d], per::text, split_part(candidate,'||',1),
-                nullif(split_part(candidate,'||',2),''), coalesce(p_session,''), coalesce(p_term,''));
-        inserted := inserted + 1; last_subj := split_part(candidate,'||',1);
-        bag := (select array_agg(u.x order by u.o) from unnest(bag) with ordinality as u(x,o) where u.o <> idx);
-      end loop;
-    end loop;
-  end loop;
-  return jsonb_build_object('ok', true, 'inserted', inserted, 'days', 5, 'periods_per_day', ppd);
-exception when others then
-  return jsonb_build_object('ok', false, 'error', sqlerrm);
-end $$;
-revoke execute on function public.generate_timetable(text, text, text, integer) from public, anon;
-grant  execute on function public.generate_timetable(text, text, text, integer) to authenticated;
-
--- 18.9 cbt_import_backup(payload) — teacher-side import of offline exam backups.
--- Same server-authoritative, shuffle-safe grading as cbt_submit_v2 but WITHOUT
--- the exam-window / attempt-limit gates (backups reach the teacher after the
--- sitting). Idempotent on client_ref like the live path.
-DROP FUNCTION IF EXISTS public.cbt_import_backup() CASCADE;
-create or replace function public.cbt_import_backup(p_payload jsonb)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare
-  e record; r record; rid uuid; sid uuid; n int; taken int := 0;
-  score numeric := 0; total numeric := 0; cc int := 0; wc int := 0; sc int := 0;
-  ans jsonb; q jsonb; i int := 0; a text; k text; mark numeric;
-  ref text := nullif(p_payload->>'client_ref','');
-begin
-  select * into e from public.cbt_exams where id = (p_payload->>'exam_id')::uuid;
-  if not found then return jsonb_build_object('saved', false, 'error', 'Exam not found'); end if;
-  if ref is not null then
-    select * into r from public.cbt_results where exam_id = e.id and client_ref = ref limit 1;
-    if found then
-      return jsonb_build_object('saved', true, 'duplicate', true, 'result_id', r.id, 'score', r.score, 'total', r.total, 'percent', r.percent,
-        'correct_count', r.correct_count, 'wrong_count', r.wrong_count, 'skipped_count', r.skipped_count,
-        'cert_code', r.cert_code, 'title', e.title, 'release_results', e.release_results, 'report_column', e.report_column);
-    end if;
-  end if;
-  for ans in select * from jsonb_array_elements(coalesce(p_payload->'answers_data','[]'::jsonb)) loop
-    q := (case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end)
-          -> (case when coalesce(ans->>'index','') ~ '^[0-9]+$' then (ans->>'index')::int else i end);
-    mark := coalesce(nullif(q->>'mark','')::numeric, 1); total := total + mark;
-    a := coalesce(ans->>'answer', ans #>> '{}', '');
-    k := coalesce(q->>'answer', q->>'correct', q->>'correct_answer', '');
-    if a is null or trim(a) = '' then sc := sc + 1;
-    elsif k <> '' and lower(trim(a)) = lower(trim(k)) then score := score + mark; cc := cc + 1;
-    else wc := wc + 1; end if;
-    i := i + 1;
-  end loop;
-  sid := nullif(p_payload->>'student_id','')::uuid;
-  n := case when total > 0 then round(score/total*100)::int else 0 end;
-  if nullif(p_payload->>'student_id_ref','') is not null then
-    select count(*) into taken from public.cbt_results where exam_id = e.id and student_id_ref = p_payload->>'student_id_ref';
-  end if;
-  begin
-    insert into public.cbt_results(
-      exam_id, student_id, student_name, student_class, student_id_ref, student_type,
-      score, total, percent, correct_count, wrong_count, skipped_count,
-      attempt_number, time_taken, violations, violation_log, answers_data, cert_code, client_ref
-    ) values (
-      e.id, sid, coalesce(p_payload->>'student_name','Anonymous'), coalesce(p_payload->>'student_class', e.class),
-      coalesce(p_payload->>'student_id_ref',''), coalesce(p_payload->>'student_type', e.exam_mode),
-      score, total::int, n, cc, wc, sc,
-      taken + 1, coalesce((p_payload->>'time_taken')::int,0), coalesce((p_payload->>'violations')::int,0),
-      coalesce(p_payload->'violation_log','[]'::jsonb), p_payload->'answers_data',
-      case when e.certificate_enabled then 'CERT-'||upper(substr(md5(random()::text),1,8)) else '' end,
-      ref
-    ) returning id into rid;
-  exception when unique_violation then
-    select * into r from public.cbt_results where exam_id = e.id and client_ref = ref limit 1;
-    if found then
-      return jsonb_build_object('saved', true, 'duplicate', true, 'result_id', r.id, 'score', r.score, 'total', r.total, 'percent', r.percent,
-        'correct_count', r.correct_count, 'wrong_count', r.wrong_count, 'skipped_count', r.skipped_count,
-        'cert_code', r.cert_code, 'title', e.title, 'release_results', e.release_results, 'report_column', e.report_column);
-    end if;
-    return jsonb_build_object('saved', false, 'error', 'Duplicate submission conflict');
-  end;
-  return jsonb_build_object('saved', true, 'result_id', rid, 'score', score, 'total', total, 'percent', n,
-    'correct_count', cc, 'wrong_count', wc, 'skipped_count', sc,
-    'cert_code', (select cert_code from public.cbt_results where id = rid), 'title', e.title,
-    'release_results', e.release_results, 'report_column', e.report_column);
-exception when others then
-  return jsonb_build_object('saved', false, 'error', sqlerrm);
-end $$;
-revoke execute on function public.cbt_import_backup(jsonb) from public, anon;
-grant  execute on function public.cbt_import_backup(jsonb) to authenticated;
+-- Timetable and CBT import are installed by their single authoritative sections.
 
 -- ============================================================================
 -- SECTION 19: POSTGREST SCHEMA CACHE RELOAD (kills "schema cache" errors instantly)
@@ -2922,7 +2654,7 @@ grant  execute on function public.cbt_import_backup(jsonb) to authenticated;
 notify pgrst, 'reload schema';
 select pg_notify('pgrst','reload schema');
 
-select 'School Connect v12.5 clean schema installed successfully ✅ (CBT scale pack + Punctuality Points engine + all runtime helper RPCs included — fully self-contained)' as status;
+select 'School Connect cumulative core installed; applying final V5.6.1 contracts…' as status;
 
 -- Enhanced admission number and staff ID format settings
 alter table public.school_settings add column if not exists admission_format text default 'prefix-dash';
@@ -2931,238 +2663,7 @@ alter table public.school_settings add column if not exists admission_include_ye
 alter table public.school_settings add column if not exists staff_mid_segment text default 'STF';
 
 -- ============================================================================
--- SECTION 20: SCHOOL CONNECT V5 CBT AUTHORITATIVE GRADING + TAB REPAIR
--- Cumulative/additive: safe for fresh installs and existing School Connect DBs.
--- ============================================================================
-
--- Decimal marks (for example 0.5) must not be truncated on result storage.
-alter table public.cbt_results alter column total type numeric(10,2) using total::numeric;
-alter table public.cbt_results add column if not exists subject_scores jsonb not null default '{}'::jsonb;
-
-create or replace function public.sc_cbt_norm(p_value text)
-returns text language sql immutable parallel safe as $$
-  select lower(regexp_replace(trim(coalesce(p_value,'')), '\s+', ' ', 'g'))
-$$;
-
--- Turn A/B/C/D and exact option text into one comparable representation.
-create or replace function public.sc_cbt_canonical_option(p_question jsonb, p_value text)
-returns text language plpgsql immutable parallel safe as $$
-declare
-  opts text[] := '{}';
-  typ text := lower(replace(replace(coalesce(p_question->>'type',p_question->>'question_type','mcq'),'-','_'),' ','_'));
-  val text := public.sc_cbt_norm(p_value);
-  idx int;
-begin
-  if jsonb_typeof(p_question->'options')='array' then
-    select coalesce(array_agg(public.sc_cbt_norm(x.value) order by x.ord),'{}'::text[])
-      into opts from jsonb_array_elements_text(p_question->'options') with ordinality x(value,ord);
-  else
-    opts := array_remove(array[
-      public.sc_cbt_norm(coalesce(p_question->>'a',p_question->>'option_a',p_question->>'opt_a')),
-      public.sc_cbt_norm(coalesce(p_question->>'b',p_question->>'option_b',p_question->>'opt_b')),
-      public.sc_cbt_norm(coalesce(p_question->>'c',p_question->>'option_c',p_question->>'opt_c')),
-      public.sc_cbt_norm(coalesce(p_question->>'d',p_question->>'option_d',p_question->>'opt_d')),
-      public.sc_cbt_norm(coalesce(p_question->>'e',p_question->>'option_e',p_question->>'opt_e'))
-    ], '');
-  end if;
-  if typ in ('true_false','truefalse','true_or_false','tf','boolean','yes_no','yesno') and coalesce(array_length(opts,1),0)=0 then
-    opts := array['true','false'];
-  end if;
-  if val ~ '^[a-z]$' then
-    idx := ascii(val)-ascii('a')+1;
-    if idx between 1 and coalesce(array_length(opts,1),0) then return opts[idx]; end if;
-  end if;
-  return val;
-end $$;
-
--- Server-side answer matcher. The correct key never leaves PostgreSQL.
-create or replace function public.sc_cbt_answer_matches(p_question jsonb, p_given jsonb)
-returns boolean language plpgsql immutable parallel safe as $$
-declare
-  expected jsonb := coalesce(p_question->'answer',p_question->'correct',p_question->'correct_answer',p_question->'correctAnswer',p_question->'key');
-  typ text := lower(replace(replace(coalesce(p_question->>'type',p_question->>'question_type','mcq'),'-','_'),' ','_'));
-  given_text text;
-  expected_text text;
-  tolerance numeric;
-  gv numeric;
-  ev numeric;
-  given_tokens text[] := '{}';
-  expected_tokens text[] := '{}';
-  token text;
-begin
-  if p_given is null or p_given='null'::jsonb or expected is null or expected='null'::jsonb then return false; end if;
-
-  if typ='numeric' then
-    begin
-      given_text := case when jsonb_typeof(p_given)='string' then p_given #>> '{}' else trim(both '"' from p_given::text) end;
-      expected_text := case when jsonb_typeof(expected)='string' then expected #>> '{}' else trim(both '"' from expected::text) end;
-      gv := given_text::numeric; ev := expected_text::numeric;
-      tolerance := greatest(abs(coalesce(nullif(p_question->>'tolerance','')::numeric,nullif(p_question->>'accept','')::numeric,0.0001)),0.0000001);
-      return abs(gv-ev) <= tolerance;
-    exception when others then return false;
-    end;
-  end if;
-
-  -- Multi-select must match the complete set (not merely one member).
-  if typ='multi_select' or jsonb_typeof(p_given)='array' then
-    if jsonb_typeof(p_given)='array' then
-      select coalesce(array_agg(distinct public.sc_cbt_canonical_option(p_question,x)),'{}'::text[])
-        into given_tokens from jsonb_array_elements_text(p_given) x;
-    else
-      given_text := case when jsonb_typeof(p_given)='string' then p_given #>> '{}' else trim(both '"' from p_given::text) end;
-      foreach token in array regexp_split_to_array(coalesce(given_text,''),'\s*[,;|]\s*') loop
-        if public.sc_cbt_norm(token)<>'' then given_tokens:=array_append(given_tokens,public.sc_cbt_canonical_option(p_question,token)); end if;
-      end loop;
-    end if;
-    if jsonb_typeof(expected)='array' then
-      select coalesce(array_agg(distinct public.sc_cbt_canonical_option(p_question,x)),'{}'::text[])
-        into expected_tokens from jsonb_array_elements_text(expected) x;
-    else
-      expected_text := case when jsonb_typeof(expected)='string' then expected #>> '{}' else trim(both '"' from expected::text) end;
-      foreach token in array regexp_split_to_array(coalesce(expected_text,''),'\s*[,;|]\s*') loop
-        if public.sc_cbt_norm(token)<>'' then expected_tokens:=array_append(expected_tokens,public.sc_cbt_canonical_option(p_question,token)); end if;
-      end loop;
-    end if;
-    select coalesce(array_agg(x order by x),'{}'::text[]) into given_tokens from unnest(given_tokens) x;
-    select coalesce(array_agg(x order by x),'{}'::text[]) into expected_tokens from unnest(expected_tokens) x;
-    return coalesce(array_length(expected_tokens,1),0)>0 and given_tokens=expected_tokens;
-  end if;
-
-  given_text := case when jsonb_typeof(p_given)='string' then p_given #>> '{}' else trim(both '"' from p_given::text) end;
-  if jsonb_typeof(expected)='array' then
-    for token in select jsonb_array_elements_text(expected) loop
-      if public.sc_cbt_canonical_option(p_question,given_text)=public.sc_cbt_canonical_option(p_question,token) then return true; end if;
-    end loop;
-    return false;
-  end if;
-  expected_text := case when jsonb_typeof(expected)='string' then expected #>> '{}' else trim(both '"' from expected::text) end;
-  -- Pipes are accepted-alternative separators for fill/short-answer banks.
-  if typ in ('fill_blank','short_answer','short','cloze','math_equation') and expected_text like '%|%' then
-    foreach token in array regexp_split_to_array(expected_text,'\s*\|\s*') loop
-      if public.sc_cbt_norm(given_text)=public.sc_cbt_norm(token) then return true; end if;
-    end loop;
-    return false;
-  end if;
-  return public.sc_cbt_canonical_option(p_question,given_text)=public.sc_cbt_canonical_option(p_question,expected_text);
-end $$;
-
--- Public getter: strips every top-level answer key but preserves subject metadata
--- and original indexes, which are required for UTME tabs and shuffle-safe scoring.
-create or replace function public.cbt_get_public_exam(p_code text)
-returns jsonb language plpgsql security definer stable set search_path=public as $$
-declare e record; qs jsonb; school jsonb;
-begin
-  select * into e from public.cbt_exams
-   where upper(code)=upper(trim(p_code)) and is_open=true and is_archived=false limit 1;
-  if not found then return null; end if;
-  if e.start_at is not null and now()<e.start_at then return jsonb_build_object('wait',true,'start_at',e.start_at,'title',e.title,'server_now',now()); end if;
-  if e.close_at is not null and now()>e.close_at then return jsonb_build_object('closed',true,'server_now',now()); end if;
-  select coalesce(jsonb_agg((q-'correct'-'correct_answer'-'correctAnswer'-'answer'-'key'-'explanation')||jsonb_build_object('_orig_index',ord-1) order by ord),'[]'::jsonb)
-    into qs from jsonb_array_elements(
-      case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data
-           when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end
-    ) with ordinality x(q,ord);
-  select jsonb_build_object('name',school_name,'short_name',short_name,'motto',motto,'address',address,'phone',phone,'email',email,'logo_url',logo_url)
-    into school from public.school_settings where id=1;
-  return jsonb_build_object(
-    'id',e.id,'code',e.code,'title',e.title,'subject',e.subject,'class',e.class,
-    'term',e.term,'session',e.session,'assessment_type',e.assessment_type,
-    'duration',coalesce(nullif(e.duration_min,0),nullif(e.duration,0),45),
-    'questions',qs,'_questions',qs,'report_column',e.report_column,'max_score',e.max_score,
-    'exam_mode',e.exam_mode,'server_now',now(),'start_at',e.start_at,'close_at',e.close_at,
-    'instructions',e.instructions,'anti_cheat_config',e.anti_cheat_config,
-    'attempt_limit',e.attempt_limit,'randomise',e.randomise,'select_count',e.select_count,
-    'negative_mark',e.negative_mark,'pass_mark',e.pass_mark,'release_results',e.release_results,
-    'certificate_enabled',e.certificate_enabled,'updated_at',e.updated_at,'school',coalesce(school,'{}'::jsonb)
-  );
-end $$;
-
--- Canonical, server-authoritative, original-index-aware and idempotent submit.
-create or replace function public.cbt_submit(p_payload jsonb)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare
-  e record; r record; rid uuid; sid uuid; taken int:=0; idx int:=0; qidx int;
-  score numeric:=0; total numeric:=0; cc int:=0; wc int:=0; sc int:=0;
-  ans jsonb; q jsonb; bank jsonb; given jsonb; mark numeric; penalty numeric;
-  ref text:=nullif(p_payload->>'client_ref',''); pct numeric; grade text;
-  idref text:=trim(coalesce(p_payload->>'student_id_ref',''));
-  subject_name text; subject_scores jsonb:='{}'::jsonb; subject_row jsonb;
-begin
-  select * into e from public.cbt_exams where id=(p_payload->>'exam_id')::uuid;
-  if not found then return jsonb_build_object('saved',false,'error','exam_not_found','message','Exam not found.'); end if;
-  if not coalesce(e.is_open,false) or coalesce(e.is_archived,false) then return jsonb_build_object('saved',false,'error','closed','message','This exam is not open.'); end if;
-  if e.start_at is not null and now()<e.start_at then return jsonb_build_object('saved',false,'error','not_started','message','This exam has not started.'); end if;
-  if e.close_at is not null and now()>e.close_at+interval '120 seconds' then return jsonb_build_object('saved',false,'error','closed','message','This exam has closed.'); end if;
-
-  if ref is not null then
-    select * into r from public.cbt_results where exam_id=e.id and client_ref=ref limit 1;
-    if found then return jsonb_build_object('saved',true,'duplicate',true,'result_id',r.id,'score',r.score,'total',r.total,'percent',r.percent,'grade',case when r.percent>=75 then 'A' when r.percent>=60 then 'B' when r.percent>=50 then 'C' when r.percent>=40 then 'D' else 'F' end,'correct_count',r.correct_count,'wrong_count',r.wrong_count,'skipped_count',r.skipped_count,'cert_code',r.cert_code,'subject_scores',r.subject_scores,'release_results',e.release_results,'report_column',e.report_column); end if;
-  end if;
-  if idref<>'' and coalesce(e.attempt_limit,0)>0 then
-    select count(*) into taken from public.cbt_results where exam_id=e.id and student_id_ref=idref;
-    if taken>=e.attempt_limit then return jsonb_build_object('saved',false,'error','attempts_exhausted','message','Attempt limit reached for this exam.'); end if;
-  end if;
-
-  bank := case when jsonb_typeof(e.csv_data)='array' and jsonb_array_length(e.csv_data)>0 then e.csv_data
-               when jsonb_typeof(e.questions)='array' and jsonb_array_length(e.questions)>0 then e.questions else '[]'::jsonb end;
-  penalty:=greatest(coalesce(e.negative_mark,0),0);
-  for ans in select * from jsonb_array_elements(coalesce(p_payload->'answers_data','[]'::jsonb)) loop
-    qidx:=case when coalesce(ans->>'index','')~'^[0-9]+$' then (ans->>'index')::int else idx end;
-    if qidx<0 or qidx>=jsonb_array_length(bank) then idx:=idx+1; continue; end if;
-    q:=bank->qidx;
-    begin mark:=coalesce(nullif(q->>'mark','')::numeric,nullif(q->>'score','')::numeric,nullif(q->>'points','')::numeric,1); exception when others then mark:=1; end;
-    mark:=greatest(mark,0); total:=total+mark; given:=ans->'answer';
-    subject_name:=coalesce(nullif(q->>'section',''),nullif(q->>'subject',''),nullif(q->>'subject_section',''),nullif(ans->>'subject',''),'General');
-    subject_row:=coalesce(subject_scores->subject_name,'{"score":0,"total":0,"correct":0,"wrong":0,"skipped":0}'::jsonb);
-    subject_row:=jsonb_set(subject_row,'{total}',to_jsonb(coalesce((subject_row->>'total')::numeric,0)+mark));
-    if given is null or given='null'::jsonb or (jsonb_typeof(given)='string' and public.sc_cbt_norm(given #>> '{}')='') or (jsonb_typeof(given)='array' and jsonb_array_length(given)=0) then
-      sc:=sc+1; subject_row:=jsonb_set(subject_row,'{skipped}',to_jsonb(coalesce((subject_row->>'skipped')::int,0)+1));
-    elsif public.sc_cbt_answer_matches(q,given) then
-      score:=score+mark; cc:=cc+1; subject_row:=jsonb_set(subject_row,'{score}',to_jsonb(coalesce((subject_row->>'score')::numeric,0)+mark)); subject_row:=jsonb_set(subject_row,'{correct}',to_jsonb(coalesce((subject_row->>'correct')::int,0)+1));
-    else
-      score:=score-penalty; wc:=wc+1; subject_row:=jsonb_set(subject_row,'{wrong}',to_jsonb(coalesce((subject_row->>'wrong')::int,0)+1));
-    end if;
-    subject_scores:=jsonb_set(subject_scores,array[subject_name],subject_row,true); idx:=idx+1;
-  end loop;
-  score:=greatest(round(score,2),0); pct:=case when total>0 then round(score/total*100,2) else 0 end;
-  grade:=case when pct>=75 then 'A' when pct>=60 then 'B' when pct>=50 then 'C' when pct>=40 then 'D' else 'F' end;
-  if coalesce(p_payload->>'student_id','')~*'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then sid:=(p_payload->>'student_id')::uuid; else sid:=null; end if;
-  if sid is null and idref<>'' then select id into sid from public.students where admission_no=idref limit 1; end if;
-  begin
-    insert into public.cbt_results(exam_id,student_id,student_name,student_class,student_id_ref,student_type,score,total,percent,correct_count,wrong_count,skipped_count,attempt_number,time_taken,violations,violation_log,answers_data,cert_code,client_ref,subject_scores)
-    values(e.id,sid,coalesce(nullif(p_payload->>'student_name',''),'Anonymous'),coalesce(nullif(p_payload->>'student_class',''),e.class),idref,coalesce(p_payload->>'student_type',e.exam_mode),score,total,pct,cc,wc,sc,taken+1,coalesce((p_payload->>'time_taken')::int,0),coalesce((p_payload->>'violations')::int,0),coalesce(p_payload->'violation_log','[]'::jsonb),coalesce(p_payload->'answers_data','[]'::jsonb),case when e.certificate_enabled then 'CERT-'||upper(substr(md5(random()::text),1,8)) else '' end,ref,subject_scores)
-    returning id into rid;
-  exception when unique_violation then
-    if ref is not null then select * into r from public.cbt_results where exam_id=e.id and client_ref=ref limit 1; if found then return jsonb_build_object('saved',true,'duplicate',true,'result_id',r.id,'score',r.score,'total',r.total,'percent',r.percent,'correct_count',r.correct_count,'wrong_count',r.wrong_count,'skipped_count',r.skipped_count,'cert_code',r.cert_code,'subject_scores',r.subject_scores,'release_results',e.release_results,'report_column',e.report_column); end if; end if;
-    return jsonb_build_object('saved',false,'error','duplicate_submission','message','Duplicate submission conflict.');
-  end;
-  return jsonb_build_object('saved',true,'result_id',rid,'score',score,'total',total,'percent',pct,'grade',grade,'correct_count',cc,'wrong_count',wc,'skipped_count',sc,'cert_code',(select cert_code from public.cbt_results where id=rid),'subject_scores',subject_scores,'release_results',e.release_results,'report_column',e.report_column);
-exception when others then return jsonb_build_object('saved',false,'error','server_error','message',sqlerrm);
-end $$;
-
--- Compatibility aliases: every historic runner version now reaches the same
--- fixed implementation rather than an older exact-text-only scorer.
-create or replace function public.cbt_get_public_exam_v2(p_code text)
-returns jsonb language sql security definer stable set search_path=public as $$ select public.cbt_get_public_exam(p_code) $$;
-create or replace function public.cbt_submit_v2(p_payload jsonb)
-returns jsonb language sql security definer set search_path=public as $$ select public.cbt_submit(p_payload) $$;
-
-revoke execute on function public.sc_cbt_norm(text) from public, anon, authenticated;
-revoke execute on function public.sc_cbt_canonical_option(jsonb,text) from public, anon, authenticated;
-revoke execute on function public.sc_cbt_answer_matches(jsonb,jsonb) from public, anon, authenticated;
-revoke execute on function public.cbt_get_public_exam(text) from public;
-revoke execute on function public.cbt_submit(jsonb) from public;
-grant execute on function public.cbt_get_public_exam(text) to anon, authenticated;
-grant execute on function public.cbt_submit(jsonb) to anon, authenticated;
-grant execute on function public.cbt_get_public_exam_v2(text) to anon, authenticated;
-grant execute on function public.cbt_submit_v2(jsonb) to anon, authenticated;
-
-notify pgrst, 'reload schema';
-select pg_notify('pgrst','reload schema');
-select 'School Connect V5 cumulative schema installed — authoritative CBT scoring, shuffle-safe indexes, UTME subject tabs and school identity enabled ✅' as status;
-
--- ============================================================================
--- SECTION 21: V5 BROWSER/SCHEMA CONTRACT RECONCILIATION (ADDITIVE)
+-- SECTION 20: BROWSER/SCHEMA CONTRACT RECONCILIATION (ADDITIVE)
 -- Every column written by crud.js exists on both fresh and upgraded databases.
 -- ============================================================================
 alter table public.staff add column if not exists staff_type text default 'teaching';
@@ -3203,29 +2704,20 @@ notify pgrst, 'reload schema';
 select pg_notify('pgrst','reload schema');
 select 'School Connect V5 schema/browser contract reconciled ✅' as status;
 
--- V5 fee balance authority: every receipt sees the same balance even when rows
--- are inserted outside the browser UI.
-create or replace function public.compute_fee_payment_balance()
-returns trigger language plpgsql set search_path=public as $$
-begin
-  if coalesce(new.fee_total,0)>0 then new.balance:=greatest(coalesce(new.fee_total,0)-coalesce(new.amount_paid,0),0);
-  else new.balance:=greatest(coalesce(new.balance,0),0); end if;
-  return new;
-end $$;
-drop trigger if exists trg_compute_fee_payment_balance on public.fee_payments;
-create trigger trg_compute_fee_payment_balance before insert or update of fee_total,amount_paid,balance on public.fee_payments for each row execute function public.compute_fee_payment_balance();
-notify pgrst, 'reload schema';
-select pg_notify('pgrst','reload schema');
-
 -- ============================================================================
--- SECTION 22: CBT V5.1 DEFINITIVE GRADING ENGINE
+-- SECTION 21: DEFINITIVE CBT GRADING, IDENTITY AND MULTI-SUBJECT ENGINE
 -- A distinct RPC name prevents stale/legacy PostgREST overloads from silently
 -- returning zero. Legacy answer-key spellings are normalised case-insensitively.
 -- ============================================================================
 
+alter table public.cbt_results alter column total type numeric(10,2) using total::numeric;
+alter table public.cbt_results add column if not exists subject_scores jsonb not null default '{}'::jsonb;
 alter table public.cbt_results add column if not exists ungraded_count int not null default 0;
 alter table public.cbt_results add column if not exists grading_status text not null default 'graded';
 alter table public.cbt_results add column if not exists engine_version text not null default '';
+create index if not exists cbt_exams_normalized_code_idx on public.cbt_exams((regexp_replace(upper(code),'[^A-Z0-9]','','g')));
+
+create or replace function public.sc_cbt_norm(p_value text)returns text language sql immutable parallel safe as $$select lower(regexp_replace(trim(coalesce(p_value,'')),'\s+',' ','g'))$$;
 
 create or replace function public.sc_cbt_json_value(p_object jsonb,p_keys text[])
 returns jsonb language sql immutable parallel safe as $$
@@ -3510,28 +3002,6 @@ revoke execute on function public.cbt_regrade_exam_results_v5(uuid)from public,a
 grant execute on function public.cbt_regrade_exam_results_v5(uuid)to authenticated;
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
 
--- Distinct V5.1 public getter with normalised codes and explicit diagnostics.
-create index if not exists cbt_exams_normalized_code_idx on public.cbt_exams((regexp_replace(upper(code),'[^A-Z0-9]','','g')));
-create or replace function public.cbt_get_public_exam_v5(p_code text)
-returns jsonb language plpgsql security definer stable set search_path=public as $$
-declare e record;qs jsonb;school jsonb;wanted text:=regexp_replace(upper(coalesce(p_code,'')),'[^A-Z0-9]','','g');
-begin
- if wanted=''then return jsonb_build_object('ok',false,'error','code_required','message','Enter an exam code.','engine_version','v5.1.0');end if;
- select * into e from public.cbt_exams where regexp_replace(upper(code),'[^A-Z0-9]','','g')=wanted order by updated_at desc nulls last,created_at desc limit 1;
- if not found then return jsonb_build_object('ok',false,'error','exam_not_found','message','No exam matches that code. Ask the exam officer to confirm the code.','engine_version','v5.1.0','normalised_code',wanted);end if;
- if coalesce(e.is_archived,false)then return jsonb_build_object('ok',false,'error','archived','message','This exam is archived. The exam officer must unarchive it.','id',e.id,'title',e.title,'code',e.code,'engine_version','v5.1.0');end if;
- if not coalesce(e.is_open,false)then return jsonb_build_object('ok',false,'error','not_open','message','This exam exists but is not open. The exam officer must click Open in CBT Manager.','id',e.id,'title',e.title,'code',e.code,'engine_version','v5.1.0');end if;
- if e.start_at is not null and now()<e.start_at then return jsonb_build_object('ok',false,'wait',true,'error','not_started','message','This exam has not started yet.','start_at',e.start_at,'title',e.title,'code',e.code,'server_now',now(),'engine_version','v5.1.0');end if;
- if e.close_at is not null and now()>e.close_at then return jsonb_build_object('ok',false,'closed',true,'error','closed','message','This exam closing time has passed.','close_at',e.close_at,'title',e.title,'code',e.code,'server_now',now(),'engine_version','v5.1.0');end if;
- select coalesce(jsonb_agg(public.sc_cbt_public_question(q)||jsonb_build_object('_orig_index',ord-1)order by ord),'[]'::jsonb)into qs from jsonb_array_elements(case when jsonb_typeof(e.csv_data)='array'and jsonb_array_length(e.csv_data)>0 then e.csv_data when jsonb_typeof(e.questions)='array'then e.questions else'[]'::jsonb end)with ordinality x(q,ord);
- select jsonb_build_object('name',school_name,'short_name',short_name,'motto',motto,'address',address,'phone',phone,'email',email,'logo_url',logo_url)into school from public.school_settings where id=1;
- return jsonb_build_object('ok',true,'id',e.id,'code',e.code,'title',e.title,'subject',e.subject,'class',e.class,'term',e.term,'session',e.session,'assessment_type',e.assessment_type,'duration',coalesce(nullif(e.duration_min,0),nullif(e.duration,0),45),'questions',qs,'_questions',qs,'report_column',e.report_column,'max_score',e.max_score,'exam_mode',e.exam_mode,'server_now',now(),'start_at',e.start_at,'close_at',e.close_at,'instructions',e.instructions,'anti_cheat_config',e.anti_cheat_config,'attempt_limit',e.attempt_limit,'randomise',e.randomise,'select_count',e.select_count,'negative_mark',e.negative_mark,'pass_mark',e.pass_mark,'release_results',e.release_results,'certificate_enabled',e.certificate_enabled,'updated_at',e.updated_at,'school',coalesce(school,'{}'::jsonb),'engine_version','v5.1.0');
-exception when others then return jsonb_build_object('ok',false,'error','getter_server_error','message',sqlerrm,'engine_version','v5.1.0');
-end$$;
-revoke execute on function public.cbt_get_public_exam_v5(text)from public;
-grant execute on function public.cbt_get_public_exam_v5(text)to anon,authenticated;
-notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
-
 -- V5.2 promotion/report integrity: pending is a valid decision state and every
 -- report can resolve the student by id or legacy name.
 alter table public.promotions drop constraint if exists promotions_action_check;
@@ -3614,43 +3084,6 @@ grant execute on function public.get_class_teacher_identity(text)to authenticate
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
 select 'School Connect V5.3 teacher signature and class-report identity installed ✅'as status;
 
--- V5.3 robust deterministic timetable generator with availability and teacher-conflict checks.
-alter table public.timetable_config alter column period_no type numeric using period_no::numeric;
-
-create or replace function public.generate_timetable(p_class text,p_session text default '',p_term text default '',p_periods_per_day integer default 6)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare req record;occ int;placed int:=0;unplaced int:=0;ppd int:=least(greatest(coalesce(p_periods_per_day,6),1),12);chosen_day text;chosen_period int;allowed text[];unplaced_items jsonb:='[]'::jsonb;required_total int:=0;capacity int:=5*least(greatest(coalesce(p_periods_per_day,6),1),12);
-begin
- if not public.is_staff(auth.uid())then return jsonb_build_object('ok',false,'error','Staff/admin role required.');end if;
- if coalesce(trim(p_class),'')=''then return jsonb_build_object('ok',false,'error','Select a class.');end if;
- select coalesce(sum(greatest(periods_per_week,0)),0)into required_total from public.timetable_requirements where class=p_class;
- if required_total=0 then return jsonb_build_object('ok',false,'error','No subject demand exists for '||p_class||'. Add each subject, teacher and periods/week first.');end if;
- delete from public.timetable where class=p_class and coalesce(session,'')=coalesce(p_session,'')and coalesce(term,'')=coalesce(p_term,'');
- for req in select * from public.timetable_requirements where class=p_class order by periods_per_week desc,subject loop
-  allowed:=req.available_days;
-  if (allowed is null or array_length(allowed,1)is null)and coalesce(req.teacher,'')<>'' then select available_days into allowed from public.teacher_availability where lower(trim(teacher))=lower(trim(req.teacher))limit 1;end if;
-  for occ in 1..greatest(coalesce(req.periods_per_week,0),0)loop
-   chosen_day:=null;chosen_period:=null;
-   select d.day,p.per into chosen_day,chosen_period
-   from unnest(array['Monday','Tuesday','Wednesday','Thursday','Friday'])with ordinality d(day,dord)
-   cross join generate_series(1,ppd)p(per)
-   where (allowed is null or array_length(allowed,1)is null or exists(select 1 from unnest(allowed)a(x)where left(lower(a.x),3)=left(lower(d.day),3)))
-    and not exists(select 1 from public.timetable t where t.class=p_class and t.day=d.day and t.period=p.per::text and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,''))
-    and (coalesce(req.teacher,'')='' or not exists(select 1 from public.timetable t where lower(trim(coalesce(t.teacher,'')))=lower(trim(req.teacher))and t.day=d.day and t.period=p.per::text and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,'')))
-   order by (select count(*)from public.timetable t where t.class=p_class and t.day=d.day and t.subject=req.subject and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,'')),
-            (select count(*)from public.timetable t where t.class=p_class and t.day=d.day and coalesce(t.session,'')=coalesce(p_session,'')and coalesce(t.term,'')=coalesce(p_term,'')),d.dord,p.per limit 1;
-   if chosen_day is null then unplaced:=unplaced+1;unplaced_items:=unplaced_items||jsonb_build_array(jsonb_build_object('subject',req.subject,'teacher',req.teacher,'occurrence',occ,'reason','No free class/teacher slot on an allowed day'));
-   else insert into public.timetable(class,day,period,subject,teacher,session,term)values(p_class,chosen_day,chosen_period::text,req.subject,nullif(req.teacher,''),coalesce(p_session,''),coalesce(p_term,''));placed:=placed+1;end if;
-  end loop;
- end loop;
- insert into public.timetable_runs(class,session,term,generated_at,conflicts,notes)values(p_class,p_session,p_term,now(),unplaced,'Placed '||placed||' of '||required_total||' requested periods') ;
- return jsonb_build_object('ok',true,'placed',placed,'unplaced',unplaced,'requested',required_total,'capacity',capacity,'periods_per_day',ppd,'unplaced_items',unplaced_items,'message',case when unplaced=0 then'Conflict-free timetable generated.'else'Generated with '||unplaced||' unplaced demand(s). Review teacher days or increase periods/day.'end);
-exception when others then return jsonb_build_object('ok',false,'error',sqlerrm);end$$;
-revoke execute on function public.generate_timetable(text,text,text,integer)from public,anon;
-grant execute on function public.generate_timetable(text,text,text,integer)to authenticated;
-notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
-select 'School Connect V5.3 robust timetable generator installed ✅'as status;
-
 -- V5.4 beginning-of-term student physical/health metrics printed on reports.
 create table if not exists public.student_term_metrics(
  id uuid primary key default gen_random_uuid(),student_id uuid references public.students(id)on delete cascade,
@@ -3673,36 +3106,49 @@ select 'School Connect V5.4 portable archives, CBT organization and student metr
 -- V5.5 registered-exam identity: admission number resolves the official student.
 create or replace function public.cbt_get_public_exam_v6(p_code text,p_admission_no text default '')
 returns jsonb language plpgsql security definer stable set search_path=public as $$
-declare base jsonb;e record;s record;wanted text:=regexp_replace(upper(coalesce(p_admission_no,'')),'[^A-Z0-9]','','g');roster_count int:=0;
+declare
+ base jsonb;exam_row public.cbt_exams%rowtype;student_row public.students%rowtype;
+ candidate jsonb:='null'::jsonb;wanted text:=regexp_replace(upper(coalesce(p_admission_no,'')),'[^A-Z0-9]','','g');roster_count integer:=0;
 begin
- base:=public.cbt_get_public_exam_v5(p_code);if coalesce((base->>'ok')::boolean,false)=false then return base;end if;
- select * into e from public.cbt_exams where id=(base->>'id')::uuid;
- if lower(coalesce(e.exam_mode,'open'))='registered'then
-  if wanted=''then return (base-'questions'-'_questions')||jsonb_build_object('ok',false,'error','admission_required','message','This examination is restricted to registered students. Enter your admission number; your official name and class will be loaded automatically.','identity_mode','registered');end if;
-  select * into s from public.students where regexp_replace(upper(coalesce(admission_no,'')),'[^A-Z0-9]','','g')=wanted and coalesce(status,'active')in('active','approved')limit 1;
-  if not found then return (base-'questions'-'_questions')||jsonb_build_object('ok',false,'error','invalid_admission','message','No active registered student matches that admission number. Contact the school—do not type a name manually.','identity_mode','registered');end if;
-  select count(*)into roster_count from public.cbt_roster where exam_id=e.id;
-  if roster_count>0 and not exists(select 1 from public.cbt_roster r where r.exam_id=e.id and regexp_replace(upper(r.student_id_ref),'[^A-Z0-9]','','g')=wanted)then return (base-'questions'-'_questions')||jsonb_build_object('ok',false,'error','not_on_roster','message','This registered student is not on the roster for this examination.','identity_mode','registered');end if;
-  return base||jsonb_build_object('identity_mode','registered','candidate',jsonb_build_object('id',s.id,'admission_no',s.admission_no,'full_name',s.full_name,'class',trim(coalesce(s.class,'')||' '||coalesce(s.arm,''))));
+ base:=public.cbt_get_public_exam_v5(p_code);if not coalesce((base->>'ok')::boolean,false)then return base;end if;
+ select ce.* into exam_row from public.cbt_exams ce where ce.id=(base->>'id')::uuid;
+ if not found then return jsonb_build_object('ok',false,'error','exam_not_found','message','The examination record is no longer available.','engine_version','v5.6.1');end if;
+ if lower(coalesce(exam_row.exam_mode,'open'))='registered'then
+  if wanted=''then return(base-'questions'-'_questions')||jsonb_build_object('ok',false,'error','admission_required','message','This examination is restricted to registered students. Enter your admission number; your official name and class will be loaded automatically.','identity_mode','registered');end if;
+  select st.* into student_row from public.students st where regexp_replace(upper(coalesce(st.admission_no,'')),'[^A-Z0-9]','','g')=wanted and coalesce(st.status,'active')in('active','approved')limit 1;
+  if not found then return(base-'questions'-'_questions')||jsonb_build_object('ok',false,'error','invalid_admission','message','No active registered student matches that admission number. Contact the school—do not type a name manually.','identity_mode','registered');end if;
+  select count(*)into roster_count from public.cbt_roster cr where cr.exam_id=exam_row.id;
+  if roster_count>0 and not exists(select 1 from public.cbt_roster cr where cr.exam_id=exam_row.id and regexp_replace(upper(coalesce(cr.student_id_ref,'')),'[^A-Z0-9]','','g')=wanted)then return(base-'questions'-'_questions')||jsonb_build_object('ok',false,'error','not_on_roster','message','This registered student is not on the roster for this examination.','identity_mode','registered');end if;
+  candidate:=jsonb_build_object('id',student_row.id,'admission_no',student_row.admission_no,'full_name',student_row.full_name,'class',trim(coalesce(student_row.class,'')||' '||coalesce(student_row.arm,'')));
+  return base||jsonb_build_object('identity_mode','registered','candidate',candidate,'identity_engine_version','v5.6.1');
  end if;
- if wanted<>''then select * into s from public.students where regexp_replace(upper(coalesce(admission_no,'')),'[^A-Z0-9]','','g')=wanted limit 1;end if;
- return base||jsonb_build_object('identity_mode','open','candidate',case when s.id is null then null else jsonb_build_object('id',s.id,'admission_no',s.admission_no,'full_name',s.full_name,'class',trim(coalesce(s.class,'')||' '||coalesce(s.arm,'')))end);
+ -- Open/multi-subject exams may start without admission. Never read an unassigned record.
+ if wanted<>''then
+  select st.* into student_row from public.students st where regexp_replace(upper(coalesce(st.admission_no,'')),'[^A-Z0-9]','','g')=wanted limit 1;
+  if found then candidate:=jsonb_build_object('id',student_row.id,'admission_no',student_row.admission_no,'full_name',student_row.full_name,'class',trim(coalesce(student_row.class,'')||' '||coalesce(student_row.arm,'')));end if;
+ end if;
+ return base||jsonb_build_object('identity_mode','open','candidate',candidate,'identity_engine_version','v5.6.1');
 end$$;
 
 create or replace function public.cbt_submit_v6(p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare e record;s record;wanted text;roster_count int;payload jsonb:=p_payload;
+declare exam_row public.cbt_exams%rowtype;student_row public.students%rowtype;wanted text:='';roster_count integer:=0;payload jsonb:=coalesce(p_payload,'{}'::jsonb);
 begin
- select * into e from public.cbt_exams where id=(p_payload->>'exam_id')::uuid;if not found then return jsonb_build_object('saved',false,'error','exam_not_found','message','Exam not found.','engine_version','v5.1.0');end if;
- if lower(coalesce(e.exam_mode,'open'))='registered'then
-  wanted:=regexp_replace(upper(coalesce(p_payload->>'student_id_ref','')),'[^A-Z0-9]','','g');if wanted=''then return jsonb_build_object('saved',false,'error','admission_required','message','Admission number is required.','engine_version','v5.1.0');end if;
-  select * into s from public.students where regexp_replace(upper(coalesce(admission_no,'')),'[^A-Z0-9]','','g')=wanted and coalesce(status,'active')in('active','approved')limit 1;if not found then return jsonb_build_object('saved',false,'error','invalid_admission','message','Registered student not found.','engine_version','v5.1.0');end if;
-  select count(*)into roster_count from public.cbt_roster where exam_id=e.id;if roster_count>0 and not exists(select 1 from public.cbt_roster r where r.exam_id=e.id and regexp_replace(upper(r.student_id_ref),'[^A-Z0-9]','','g')=wanted)then return jsonb_build_object('saved',false,'error','not_on_roster','message','Student is not on this exam roster.','engine_version','v5.1.0');end if;
-  payload:=payload||jsonb_build_object('student_id',s.id,'student_id_ref',s.admission_no,'student_name',s.full_name,'student_class',trim(coalesce(s.class,'')||' '||coalesce(s.arm,'')),'student_type','registered');
+ select ce.* into exam_row from public.cbt_exams ce where ce.id=(p_payload->>'exam_id')::uuid;
+ if not found then return jsonb_build_object('saved',false,'error','exam_not_found','message','Exam not found.','engine_version','v5.6.1');end if;
+ if lower(coalesce(exam_row.exam_mode,'open'))='registered'then
+  wanted:=regexp_replace(upper(coalesce(p_payload->>'student_id_ref','')),'[^A-Z0-9]','','g');if wanted=''then return jsonb_build_object('saved',false,'error','admission_required','message','Admission number is required.','engine_version','v5.6.1');end if;
+  select st.* into student_row from public.students st where regexp_replace(upper(coalesce(st.admission_no,'')),'[^A-Z0-9]','','g')=wanted and coalesce(st.status,'active')in('active','approved')limit 1;
+  if not found then return jsonb_build_object('saved',false,'error','invalid_admission','message','Registered student not found.','engine_version','v5.6.1');end if;
+  select count(*)into roster_count from public.cbt_roster cr where cr.exam_id=exam_row.id;
+  if roster_count>0 and not exists(select 1 from public.cbt_roster cr where cr.exam_id=exam_row.id and regexp_replace(upper(coalesce(cr.student_id_ref,'')),'[^A-Z0-9]','','g')=wanted)then return jsonb_build_object('saved',false,'error','not_on_roster','message','Student is not on this exam roster.','engine_version','v5.6.1');end if;
+  payload:=payload||jsonb_build_object('student_id',student_row.id,'student_id_ref',student_row.admission_no,'student_name',student_row.full_name,'student_class',trim(coalesce(student_row.class,'')||' '||coalesce(student_row.arm,'')),'student_type','registered');
  elsif coalesce(p_payload->>'student_id_ref','')<>''then
-  wanted:=regexp_replace(upper(p_payload->>'student_id_ref'),'[^A-Z0-9]','','g');select * into s from public.students where regexp_replace(upper(coalesce(admission_no,'')),'[^A-Z0-9]','','g')=wanted limit 1;if found then payload:=payload||jsonb_build_object('student_id',s.id,'student_id_ref',s.admission_no,'student_name',s.full_name,'student_class',trim(coalesce(s.class,'')||' '||coalesce(s.arm,'')));end if;
+  wanted:=regexp_replace(upper(p_payload->>'student_id_ref'),'[^A-Z0-9]','','g');select st.* into student_row from public.students st where regexp_replace(upper(coalesce(st.admission_no,'')),'[^A-Z0-9]','','g')=wanted limit 1;
+  if found then payload:=payload||jsonb_build_object('student_id',student_row.id,'student_id_ref',student_row.admission_no,'student_name',student_row.full_name,'student_class',trim(coalesce(student_row.class,'')||' '||coalesce(student_row.arm,'')));end if;
  end if;
  return public.cbt_submit_v5(payload);
+exception when invalid_text_representation then return jsonb_build_object('saved',false,'error','invalid_exam_id','message','The exam identifier is invalid. Reload the exam and try again.','engine_version','v5.6.1');
 end$$;
 revoke execute on function public.cbt_get_public_exam_v6(text,text)from public;grant execute on function public.cbt_get_public_exam_v6(text,text)to anon,authenticated;
 revoke execute on function public.cbt_submit_v6(jsonb)from public;grant execute on function public.cbt_submit_v6(jsonb)to anon,authenticated;
@@ -3849,3 +3295,23 @@ drop policy if exists affective_scope_write on public.affective_traits;create po
 drop policy if exists psychomotor_scope_write on public.psychomotor_traits;create policy psychomotor_scope_write on public.psychomotor_traits for all using(public.is_admin(auth.uid())or((teacher_id=auth.uid()or teacher_id is null)and public.teacher_can_manage_student(auth.uid(),student_id)))with check(public.is_admin(auth.uid())or(teacher_id=auth.uid()and public.teacher_can_manage_student(auth.uid(),student_id)));
 drop policy if exists comments_scope_write on public.report_comments;create policy comments_scope_write on public.report_comments for all using(public.is_admin(auth.uid())or((teacher_id=auth.uid()or teacher_id is null)and public.teacher_can_manage_student(auth.uid(),student_id)))with check(public.is_admin(auth.uid())or(teacher_id=auth.uid()and public.teacher_can_manage_student(auth.uid(),student_id)));
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
+
+-- ============================================================================
+-- FINAL V5.6.1 SELF-SUFFICIENCY CHECK AND POSTGREST RELOAD
+-- ============================================================================
+do $$declare missing text[]:='{}';begin
+ if to_regclass('public.cbt_exams')is null then missing:=array_append(missing,'table:cbt_exams');end if;
+ if to_regclass('public.cbt_results')is null then missing:=array_append(missing,'table:cbt_results');end if;
+ if to_regclass('public.cbt_roster')is null then missing:=array_append(missing,'table:cbt_roster');end if;
+ if to_regclass('public.fee_payments')is null then missing:=array_append(missing,'table:fee_payments');end if;
+ if to_regclass('public.student_term_metrics')is null then missing:=array_append(missing,'table:student_term_metrics');end if;
+ if to_regprocedure('public.cbt_get_public_exam_v6(text,text)')is null then missing:=array_append(missing,'rpc:cbt_get_public_exam_v6');end if;
+ if to_regprocedure('public.cbt_submit_v6(jsonb)')is null then missing:=array_append(missing,'rpc:cbt_submit_v6');end if;
+ if to_regprocedure('public.cbt_clear_exam_results(uuid,text)')is null then missing:=array_append(missing,'rpc:cbt_clear_exam_results');end if;
+ if to_regprocedure('public.teacher_can_manage_subject_class(uuid,text,text)')is null then missing:=array_append(missing,'rpc:teacher_can_manage_subject_class');end if;
+ if to_regprocedure('public.teacher_can_manage_student(uuid,uuid)')is null then missing:=array_append(missing,'rpc:teacher_can_manage_student');end if;
+ if to_regprocedure('public.generate_timetable(text,text,text,integer)')is null then missing:=array_append(missing,'rpc:generate_timetable');end if;
+ if coalesce(array_length(missing,1),0)>0 then raise exception 'School Connect V5.6.1 incomplete installation: %',array_to_string(missing,', ');end if;
+end$$;
+notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
+select 'School Connect V5.6.1 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;

@@ -1,10 +1,10 @@
-# School Connect V5 — Deployment and Upgrade Guide
+# School Connect V5.6.1 — Deployment and Upgrade Guide
 
 ## A. Fresh production deployment (GOSA or another client)
 
 1. **Use the correct folder.** Deploy the contents of `generated-sites/gosa` for GOSA, or generate a new client ZIP from `school-connect-generator/builder.html`.
 2. **Create a free Supabase project.** Record the Project URL and **anon public** key. Never put the service-role key in a browser file.
-3. **Install the database once.** Supabase → SQL Editor → New query → paste all of `database/complete-schema.sql` → Run. Wait for the final V5 success messages.
+3. **Install the database once.** Supabase → SQL Editor → New query → paste all of `database/complete-schema.sql` → Run. Wait for the final V5.6.1 self-sufficiency success row.
 4. **Create the first administrator.** Authentication → Users → Add user, auto-confirm. Then set the matching `profiles.role` to `admin`/`super_admin` and `status` to `approved` in SQL/Table Editor. Do not expose an admin password in Git.
 5. **Configure the portal.** Edit `assets/js/config.js`: set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, school identity, correct `siteUrl` and logo extension. Keep the existing public anon key only if this is the intended project.
 6. **Confirm RLS.** In Table Editor, verify RLS is enabled. Test a student and parent account before adding real records.
@@ -14,28 +14,31 @@
 
 Do **not** run `demo-seed.sql` on a real school database.
 
-## B. Existing deployment upgrade (complete V5.6)
+## B. Existing deployment upgrade (complete V5.6.1)
 
-If the only current error is `column "motto" does not exist`, run the small
-`database/cbt-v5.1.1-getter-school-settings-fix.sql`, deploy the updated candidate
-page/service worker and hard-refresh. For the complete V5.6 release use the full schema.
+**Use one SQL path for every existing deployment.** Back up Supabase and run the
+entire updated `database/complete-schema.sql`. It includes all V5.1–V5.6.1 repairs:
+CBT scoring/getters, open multi-subject identity, report integrity, recovery support,
+timetables, metrics, daily fees, controlled result reset and strict teacher RLS.
+It is safe to re-run and ends with a self-sufficiency check.
 
-For daily fee collection, controlled CBT result resets, strict teacher subject/class ownership, complete demo coverage and all earlier V5.5 features, run the **full updated `complete-schema.sql`**. `v5.3-platform-enhancements.sql` is available only when an existing project needs the focused teacher-signature/timetable upgrade. The CBT hotfixes do not install all V5.3 features.
-
+Do not run `cbt-v5.1-*` or any `v5.x-*.sql` afterward. Those files are historical
+focused references and are already folded into the complete schema. The only extra
+SQL allowed is `demo-users.sql` + `demo-seed.sql` in a separate demo project.
 1. Supabase → Database → Backups/export: create a restorable backup. Export `cbt_exams`, `cbt_results`, `assessment_columns`, `report_scores`, `results`, payments and identities.
 2. Put the site in a short maintenance window; do not begin an examination during the database upgrade.
-3. Run the full new `database/complete-schema.sql` for V5.6. It includes every V5.1–V5.6 CBT/report repair, daily fee dates, the controlled result-reset RPC, strict teacher RLS, teacher signatures, metrics and timetable generator. Do not run the smaller packs afterward.
+3. Run the full new `database/complete-schema.sql` for V5.6.1. Do not run any focused/versioned pack afterward. Wait for the exact final success row: `School Connect V5.6.1 complete cumulative schema installed successfully ✅ — no other production SQL is required`.
 4. Confirm SQL functions exist:
    ```sql
    select routine_name from information_schema.routines
    where routine_schema='public'
-     and routine_name in ('cbt_get_public_exam_v6','cbt_submit_v6','cbt_diagnose_exam','cbt_repair_exam_scoring','sc_cbt_answer_matches','cbt_clear_exam_results','teacher_can_manage_subject_class','teacher_can_manage_student');
+     and routine_name in ('cbt_get_public_exam_v6','cbt_submit_v6','cbt_diagnose_exam','cbt_repair_exam_scoring','sc_cbt_answer_matches','cbt_clear_exam_results','teacher_can_manage_subject_class','teacher_can_manage_student','generate_timetable','cbt_import_backup');
    ```
 5. Deploy all updated files, especially the critical list in `BUG-FIX-REPORT.md`. Do not deploy only `cbt-engine.js`.
 6. Supabase Authentication → URL Configuration: set the production Site URL and add `https://YOUR-DOMAIN/change-password.html?recovery=1` to Redirect URLs so password-recovery emails return safely.
 7. Wait for hosting deployment completion. The new service-worker literal purges the former cache. On a test device, close all portal tabs, reopen and perform one hard refresh.
 8. Create a disposable exam whose correct answers mix `B`, exact option text, `True`, numeric tolerance and multi-select. Submit and inspect `cbt_results.score`, `total`, `percent`, counts and `subject_scores`.
-9. For old multi-subject exams, open CBT Manager → **Repair Tabs**. Verify each subject and count. Candidate reload is network-first, so the tabs should appear immediately.
+9. For old multi-subject exams, open CBT Manager → **Repair Tabs**. Verify each subject and count. Then open the candidate page with an **open** multi-subject code and no admission number; it must load without `record "s" is not assigned yet`. Candidate reload is network-first.
 10. In Fees, compare today, the previous day and month-to-date; export the selected-day CSV and reconcile it with the ledger.
 11. As the exam creator/admin, export then clear a disposable exam and confirm another teacher is denied; remember that official `report_scores` are intentionally not deleted.
 12. Test a teacher’s assigned subject/class and an unassigned subject/class. Confirm the first succeeds, the second is denied, and admin still has full access.
@@ -47,7 +50,7 @@ For daily fee collection, controlled CBT result resets, strict teacher subject/c
 2. Run `database/complete-schema.sql`.
 3. Authentication → Users → Add user five times using the accounts in `demo-site/DEMO-SETUP.md`; enable Auto Confirm.
 4. Run `database/demo-users.sql` to adopt/approve the profiles.
-5. Run `database/demo-seed.sql`. The former `alumni.occupation` error is fixed; the static audit confirms every inserted column exists.
+5. Run `database/demo-seed.sql`. The former `alumni.occupation`, numeric `amount` and ambiguous `exam_id` failures are fixed. The executed test runs the seed twice.
 6. Configure the demo project URL/anon key in `assets/js/config.js` and set `siteUrl=https://schoolconnectdemo.vercel.app` (or your actual host).
 7. Deploy and test all five roles. Use `DEMO-UTME` to demonstrate subject tabs.
 8. Schedule manual periodic reset/backup. Free tools do not provide an unlimited automatic reset service.
@@ -94,10 +97,11 @@ For daily fee collection, controlled CBT result resets, strict teacher subject/c
 ## I. Required acceptance checklist
 
 - [ ] No console syntax errors.
-- [ ] `complete-schema.sql` final V5.6 status is visible.
+- [ ] `complete-schema.sql` final V5.6.1 self-sufficiency status is visible.
 - [ ] Admin, teacher, parent, student and bursar scope tested.
 - [ ] Correct CBT answers produce nonzero marks.
 - [ ] Randomised questions grade by original index.
+- [ ] Open multi-subject exam loads with no admission number and no unassigned-record error.
 - [ ] Multi-subject tabs switch both ways and retain answers.
 - [ ] School logo/name/motto/contact appear on exam page.
 - [ ] Report card, class broadsheet, subject broadsheet and receipt visually match samples.

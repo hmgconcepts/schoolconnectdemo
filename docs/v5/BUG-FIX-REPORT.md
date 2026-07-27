@@ -124,6 +124,17 @@
 - Locked school structure to administrators and added an explicit one-time claim path for genuinely unowned legacy rows by the assigned teacher.
 - Added specialised demo rows and `tools/audit-demo-coverage.py`. Verification reports **80/80 CRUD modules plus 16 specialised datasets covered**.
 
+## V5.6.1 complete-schema and SQL runtime repairs
+
+- Consolidated `complete-schema.sql` so every public function has one authoritative definition and every focused-upgrade RPC is included.
+- Added a final self-sufficiency assertion for critical V5.6.1 tables/RPCs and a final PostgREST cache reload.
+- Executed the complete schema twice against the same PostgreSQL-compatible database to prove re-run safety.
+- Fixed `cbt_get_public_exam_v6`: open/multi-subject examinations with no admission number now return `candidate: null` rather than reading an unassigned PL/pgSQL record.
+- Hardened `cbt_submit_v6` with typed rows and qualified identity/roster lookups while preserving registered-exam enforcement.
+- Fixed demo PostgreSQL `42702` by renaming the local `exam_id` variable to `v_exam_id` and qualifying roster/result references.
+- Executed `demo-users.sql` and `demo-seed.sql` twice; roster and admission-letter data remain populated.
+- Generated clients now contain only `complete-schema.sql` as production SQL; demo mode adds only `demo-users.sql` and `demo-seed.sql`.
+
 ## Files requiring redeployment
 
 At minimum deploy the complete repositories. The critical runtime set is:

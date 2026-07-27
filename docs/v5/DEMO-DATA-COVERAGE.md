@@ -55,6 +55,10 @@ The generic CRUD engine stores modules such as `financial_aid`, `parent_meeting`
 - LMS courses, lessons and submissions
 - security preferences, login audit and translated interface strings
 
+## V5.6.1 execution safety
+
+The specialised CBT block uses `v_exam_id` and qualified `st`/`cr` aliases, so PostgreSQL cannot confuse a PL/pgSQL variable with table column `exam_id`. The maintained execution harness runs `demo-users.sql` and then the full `demo-seed.sql` twice; both runs pass with roster and admission-letter records intact.
+
 ## Safe demo use
 
 All names/data are synthetic. Do not enter real personal data. Use a Supabase project separate from production, review the five demo roles and reset periodically. See `demo-site/DEMO-SETUP.md`.
