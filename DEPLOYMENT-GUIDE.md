@@ -7,16 +7,12 @@ This guide has **two parts**:
 
 Everything uses **free tools only**. No credit card, no monthly fees, no AI APIs.
 
-> **V5.3:** existing deployments should back up and rerun `database/complete-schema.sql` to enable teacher profile signatures on class reports, full controlled CBT editing, adaptive CBT-only reports and the robust timetable wizard. The focused `v5.3-platform-enhancements.sql` is provided only for a narrow upgrade.
+> **V5.6.1 ONE-SQL RULE:** back up Supabase and run the entire
+> `database/complete-schema.sql` for a fresh install or any upgrade. It includes
+> every earlier focused pack and is safe to re-run. Do not run versioned/focused
+> SQL afterward. Only a separate demo project additionally runs `demo-users.sql`
+> and `demo-seed.sql`.
 
-> ## CBT V5.1 existing-database requirement
-> If correct attempts currently record zero, stop new sittings, back up Supabase,
-> run **`database/cbt-v5.1-zero-score-hotfix.sql`**, then deploy the matching V5.1
-> CBT pages/engine. The candidate page deliberately refuses to start against an
-> old engine. In CBT Manager use **Diagnose Scoring** and **Repair Scoring** on
-> legacy exams. If the getter specifically reports `column "motto" does not exist`,
-> run `database/cbt-v5.1.1-getter-school-settings-fix.sql`. Fresh projects run only
-> `complete-schema.sql`, which includes both repairs.
 
 ---
 
@@ -146,5 +142,5 @@ Run `database/complete-schema.sql` once in Supabase SQL Editor for a fresh deplo
 ## V5.5 authentication/report setup
 After deployment, add `https://YOUR-DOMAIN/change-password.html?recovery=1` to Supabase Authentication Redirect URLs. Registered CBT exams use admission number only and resolve official learner identity. Report headings/maxima come directly from Report Cards assessment-column settings; review/edit unusual maxima before publishing reports.
 
-## V5.6 daily fees / CBT reset / teacher permissions
-Run the full updated `database/complete-schema.sql` to add Lagos daily fee dates, controlled CBT-result reset and strict teacher subject/class RLS. Review Staff→login links plus Subjects→teacher and Classes→class teacher assignments before teacher testing. Run the expanded demo seed only in the demo project.
+## V5.6.1 complete schema / CBT / demo SQL repair
+Run the full updated `database/complete-schema.sql`; it now includes all V5.1–V5.6.1 SQL, the open/multi-subject unassigned-record repair, Lagos daily fees, CBT reset and teacher RLS. Do not run any focused SQL afterward. The demo seed `exam_id` ambiguity is fixed; run demo users/seed only in the demo project.
