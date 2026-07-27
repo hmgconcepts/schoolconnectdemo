@@ -193,3 +193,12 @@ Registered identity enforcement remains intact. Deploying frontend files without
 rerunning the complete schema is insufficient.
 
 See `docs/v5/V5.6.1-COMPLETE-SCHEMA-CBT-DEMO-SQL-FIX.md`.
+
+## School Connect V5.7 final professional audit
+
+V5.7 adds institutional principal/proprietor/examination-officer Drive signatures
+with background removal, editable/deletable public examination campaigns, enhanced
+custom documents, performance-based bulk report comments, separated leadership
+navigation and registered-value dropdowns. Back up and run only the full updated
+`database/complete-schema.sql`, deploy every file and hard-refresh. See
+`docs/v5/V5.7-FINAL-PROFESSIONAL-AUDIT-AND-ENHANCEMENTS.md`.
