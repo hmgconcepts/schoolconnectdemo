@@ -161,11 +161,11 @@ This platform is a proud part of the **HMG Academy Ecosystem**. It's optimized f
 
 
 ## School Connect v1 Final Deployment Note
-Run `database/complete-schema.sql` once in Supabase SQL Editor for a fresh deployment. It is now cumulative and self-contained: it includes base schema, CBT, voting, report cards, enterprise tables, class fee structures, product store, status audit log, parent-child access policies, staff check-in deadline settings, and schema-cache reload notifications. The smaller update SQL files are retained only for upgrading older deployed clients.
+Run `database/complete-schema.sql` once in Supabase SQL Editor for a fresh deployment. It is now cumulative and self-contained: it includes base schema, CBT, voting, report cards, enterprise tables, class fee structures, product store, status audit log, parent-child access policies, staff check-in deadline settings, and schema-cache reload notifications. Versioned SQL files are historical references only; the current complete schema already includes them.
 
 ## School Connect V5.1 definitive CBT repair
 
-The maintained V5.1 repair documentation is in `docs/v5/`. Before deployment read `BUG-FIX-REPORT.md` and `DEPLOYMENT-GUIDE-V5.md`. For an existing database, the CBT zero-score fix requires `database/cbt-v5.1-zero-score-hotfix.sql` (the full new schema already includes it); frontend-only deployment is insufficient. No paid AI API is used.
+The historical V5.1 repair documentation is in `docs/v5/`. In V5.6.1, fresh and existing projects run only the full `database/complete-schema.sql`; it includes the zero-score repair. Frontend-only deployment is insufficient. No paid AI API is used.
 
 ## School Connect V5.3 update
 
@@ -179,8 +179,17 @@ V5.4 adds re-importable paginated portable archives, local archive analysis, exp
 
 V5.5 adds fully dynamic admin-defined report headings/maxima, admission-only registered CBT identity, password recovery, consistent navigation icons, comprehensive per-page assistant guidance, clearer Rubrics/Transcripts and term/session academic-performance insights. Back up and run the latest `database/complete-schema.sql`, deploy all files, configure the Supabase recovery redirect and hard-refresh. See `docs/v5/V5.5-FLEXIBLE-REPORTS-REGISTERED-CBT-RECOVERY-INSIGHTS.md`.
 
-## School Connect V5.6 update
+## School Connect V5.6.1 — one complete schema and SQL repairs
 
-V5.6 adds an Africa/Lagos daily fee collection dashboard with date, payment-method, class and collector totals; an **Export then clear results** workflow for safely reusing CBT examinations; strict database-enforced teacher subject/class ownership while admin roles retain full control; and verified demo coverage for all 80 CRUD modules plus 16 specialised datasets. Back up Supabase, run the latest `database/complete-schema.sql`, deploy all files and hard-refresh. The focused `database/v5.6-daily-fees-cbt-reset-teacher-scope.sql` is only for a database already fully current on V5.5. See `docs/v5/V5.6-DAILY-FEES-CBT-RESET-TEACHER-SCOPE-DEMO.md`.
+V5.6.1 makes `database/complete-schema.sql` the only production SQL path. It
+contains all V5.1–V5.6.1 objects, has one authoritative definition per function,
+ends with a self-sufficiency check and is verified by executing it twice. Do not
+run focused/versioned SQL after it; only a separate demo project additionally runs
+`demo-users.sql` and `demo-seed.sql`.
 
-**Database deployment is mandatory:** uploading only HTML/JavaScript does not install `payment_date`, the CBT reset RPC or the V5.6 RLS policies.
+The release fixes open/multi-subject CBT failing with `record "s" is not assigned
+yet` and demo seeding failing with PostgreSQL `42702 exam_id is ambiguous`.
+Registered identity enforcement remains intact. Deploying frontend files without
+rerunning the complete schema is insufficient.
+
+See `docs/v5/V5.6.1-COMPLETE-SCHEMA-CBT-DEMO-SQL-FIX.md`.
