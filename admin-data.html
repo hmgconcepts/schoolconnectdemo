@@ -544,10 +544,7 @@ const DataTools = {
   },
   async del(table,id){
     if(!confirm('Permanently delete this record from '+table+'?'))return;
-    const { error } = await sb.from(table).delete().eq('id',id);
-    if(error){ toast(error.message,'danger'); return; }
-    if(App&&App.logActivity)App.logActivity('delete',table,id);
-    toast('Deleted.','info'); DataTools.view();
+    const r=await SCDelete.byId(sb,table,id);if(!r.ok){toast(r.error,'danger');return;}if(App&&App.logActivity)App.logActivity('delete',table,id);toast('Deleted permanently and verified.','success');DataTools.view();
   },
   async exportTable(){const t=document.getElementById('dt-table').value;try{const n=await DataPortability.exportCSV(t);toast('✅ '+n+' row(s) exported. Select the same table and use Import to restore this CSV.','success',7000);}catch(e){toast(e.message||e,'danger');}},
   importCSV(){this.choosePortableImport();},

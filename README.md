@@ -202,3 +202,8 @@ custom documents, performance-based bulk report comments, separated leadership
 navigation and registered-value dropdowns. Back up and run only the full updated
 `database/complete-schema.sql`, deploy every file and hard-refresh. See
 `docs/v5/V5.7-FINAL-PROFESSIONAL-AUDIT-AND-ENHANCEMENTS.md`.
+
+## School Connect V5.8
+V5.8 fixes deleted-record resurrection, makes PostgreSQL authoritative for saved
+admission/staff ID formats, and adds external-link-only database/storage efficiency
+controls. Run only the full updated complete schema, deploy all files and hard-refresh.

@@ -542,8 +542,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 
     async delCol(id){
       if (!confirm('Delete this column and its scores?')) return;
-      await window.sb.from('assessment_columns').delete().eq('id', id);
-      this.load();
+      const r=await SCDelete.byId(window.sb,'assessment_columns',id);if(!r.ok){toast(r.error,'danger');return;}toast('Assessment column deleted permanently.','success');this.load();
     },
 
     async renderGrid(){

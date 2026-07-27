@@ -593,11 +593,11 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           <div class="grid grid-2"><div class="form-group"><label>Stamp text</label><input class="form-input" id="st-stamp-text" value="OFFICIAL SCHOOL SEAL" placeholder="OFFICIAL SCHOOL SEAL"></div><div class="form-group"><label>Stamp colour</label><input class="form-input" id="st-stamp-color" type="color" value="#1e3a8a"></div></div>
           <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" id="st-stamp-enabled" checked> Print the official school stamp on report cards and certificates</label>
           <div style="margin:14px 0;border:1px dashed var(--gray-300);border-radius:8px;padding:12px;background:var(--gray-50)">
-            <label style="font-weight:700;display:block;margin-bottom:6px">Or Draw Signature Directly on this Pad:</label>
+            <label style="font-weight:700;display:block;margin-bottom:6px">Draw locally, then upload to Google Drive:</label>
             <canvas id="sig-pad" width="300" height="120" style="border:1px solid var(--gray-300);background:#fff;border-radius:4px;cursor:crosshair;touch-action:none;display:block;max-width:100%"></canvas>
             <div style="margin-top:8px;display:flex;gap:8px">
               <button class="btn btn-outline btn-sm" onclick="ST.clearSigPad()">Clear Pad</button>
-              <button class="btn btn-primary btn-sm" onclick="ST.saveSigPad()">Save Drawn Signature</button>
+              <button class="btn btn-primary btn-sm" onclick="ST.saveSigPad()">Download Signature PNG</button>
             </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="ST.saveSignature()">Save signature details</button>
@@ -675,15 +675,7 @@ const ST={
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   },
-  async saveSigPad() {
-    const canvas = document.getElementById('sig-pad');
-    if (!canvas) return;
-    const url = canvas.toDataURL('image/png');
-    const sig = document.getElementById('st-signature');
-    if (sig) sig.value = url;
-    await ST.saveSignature();
-    toast('Signature drawn and saved! It is now embedded into the official stamp.','success');
-  },
+  async saveSigPad(){const canvas=document.getElementById('sig-pad');if(!canvas)return;const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='school-signature.png';a.click();toast('Signature downloaded locally. Upload it to Google Drive, make it public, then paste the link above. The image is not stored in Supabase.','success',9000);},
   async toggle2fa(on){ const r=await Enterprise.security.setTwoFactor(on); if(r&&r.error){toast(r.error.message||r.error,'danger');return;} toast(on?'2FA enabled':'2FA disabled','success'); },
   lang(l){ Enterprise.i18n.setLang(l); toast('Language set','success'); },
   preview(){ const box=document.getElementById('st-sign-preview'); const raw=localStorage.getItem('sc-signature-url')||''; const url=(window.Super&&Super.idcard&&Super.idcard.driveDirect)?Super.idcard.driveDirect(raw):raw; if(box) box.innerHTML=url?'<img src="'+esc(url)+'" referrerpolicy="no-referrer" style="max-width:180px;max-height:80px;object-fit:contain;mix-blend-mode:multiply;filter:contrast(1.3) brightness(1.05)" onerror="this.replaceWith(document.createTextNode(&quot;Signature link saved; preview unavailable — check the Drive link is public.&quot;))">':''; },
@@ -706,7 +698,7 @@ const ST={
       localStorage.setItem('sc-adm-prefix', admPrefix); localStorage.setItem('sc-staff-prefix', staffPrefix);
       localStorage.setItem('sc-staff-mid', staffMid); localStorage.setItem('sc-adm-format', admFormat);
       localStorage.setItem('sc-adm-start', String(admStart)); localStorage.setItem('sc-adm-year', admYear);
-      ST.updateIdPreview();
+      await ST.refreshIdSequences();ST.updateIdPreview();
       toast('Admission & Staff ID settings saved! Student: ' + ST.formatAdmPreview() + ', Staff: ' + ST.formatStaffPreview(), 'success', 8000);
     } catch(e) { toast('Could not save ID settings: ' + (e.message || e), 'danger'); }
   },
@@ -722,13 +714,17 @@ const ST={
       setVal('st-adm-format', d.admission_format || localStorage.getItem('sc-adm-format') || 'prefix-dash');
       setVal('st-adm-start', d.admission_start_num || localStorage.getItem('sc-adm-start') || '1');
       setVal('st-adm-year', d.admission_include_year ? 'yes' : (localStorage.getItem('sc-adm-year') || 'no'));
-      ST.updateIdPreview();
-    } catch(e) { console.warn('Could not load ID settings:', e); }
+      await ST.refreshIdSequences();ST.updateIdPreview();
+    }catch(e){console.warn('Could not load ID settings:',e);}
+  },
+  async refreshIdSequences(){
+    const ap=(document.getElementById('st-adm-prefix')?.value||'SCH').toUpperCase().replace(/[^A-Z0-9]/g,''),sp=(document.getElementById('st-staff-prefix')?.value||ap).toUpperCase().replace(/[^A-Z0-9-]/g,'');
+    let an=parseInt(document.getElementById('st-adm-start')?.value)||1,sn=1;if(sb)try{const[a,b]=await Promise.all([sb.from('students').select('admission_no').ilike('admission_no',ap+'%').limit(10000),sb.from('staff').select('staff_no').ilike('staff_no',sp+'%').limit(10000)]);(a.data||[]).forEach(r=>{const m=String(r.admission_no||'').match(/(\d+)$/);if(m)an=Math.max(an,+m[1]+1)});(b.data||[]).forEach(r=>{const m=String(r.staff_no||'').match(/(\d+)$/);if(m)sn=Math.max(sn,+m[1]+1)});}catch(e){console.warn('ID sequence preview unavailable',e);}ST._nextAdm=an;ST._nextStaff=sn;
   },
   formatAdmPreview(){
     const prefix = (document.getElementById('st-adm-prefix')?.value || 'SCH').toUpperCase();
     const fmt = document.getElementById('st-adm-format')?.value || 'prefix-dash';
-    const start = parseInt(document.getElementById('st-adm-start')?.value) || 1;
+    const start=ST._nextAdm||parseInt(document.getElementById('st-adm-start')?.value)||1;
     const year = new Date().getFullYear();
     if (fmt === 'prefix-slash') return prefix + '/' + year + '/' + String(start).padStart(4,'0');
     if (fmt === 'prefix-only') return prefix + String(start).padStart(5,'0');
@@ -736,8 +732,9 @@ const ST={
   },
   formatStaffPreview(){
     const prefix = (document.getElementById('st-staff-prefix')?.value || document.getElementById('st-adm-prefix')?.value || 'SCH').toUpperCase();
-    const mid = (document.getElementById('st-staff-mid')?.value || 'STF').toUpperCase();
-    return prefix + (mid ? '-' + mid : '') + '-00001';
+    const mid=(document.getElementById('st-staff-mid')?.value||'STF').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    const base=mid&& !prefix.endsWith('-'+mid)?prefix+'-'+mid:prefix;
+    return base+'-'+String(ST._nextStaff||1).padStart(5,'0');
   },
   updateIdPreview(){
     const admEl = document.getElementById('st-id-preview-adm');
