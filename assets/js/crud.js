@@ -609,7 +609,7 @@ const CRUD = {
     financial_aid:{ title:'Scholarship/Aid',cols:[['title','Scheme','text',true],['data.student','Student','ref-students'],['amount','Amount/Waiver','number'],['status','Status','select',['applied','approved','renewed','ended']],['body','Notes','textarea']] },
     front_desk:  { title:'Front-desk log',cols:[['title','Subject','text',true],['data.kind','Type','select',['call','dispatch','walk-in','inquiry']],['body','Details','textarea'],['data.contact','Contact','text'],['ref_date','Date','date']] },
     career_counseling:{ title:'Career record',cols:[['title','Title','text',true],['data.student','Student','ref-students'],['body','Guidance / offers','textarea'],['data.university','University/Placement','text']] },
-    document_builder:{ title:'Custom Document', help:'Build any official school document (hall ticket, bonafide letter, testimonial…): 1) Pick the document type. 2) Choose who it is for. 3) Type the body text — use [NAME], [CLASS], [DATE] placeholders. 4) Save, then press Print on the row to output a letterheaded, signed document.', cols:[['title','Document title (e.g. Bonafide Letter — Ada Obi)','text',true],['data.type','Document type','select',['hall ticket','bonafide certificate','recommendation letter','transfer letter','testimonial','invitation letter','fee clearance','custom']],['data.student','For (student — optional)','ref-students'],['data.recipient','Addressed to (e.g. The Embassy, Parent)','text'],['body','Body text — placeholders [NAME] [CLASS] [DATE] are replaced at print time','textarea',true],['status','Status','select',['draft','final','issued']]] },
+    document_builder:{title:'Custom Document',help:'Choose a preset or enter any custom document type; select the correct institutional signatory.',cols:[['title','Document title / subject','text',true],['data.type','Document type preset','select',['hall ticket','bonafide certificate','recommendation letter','transfer letter','testimonial','invitation letter','fee clearance','admission letter','appointment letter','memorandum','certificate','custom']],['data.custom_type','Custom document type (if not listed above)','text'],['data.reference','Reference number','text'],['data.student','For student','ref-students'],['data.class','Class','ref-classes'],['data.term','Term','lookup','term'],['data.session','Session','lookup','session'],['data.recipient','Recipient / addressee','text'],['data.signatory_role','Official signatory','select',['Principal','Proprietor','Examination Officer','Head Teacher','Custom']],['data.custom_signatory_name','Custom signatory name','text'],['data.custom_signatory_title','Custom designation','text'],['body','Body — tokens [NAME] [CLASS] [TERM] [SESSION] [DATE] [REFERENCE] [SCHOOL] [PRINCIPAL] [PROPRIETOR] [EXAM_OFFICER]','textarea',true],['status','Status','select',['draft','reviewed','approved','final','issued','revoked']]] },
     fleet_tracking:{ title:'Fleet log',cols:[['title','Vehicle/Route','text',true],['data.driver','Driver','text'],['body','Notes / location','textarea'],['ref_date','Date','date']] },
     facility_booking:{ title:'Facility booking',cols:[['title','Facility','text',true],['ref_date','Date','date',true],['data.time','Time','time'],['data.bookedby','Booked by','text'],['status','Status','select',['requested','approved','cancelled']]] },
     compliance:  { title:'Compliance item',cols:[['title','Item','text',true],['data.category','Category','select',['accreditation','fire drill','inspection','statutory']],['ref_date','Date','date'],['status','Status','select',['pending','passed','failed','due']],['body','Notes','textarea']] },
@@ -629,9 +629,9 @@ const CRUD = {
     return map[moduleId] || String(moduleId || '').replace(/-/g,'_');
   },
 
+  registeredField(c){c=Object.assign({},c);const k=String(c.key||'').split('.').pop();if(String(c.type||'text')!=='text')return c;if(['class','student_class','candidate_class','last_class'].includes(k))Object.assign(c,{type:'ref',refTable:'classes',refValue:'name',refStore:'value'});else if(k==='term')Object.assign(c,{type:'lookup',lookupKind:'term'});else if(k==='session')Object.assign(c,{type:'lookup',lookupKind:'session'});else if(['subject','subject_name'].includes(k))Object.assign(c,{type:'ref',refTable:'subjects',refValue:'name',refStore:'value'});else if(k==='department')Object.assign(c,{type:'ref',refTable:'departments',refValue:'name',refStore:'value'});else if(k==='arm')Object.assign(c,{type:'lookup',lookupKind:'arm'});else if(k==='campus')Object.assign(c,{type:'lookup',lookupKind:'campus'});return c;},
   def(moduleId){
-    const key = this.canonicalId(moduleId);
-    if (this.SCHEMA[key]) return this.SCHEMA[key];
+    const key=this.canonicalId(moduleId);if(this.SCHEMA[key]){const d=this.SCHEMA[key];return Object.assign({},d,{cols:(d.cols||[]).map(c=>this.registeredField(c))});}
     const g = this.GENERIC[key] || this.GENERIC[moduleId];
     if (!g) return null;
     const cols = g.cols.map(t => {
@@ -644,7 +644,7 @@ const CRUD = {
       else if (type === 'ref-subjects') { c.type='ref'; c.refTable='subjects'; c.refValue='name'; c.refStore='value'; }
       else if (type === 'ref-profiles') { c.type='ref'; c.refTable='profiles'; c.refValue='full_name'; c.refExtra=['email','role']; c.refStore='id'; c.searchable=true; }
       if (extra === true || extra2 === true) c.required = true;
-      return c;
+      return this.registeredField(c);
     });
     return { table:'module_records', title:g.title, generic:true, module:(this.canonicalId(moduleId)), cols };
   },
@@ -661,8 +661,7 @@ const CRUD = {
     ).toLowerCase().replace(/\s+/g,'_');
     const key = this.canonicalId(moduleId);
     const allow = this.WRITE_RULES[key];
-    const adminAliases = ['super_admin','superadmin','admin','administrator','owner','director','principal','proprietor','head_teacher','headteacher','bursar'];
-    if (adminAliases.includes(role) || (window.App && App.isAdminRole && App.isAdminRole(role))) return true;
+    const owners=['super_admin','superadmin','admin','administrator','owner','director','proprietor'];if(owners.includes(role)||(window.App&&App.isOwnerRole&&App.isOwnerRole(role)))return true;if(['principal','head_teacher','headteacher','bursar'].includes(role))return !!(window.App&&App.canWriteModule&&App.canWriteModule(key,role));
     // An explicit empty rule is a hard admin-only boundary and cannot be opened
     // accidentally by a stale/custom browser access map. Database RLS mirrors it.
     if (Array.isArray(allow) && allow.length===0) return false;
@@ -1083,6 +1082,7 @@ const CRUD = {
     if (!id && ['complaints','helpdesk_tickets'].includes(d.table) && window.SC_PROFILE && SC_PROFILE.id) payload.submitted_by = SC_PROFILE.id;
     if (!id && d.table === 'health' && window.SC_PROFILE && SC_PROFILE.id) { payload.recorded_by_id = SC_PROFILE.id; if (!payload.recorded_by && SC_PROFILE.full_name) payload.recorded_by = SC_PROFILE.full_name; }
     if (!id && ['academic_print_records','reports'].includes(d.table) && window.SC_PROFILE && SC_PROFILE.id) payload.generated_by = SC_PROFILE.id;
+    if(d.table==='report_comments'){payload.comment_source='manual';payload.comment_locked=true;payload.comment_band_id=null;payload.applied_percent=null;}
     if(window.SC_PROFILE&&SC_PROFILE.id){if(d.table==='digital_library')payload.teacher_id=SC_PROFILE.id;if(d.table==='eresources')payload.uploaded_by=SC_PROFILE.id;if(d.table==='conduct')payload.recorded_by_id=SC_PROFILE.id;if(d.table==='behaviour_points')payload.awarded_by=SC_PROFILE.id;if(d.table==='support_plans')payload.created_by=SC_PROFILE.id;if(d.table==='student_diary')payload.created_by=SC_PROFILE.id;if(['affective_traits','psychomotor_traits','report_comments'].includes(d.table))payload.teacher_id=SC_PROFILE.id;}
     // V6/V4: teacher-owned academic records. Admin can supervise all, but subject teachers
     // should not edit/delete another teacher's records.
@@ -1257,18 +1257,14 @@ const CRUD = {
     if (!this.sb) return;
     const { data: doc } = await this.sb.from('module_records').select('*').eq('id', id).maybeSingle();
     if (!doc) { toast('Document not found', 'warning'); return; }
-    const d = doc.data || {}; const sc = window.SCHOOL || {}; const st = window.SC_SETTINGS || {};
+    const d=doc.data||{},sc=window.SCHOOL||{},st=window.SC_SETTINGS||{},docType=(d.custom_type||d.type||doc.title||'Official Document').trim();
     let studentName = d.student || '', studentClass = '';
     if (studentName) {
       try { const { data: stu } = await this.sb.from('students').select('full_name,class').ilike('full_name', studentName).maybeSingle(); if (stu) { studentName = stu.full_name; studentClass = stu.class || ''; } } catch(_){}
     }
     const today = CRUD.formatDate(new Date().toISOString());
     let body = String(doc.body || '').replace(/\[NAME\]/g, studentName || '[NAME]').replace(/\[CLASS\]/g, studentClass || '[CLASS]').replace(/\[DATE\]/g, today);
-    const rawSig = (function(){ try { return localStorage.getItem('sc-signature-url') || ''; } catch(_) { return ''; } })() || st.signature_url || '';
-    const sig = (window.Super && Super.idcard && Super.idcard.driveDirect) ? Super.idcard.driveDirect(rawSig) : rawSig;
-    const pn = (function(){ try { return localStorage.getItem('sc-principal-name') || ''; } catch(_) { return ''; } })() || st.principal_name || 'Principal';
-    const sign = sig ? '<div style="margin-top:34px;text-align:right"><img src="' + esc(sig) + '" referrerpolicy="no-referrer" style="max-width:150px;max-height:70px;object-fit:contain;mix-blend-mode:multiply;filter:contrast(1.3) brightness(1.05)"><br><b>' + esc(pn) + '</b><br><span style="font-size:.8rem">' + esc(d.type || 'Authorised') + '</span></div>'
-                     : '<div style="margin-top:44px;text-align:right">____________________<br><b>' + esc(pn) + '</b></div>';
+    const role=d.signatory_role||'Principal',people={Principal:[st.principal_name||localStorage.getItem('sc-principal-name')||'Principal',st.signature_url||localStorage.getItem('sc-signature-url')||'','Principal',st.principal_signature_bg_removed!==false],Proprietor:[st.proprietor_name||localStorage.getItem('sc-proprietor-name')||'Proprietor',st.proprietor_signature_url||localStorage.getItem('sc-proprietor-signature')||'','Proprietor',st.proprietor_signature_bg_removed!==false],'Examination Officer':[st.examination_officer_name||localStorage.getItem('sc-exam-officer-name')||'Examination Officer',st.examination_officer_signature_url||localStorage.getItem('sc-exam-officer-signature')||'','Examination Officer',st.examination_officer_signature_bg_removed!==false],Custom:[d.custom_signatory_name||'Authorised Signatory','',d.custom_signatory_title||'Authorised Signatory',true]};const who=people[role]||[role,'',role,true],rawSig=who[1],sig=(window.SCSignature?await SCSignature.prepare(rawSig,who[3]):(window.Super&&Super.idcard?Super.idcard.driveDirect(rawSig):rawSig)),pn=who[0];let tokens={'[NAME]':studentName,'[CLASS]':studentClass,'[TERM]':d.term||'','[SESSION]':d.session||'','[DATE]':today,'[REFERENCE]':d.reference||'','[SCHOOL]':sc.name||'School','[PRINCIPAL]':st.principal_name||'Principal','[PROPRIETOR]':st.proprietor_name||'Proprietor','[EXAM_OFFICER]':st.examination_officer_name||'Examination Officer'};Object.keys(tokens).forEach(k=>body=body.split(k).join(tokens[k]));const sign='<div style="margin-top:34px;text-align:right">'+(sig?'<img src="'+esc(sig)+'" style="max-width:150px;max-height:70px;object-fit:contain;'+(who[3]?'mix-blend-mode:multiply;filter:contrast(1.3)':'')+'"><br>':'')+'<b>'+esc(pn)+'</b><br><span style="font-size:.8rem">'+esc(who[2])+'</span></div>';
     const html = '<div style="max-width:720px;margin:0 auto;font-family:Georgia,serif;color:#111">' +
       '<div style="display:flex;align-items:center;gap:14px;border-bottom:3px double ' + (sc.primary || '#1e2a5e') + ';padding-bottom:12px;margin-bottom:6px">' +
       '<img src="assets/img/logo.' + (sc.logoExt || 'svg') + '" style="width:70px;height:70px;object-fit:contain" onerror="this.style.display=\'none\'">' +
@@ -1277,7 +1273,7 @@ const CRUD = {
       (sc.motto ? '<div style="font-size:.78rem;font-style:italic;color:#7c2d12">Motto: ' + esc(sc.motto) + '</div>' : '') + '</div></div>' +
       '<div style="text-align:right;font-size:.85rem">Date: ' + esc(today) + '</div>' +
       (d.recipient ? '<p style="margin:14px 0 4px"><b>To:</b> ' + esc(d.recipient) + '</p>' : '') +
-      '<h2 style="text-align:center;text-decoration:underline;margin:22px 0 14px;font-size:1.15rem;letter-spacing:1px">' + esc((d.type || doc.title || 'DOCUMENT').toUpperCase()) + '</h2>' +
+      '<h2 style="text-align:center;text-decoration:underline;margin:22px 0 14px;font-size:1.15rem;letter-spacing:1px">' + esc(docType.toUpperCase()) + '</h2>' +
       '<div style="line-height:1.9;white-space:pre-wrap;text-align:justify">' + esc(body) + '</div>' + sign +
       '<p style="margin-top:30px;font-size:.68rem;color:#94a3b8;text-align:center">Generated electronically by ' + esc(sc.name || '') + ' · School Connect</p></div>';
     const w = window.open('', '_blank');

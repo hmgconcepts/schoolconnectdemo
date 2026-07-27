@@ -1,5 +1,5 @@
 -- ============================================================================
--- SCHOOL CONNECT V5.6.1 — COMPLETE CUMULATIVE PRODUCTION SCHEMA
+-- SCHOOL CONNECT V5.7 — COMPLETE CUMULATIVE PRODUCTION SCHEMA
 -- ============================================================================
 -- The ONLY production SQL to run. Includes every V5.1–V5.6.1 table, column,
 -- repair, constraint, index, trigger, view, RLS policy, grant and client RPC.
@@ -3297,7 +3297,48 @@ drop policy if exists comments_scope_write on public.report_comments;create poli
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
 
 -- ============================================================================
--- FINAL V5.6.1 SELF-SUFFICIENCY CHECK AND POSTGREST RELOAD
+-- V5.7 FINAL PROFESSIONAL AUDIT ENHANCEMENTS
+-- ============================================================================
+alter table public.school_settings add column if not exists principal_signature_bg_removed boolean not null default true;
+alter table public.school_settings add column if not exists proprietor_name text default '';
+alter table public.school_settings add column if not exists proprietor_signature_url text default '';
+alter table public.school_settings add column if not exists proprietor_signature_bg_removed boolean not null default true;
+alter table public.school_settings add column if not exists examination_officer_name text default '';
+alter table public.school_settings add column if not exists examination_officer_signature_url text default '';
+alter table public.school_settings add column if not exists examination_officer_signature_bg_removed boolean not null default true;
+create or replace function public.is_owner(p_uid uuid)returns boolean language sql security definer stable set search_path=public as $$select exists(select 1 from profiles where id=p_uid and role in('super_admin','admin','proprietor')and status in('approved','active'))$$;
+create or replace function public.is_school_leader(p_uid uuid)returns boolean language sql security definer stable set search_path=public as $$select exists(select 1 from profiles where id=p_uid and role in('super_admin','admin','proprietor','principal','head_teacher')and status in('approved','active'))$$;
+revoke execute on function public.is_owner(uuid)from public,anon;grant execute on function public.is_owner(uuid)to authenticated;
+revoke execute on function public.is_school_leader(uuid)from public,anon;grant execute on function public.is_school_leader(uuid)to authenticated;
+create table if not exists public.exam_registration_links(id uuid primary key default gen_random_uuid(),token text not null unique default upper(substr(replace(gen_random_uuid()::text,'-',''),1,12)),title text not null,intro text default '',exam_types text[]not null default '{}',session text default '',term text default '',registration_deadline timestamptz,exam_date date,venue text default '',fee_note text default '',requirements text default '',instructions text default '',contact_name text default '',contact_phone text default '',contact_email text default '',consent_text text default '',success_message text default '',hidden_fields text[]not null default '{}',active boolean not null default true,created_by uuid references profiles(id)on delete set null,created_at timestamptz default now(),updated_at timestamptz default now());
+alter table public.exam_registrations add column if not exists registration_link_id uuid references public.exam_registration_links(id)on delete set null;
+alter table public.exam_registrations add column if not exists reg_code text default '';
+alter table public.exam_registrations add column if not exists candidate_name text default '';
+alter table public.exam_registrations add column if not exists email text default '';
+alter table public.exam_registrations add column if not exists phone text default '';
+alter table public.exam_registrations add column if not exists updated_at timestamptz default now();
+create index if not exists exam_registration_links_active_idx on exam_registration_links(active,registration_deadline);create index if not exists exam_registrations_link_idx on exam_registrations(registration_link_id,created_at desc);
+alter table exam_registration_links enable row level security;
+drop policy if exists exam_links_staff_read on exam_registration_links;create policy exam_links_staff_read on exam_registration_links for select using(is_staff(auth.uid()));
+drop policy if exists exam_links_leader_manage on exam_registration_links;create policy exam_links_leader_manage on exam_registration_links for all using(is_school_leader(auth.uid()))with check(is_school_leader(auth.uid()));
+drop policy if exists exam_regs_staff_read on exam_registrations;create policy exam_regs_staff_read on exam_registrations for select using(is_staff(auth.uid()));
+drop policy if exists exam_regs_leader_manage on exam_registrations;create policy exam_regs_leader_manage on exam_registrations for update using(is_school_leader(auth.uid()))with check(is_school_leader(auth.uid()));
+drop policy if exists exam_regs_leader_delete on exam_registrations;create policy exam_regs_leader_delete on exam_registrations for delete using(is_school_leader(auth.uid()));
+create or replace function public.get_exam_registration_link(p_token text)returns jsonb language plpgsql security definer stable set search_path=public as $$declare x exam_registration_links%rowtype;begin select*into x from exam_registration_links where upper(token)=upper(trim(coalesce(p_token,'')))and active limit 1;if not found then return jsonb_build_object('ok',false,'error','link_not_found','message','This registration link is invalid, inactive or removed.');end if;if x.registration_deadline is not null and now()>x.registration_deadline then return jsonb_build_object('ok',false,'error','registration_closed','message','Registration has closed.','title',x.title);end if;return to_jsonb(x)-'created_by'||jsonb_build_object('ok',true);end$$;
+revoke execute on function public.get_exam_registration_link(text)from public;grant execute on function public.get_exam_registration_link(text)to anon,authenticated;
+create or replace function public.submit_exam_registration(p_token text,p_payload jsonb)returns jsonb language plpgsql security definer set search_path=public as $$declare l exam_registration_links%rowtype;rid uuid;link_id uuid;success_text text:='';tok text:=upper(trim(coalesce(p_token,'')));begin if tok<>''then select*into l from exam_registration_links where upper(token)=tok and active limit 1;if not found then return jsonb_build_object('ok',false,'error','link_not_found','message','This registration link is invalid, inactive or removed.');end if;if l.registration_deadline is not null and now()>l.registration_deadline then return jsonb_build_object('ok',false,'error','registration_closed','message','Registration has closed.');end if;link_id:=l.id;success_text:=l.success_message;end if;if trim(coalesce(p_payload->>'candidate_name',''))=''or trim(coalesce(p_payload->>'exam_type',''))=''then return jsonb_build_object('ok',false,'error','required_fields','message','Candidate name and examination type are required.');end if;insert into exam_registrations(registration_link_id,reg_code,candidate_name,student_name,class,exam_type,exam_year,email,phone,status,payload,created_at,updated_at)values(link_id,tok,p_payload->>'candidate_name',p_payload->>'candidate_name',p_payload->>'class',p_payload->>'exam_type',nullif(p_payload->>'exam_year','')::int,p_payload->>'email',p_payload->>'phone','pending',p_payload,now(),now())returning id into rid;return jsonb_build_object('ok',true,'id',rid,'reference','EXREG-'||upper(substr(replace(rid::text,'-',''),1,10)),'message',coalesce(nullif(success_text,''),'Registration received. The examination office will contact you.'));exception when others then return jsonb_build_object('ok',false,'error','server_error','message',sqlerrm);end$$;
+revoke execute on function public.submit_exam_registration(text,jsonb)from public;grant execute on function public.submit_exam_registration(text,jsonb)to anon,authenticated;
+create or replace function public.delete_exam_registration_link(p_id uuid)returns jsonb language plpgsql security definer set search_path=public as $$declare n int;begin if not is_school_leader(auth.uid())then return jsonb_build_object('ok',false,'error','permission_denied');end if;update exam_registrations set registration_link_id=null where registration_link_id=p_id;delete from exam_registration_links where id=p_id;get diagnostics n=row_count;return jsonb_build_object('ok',n=1,'deleted',n);end$$;
+revoke execute on function public.delete_exam_registration_link(uuid)from public,anon;grant execute on function public.delete_exam_registration_link(uuid)to authenticated;
+create table if not exists public.report_comment_bands(id uuid primary key default gen_random_uuid(),label text not null,min_percent numeric(5,2)not null,max_percent numeric(5,2)not null,class text not null default '*',term text not null default '*',session text not null default '*',class_teacher_comment text not null,principal_comment text not null default '',priority int not null default 0,active boolean not null default true,created_by uuid references profiles(id)on delete set null,created_at timestamptz default now(),updated_at timestamptz default now(),check(min_percent>=0 and max_percent<=100 and min_percent<=max_percent));
+create index if not exists report_comment_bands_context_idx on report_comment_bands(class,term,session,active,min_percent,max_percent,priority desc);alter table report_comment_bands enable row level security;
+alter table report_comments add column if not exists comment_source text not null default 'manual';alter table report_comments add column if not exists comment_band_id uuid references report_comment_bands(id)on delete set null;alter table report_comments add column if not exists applied_percent numeric(5,2);alter table report_comments add column if not exists comment_locked boolean not null default false;alter table report_comments add column if not exists updated_at timestamptz default now();
+drop policy if exists comment_bands_staff_read on report_comment_bands;create policy comment_bands_staff_read on report_comment_bands for select using(is_staff(auth.uid()));drop policy if exists comment_bands_leader_manage on report_comment_bands;create policy comment_bands_leader_manage on report_comment_bands for all using(is_school_leader(auth.uid()))with check(is_school_leader(auth.uid()));
+drop policy if exists site_license_write on site_license;create policy site_license_write on site_license for all using(is_owner(auth.uid()))with check(is_owner(auth.uid()));drop policy if exists v7_settings_write on school_settings;create policy v7_settings_write on school_settings for all using(is_school_leader(auth.uid()))with check(is_school_leader(auth.uid()));drop policy if exists role_status_log_write on role_status_log;drop policy if exists v7_role_log_write on role_status_log;create policy v7_role_log_write on role_status_log for all using(is_owner(auth.uid()))with check(is_owner(auth.uid()));
+notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');select 'School Connect V5.7 professional audit enhancements installed ✅'as status;
+
+-- ============================================================================
+-- FINAL V5.7 SELF-SUFFICIENCY CHECK AND POSTGREST RELOAD
 -- ============================================================================
 do $$declare missing text[]:='{}';begin
  if to_regclass('public.cbt_exams')is null then missing:=array_append(missing,'table:cbt_exams');end if;
@@ -3305,13 +3346,15 @@ do $$declare missing text[]:='{}';begin
  if to_regclass('public.cbt_roster')is null then missing:=array_append(missing,'table:cbt_roster');end if;
  if to_regclass('public.fee_payments')is null then missing:=array_append(missing,'table:fee_payments');end if;
  if to_regclass('public.student_term_metrics')is null then missing:=array_append(missing,'table:student_term_metrics');end if;
+ if to_regclass('public.exam_registration_links')is null then missing:=array_append(missing,'table:exam_registration_links');end if;
+ if to_regclass('public.report_comment_bands')is null then missing:=array_append(missing,'table:report_comment_bands');end if;
  if to_regprocedure('public.cbt_get_public_exam_v6(text,text)')is null then missing:=array_append(missing,'rpc:cbt_get_public_exam_v6');end if;
  if to_regprocedure('public.cbt_submit_v6(jsonb)')is null then missing:=array_append(missing,'rpc:cbt_submit_v6');end if;
  if to_regprocedure('public.cbt_clear_exam_results(uuid,text)')is null then missing:=array_append(missing,'rpc:cbt_clear_exam_results');end if;
  if to_regprocedure('public.teacher_can_manage_subject_class(uuid,text,text)')is null then missing:=array_append(missing,'rpc:teacher_can_manage_subject_class');end if;
  if to_regprocedure('public.teacher_can_manage_student(uuid,uuid)')is null then missing:=array_append(missing,'rpc:teacher_can_manage_student');end if;
  if to_regprocedure('public.generate_timetable(text,text,text,integer)')is null then missing:=array_append(missing,'rpc:generate_timetable');end if;
- if coalesce(array_length(missing,1),0)>0 then raise exception 'School Connect V5.6.1 incomplete installation: %',array_to_string(missing,', ');end if;
+ if coalesce(array_length(missing,1),0)>0 then raise exception 'School Connect V5.7 incomplete installation: %',array_to_string(missing,', ');end if;
 end$$;
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
-select 'School Connect V5.6.1 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;
+select 'School Connect V5.7 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;

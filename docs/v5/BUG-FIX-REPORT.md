@@ -148,3 +148,13 @@ At minimum deploy the complete repositories. The critical runtime set is:
 - `sw.js`, `_headers`, `vercel.json`
 
 Running the new frontend without rerunning `complete-schema.sql` leaves the old scorer in the database and will not solve zero marks.
+
+## V5.7 final professional audit
+
+- Added principal/proprietor/examination-officer school-wide Drive signature links and background-removal flags/tooling.
+- Replaced the broken public-link prompt/direct insert with editable campaign records, public RPCs, deadline handling, export, deactivate and delete.
+- Corrected Custom Document Builder's signatory block and added custom type, institutional signatory, references and placeholders.
+- Added educator-approved performance comment bands calculated from official report totals, with manual-comment locks.
+- Separated proprietor, principal, head teacher and bursar navigation; removed broad direct-page bypass and stale access-map persistence.
+- Normalized registered class/subject/department/arm/campus/term/session form fields to dropdowns.
+- Added owner-only site-license/role-status policy and leadership-managed settings/campaign policy.

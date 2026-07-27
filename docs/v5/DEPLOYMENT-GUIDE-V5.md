@@ -1,4 +1,6 @@
-# School Connect V5.6.1 — Deployment and Upgrade Guide
+# School Connect V5.7 — Deployment and Upgrade Guide
+
+> **V5.7:** run only the updated complete schema. It installs institutional signatories, public exam campaigns/RPCs, report comment bands and role boundaries. Then deploy every file and hard-refresh. Frontend-only deployment is insufficient.
 
 ## A. Fresh production deployment (GOSA or another client)
 
