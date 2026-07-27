@@ -1,5 +1,5 @@
 -- ============================================================================
--- SCHOOL CONNECT V5.7 — COMPLETE CUMULATIVE PRODUCTION SCHEMA
+-- SCHOOL CONNECT V5.8 — COMPLETE CUMULATIVE PRODUCTION SCHEMA
 -- ============================================================================
 -- The ONLY production SQL to run. Includes every V5.1–V5.6.1 table, column,
 -- repair, constraint, index, trigger, view, RLS policy, grant and client RPC.
@@ -1352,21 +1352,32 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
-insert into public.schools (name, short_name, admission_acronym)
-values ('My School','SCH','SCH') on conflict do nothing;
+insert into public.schools(name,short_name,admission_acronym)
+select 'My School','SCH','SCH' where not exists(select 1 from public.schools);
 
 insert into public.school_settings (id, school_id, school_name, short_name, admission_acronym, admission_prefix, staff_prefix)
 select 1, s.id, s.name, s.short_name, s.admission_acronym, s.admission_acronym, s.admission_acronym
 from public.schools s order by s.created_at limit 1
 on conflict (id) do nothing;
 
-insert into public.lookups(kind,value,position) values
- ('term','First Term',1),('term','Second Term',2),('term','Third Term',3),
- ('session','2024/2025',1),('session','2025/2026',2),('session','2026/2027',3),
- ('arm','A',1),('arm','B',2),('arm','C',3),
- ('assessment','CA1',1),('assessment','CA2',2),('assessment','Assignment',3),('assessment','Project',4),('assessment','Exam',5),
- ('audience','all',1),('audience','students',2),('audience','staff',3),('audience','parents',4)
-on conflict(kind,value) do nothing;
+-- Bootstrap defaults only on a genuinely empty first installation. Earlier
+-- releases reinserted deleted sessions on every schema rerun (data resurrection).
+create table if not exists public.sc_install_state(key text primary key,applied_at timestamptz not null default now(),details jsonb default '{}'::jsonb);
+alter table public.sc_install_state enable row level security;
+do $$begin
+ if not exists(select 1 from public.sc_install_state where key='core_lookup_defaults_v1')then
+  if not exists(select 1 from public.lookups)then
+   insert into public.lookups(kind,value,position)values
+    ('term','First Term',1),('term','Second Term',2),('term','Third Term',3),
+    ('session','2024/2025',1),('session','2025/2026',2),('session','2026/2027',3),
+    ('arm','A',1),('arm','B',2),('arm','C',3),
+    ('assessment','CA1',1),('assessment','CA2',2),('assessment','Assignment',3),('assessment','Project',4),('assessment','Exam',5),
+    ('audience','all',1),('audience','students',2),('audience','staff',3),('audience','parents',4)
+   on conflict(kind,value)do nothing;
+  end if;
+  insert into public.sc_install_state(key,details)values('core_lookup_defaults_v1',jsonb_build_object('seeded_only_when_empty',true))on conflict(key)do nothing;
+ end if;
+end$$;
 
 insert into public.school_settings (id) values (1) on conflict (id) do nothing;
 
@@ -1522,28 +1533,33 @@ end $$;
 DROP FUNCTION IF EXISTS public.sc_generate_admission_no() CASCADE;
 create or replace function public.sc_generate_admission_no()
 returns trigger language plpgsql security definer set search_path=public as $$
-declare pfx text; n int;
+declare cfg record;pfx text;fmt text;yr text;n int;start_n int;
 begin
-  if coalesce(trim(new.admission_no),'') <> '' then return new; end if;
-  select upper(coalesce(nullif(admission_prefix,''),nullif(admission_acronym,''),nullif(short_name,''),'SCH')) into pfx from public.school_settings where id=1;
-  perform pg_advisory_xact_lock(hashtext(pfx));
-  select coalesce(max((regexp_match(admission_no,'([0-9]+)$'))[1]::int),0)+1 into n from public.students where admission_no like pfx||'-%';
-  new.admission_no := pfx||'-'||lpad(n::text,5,'0');
-  return new;
-end $$;
+ if coalesce(trim(new.admission_no),'')<>''then return new;end if;
+ select * into cfg from public.school_settings where id=1;
+ pfx:=upper(regexp_replace(coalesce(nullif(cfg.admission_prefix,''),nullif(cfg.admission_acronym,''),nullif(cfg.short_name,''),'SCH'),'[^A-Z0-9]','','g'));
+ fmt:=coalesce(nullif(cfg.admission_format,''),'prefix-dash');start_n:=greatest(coalesce(cfg.admission_start_num,1),1);yr:=extract(year from current_date)::int::text;
+ perform pg_advisory_xact_lock(hashtext('ADMISSION:'||pfx));
+ select greatest(start_n,coalesce(max((regexp_match(admission_no,'([0-9]+)$'))[1]::int),start_n-1)+1)into n from public.students where upper(coalesce(admission_no,''))like pfx||'%';
+ if fmt='prefix-slash'or coalesce(cfg.admission_include_year,false)then new.admission_no:=pfx||'/'||yr||'/'||lpad(n::text,4,'0');
+ elsif fmt='prefix-only'then new.admission_no:=pfx||lpad(n::text,5,'0');
+ else new.admission_no:=pfx||'-'||lpad(n::text,5,'0');end if;
+ return new;
+end$$;
 
 DROP FUNCTION IF EXISTS public.sc_generate_staff_no() CASCADE;
 create or replace function public.sc_generate_staff_no()
 returns trigger language plpgsql security definer set search_path=public as $$
-declare pfx text; n int;
+declare cfg record;pfx text;mid text;base text;n int;
 begin
-  if coalesce(trim(new.staff_no),'') <> '' then return new; end if;
-  select upper(coalesce(nullif(staff_prefix,''),nullif(short_name,''),'SCH')) into pfx from public.school_settings where id=1;
-  perform pg_advisory_xact_lock(hashtext('STAFF:'||pfx));
-  select coalesce(max((regexp_match(staff_no,'([0-9]+)$'))[1]::int),0)+1 into n from public.staff where staff_no like pfx||'-STF-%' or staff_no like pfx||'-%';
-  new.staff_no := pfx||'-STF-'||lpad(n::text,5,'0');
-  return new;
-end $$;
+ if coalesce(trim(new.staff_no),'')<>''then return new;end if;
+ select * into cfg from public.school_settings where id=1;
+ pfx:=upper(regexp_replace(coalesce(nullif(cfg.staff_prefix,''),nullif(cfg.admission_prefix,''),nullif(cfg.short_name,''),'SCH'),'[^A-Z0-9-]','','g'));mid:=upper(regexp_replace(coalesce(cfg.staff_mid_segment,'STF'),'[^A-Z0-9]','','g'));
+ base:=case when mid=''then trim(both'-'from pfx)when right(pfx,length(mid)+1)='-'||mid then pfx else trim(both'-'from pfx)||'-'||mid end;
+ perform pg_advisory_xact_lock(hashtext('STAFF:'||base));
+ select greatest(1,coalesce(max((regexp_match(staff_no,'([0-9]+)$'))[1]::int),0)+1)into n from public.staff where upper(coalesce(staff_no,''))like trim(both'-'from pfx)||'%';
+ new.staff_no:=base||'-'||lpad(n::text,5,'0');return new;
+end$$;
 
 DROP FUNCTION IF EXISTS public.sc_push_cbt_to_results() CASCADE;
 create or replace function public.sc_push_cbt_to_results(p_exam_id uuid, p_column text default 'exam', p_term text default '', p_session text default '')
@@ -2544,6 +2560,7 @@ create or replace function public.table_sizes()
 returns table(table_name text, pretty text, row_estimate bigint, total_bytes bigint)
 language plpgsql stable security definer set search_path=public as $$
 begin
+  if not public.is_owner(auth.uid()) then raise exception 'Owner role required'; end if;
   return query
   select s.table_name, s.pretty, s.row_estimate, s.total_bytes from (
     select c.relname::text as table_name,
@@ -2564,27 +2581,7 @@ end $$;
 revoke execute on function public.table_sizes() from public, anon;
 grant  execute on function public.table_sizes() to authenticated;
 
--- 18.5 purge_old(table, days) — storage console purge, admin-only, strict whitelist
-DROP FUNCTION IF EXISTS public.purge_old() CASCADE;
-create or replace function public.purge_old(p_table text, p_days integer)
-returns integer language plpgsql security definer set search_path=public as $$
-declare r text; n integer := 0;
-  allowed text[] := array['activity_log','cbt_results','notifications','reading_scores','attendance_checkins'];
-begin
-  select lower(role) into r from public.profiles where id = auth.uid();
-  if coalesce(r,'') not in ('super_admin','admin','principal','proprietor','head_teacher') then
-    raise exception 'purge_old: admin role required';
-  end if;
-  if not (p_table = any(allowed)) then
-    raise exception 'purge_old: % is not purgeable from the storage console (allowed: %)', p_table, array_to_string(allowed, ', ');
-  end if;
-  execute format('delete from public.%I where created_at < now() - make_interval(days => $1)', p_table)
-     using greatest(coalesce(p_days, 180), 1);
-  get diagnostics n = row_count;
-  return n;
-end $$;
-revoke execute on function public.purge_old(text, integer) from public, anon;
-grant  execute on function public.purge_old(text, integer) to authenticated;
+-- 18.5 purge_old is installed once in the V5.8 retention section.
 
 -- 18.6 submit_admission(payload) — public apply form write path
 DROP FUNCTION IF EXISTS public.submit_admission() CASCADE;
@@ -3338,7 +3335,65 @@ drop policy if exists site_license_write on site_license;create policy site_lice
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');select 'School Connect V5.7 professional audit enhancements installed ✅'as status;
 
 -- ============================================================================
--- FINAL V5.7 SELF-SUFFICIENCY CHECK AND POSTGREST RELOAD
+-- V5.8 VERIFIED DELETION, ID AUTHORITY AND FREE-TIER DATA EFFICIENCY
+-- ============================================================================
+create table if not exists public.data_retention_settings(
+ id smallint primary key default 1 check(id=1),quota_mb numeric not null default 500,
+ warning_percent numeric not null default 75,critical_percent numeric not null default 90,
+ activity_log_days int not null default 365,login_audit_days int not null default 180,
+ notification_days int not null default 180,checkin_days int not null default 365,
+ clock_days int not null default 730,cbt_result_days int not null default 730,
+ reading_score_days int not null default 730,updated_by uuid references public.profiles(id)on delete set null,
+ updated_at timestamptz not null default now());
+insert into public.data_retention_settings(id)values(1)on conflict(id)do nothing;
+alter table public.data_retention_settings enable row level security;
+drop policy if exists retention_owner_read on public.data_retention_settings;create policy retention_owner_read on public.data_retention_settings for select using(public.is_owner(auth.uid()));
+drop policy if exists retention_owner_write on public.data_retention_settings;create policy retention_owner_write on public.data_retention_settings for all using(public.is_owner(auth.uid()))with check(public.is_owner(auth.uid()));
+alter table public.certificate_designs add column if not exists signature_url text default '';
+
+create or replace function public.storage_health()
+returns jsonb language plpgsql security definer stable set search_path=public as $$
+declare used_bytes bigint:=0;cfg public.data_retention_settings%rowtype;embedded bigint:=0;begin
+ if not public.is_owner(auth.uid())then raise exception 'Owner role required';end if;
+ select coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint into used_bytes from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public'and c.relkind='r';select*into cfg from data_retention_settings where id=1;
+ select coalesce(sum(n),0)into embedded from(
+  select count(*)n from school_settings where coalesce(signature_url,'')like'data:%'or coalesce(proprietor_signature_url,'')like'data:%'or coalesce(examination_officer_signature_url,'')like'data:%'
+  union all select count(*)from profiles where coalesce(photo_url,'')like'data:%'or coalesce(signature_url,'')like'data:%'
+  union all select count(*)from staff where coalesce(photo_url,'')like'data:%'or coalesce(signature_url,'')like'data:%'
+  union all select count(*)from students where coalesce(photo_url,'')like'data:%'
+  union all select count(*)from certificate_designs where coalesce(signature_data,'')like'data:%'or coalesce(signature_url,'')like'data:%')q;
+ return jsonb_build_object('used_bytes',used_bytes,'used_pretty',pg_size_pretty(used_bytes),'quota_mb',cfg.quota_mb,'quota_bytes',(cfg.quota_mb*1024*1024)::bigint,'percent',round(used_bytes/greatest(cfg.quota_mb*1024*1024,1)*100,2),'status',case when used_bytes>=cfg.quota_mb*1024*1024*cfg.critical_percent/100 then'critical'when used_bytes>=cfg.quota_mb*1024*1024*cfg.warning_percent/100 then'warning'else'healthy'end,'embedded_media_rows',embedded,'media_policy','external-links-only');
+end$$;
+revoke execute on function public.storage_health()from public,anon,authenticated;grant execute on function public.storage_health()to authenticated;
+
+create or replace function public.retention_candidates()
+returns table(table_name text,date_column text,keep_days int,eligible_rows bigint)language plpgsql security definer stable set search_path=public as $$
+declare cfg data_retention_settings%rowtype;r record;n bigint;begin
+ if not is_owner(auth.uid())then raise exception 'Owner role required';end if;select*into cfg from data_retention_settings where id=1;
+ for r in select*from(values('activity_log','created_at',cfg.activity_log_days),('login_audit','created_at',cfg.login_audit_days),('notifications','created_at',cfg.notification_days),('attendance_checkins','checkin_at',cfg.checkin_days),('staff_clock','created_at',cfg.clock_days),('student_clock','created_at',cfg.clock_days),('cbt_results','created_at',cfg.cbt_result_days),('reading_scores','created_at',cfg.reading_score_days))v(t,c,d)loop execute format('select count(*) from public.%I where %I < now()-make_interval(days=>$1)',r.t,r.c)into n using r.d;table_name:=r.t;date_column:=r.c;keep_days:=r.d;eligible_rows:=n;return next;end loop;
+end$$;
+revoke execute on function public.retention_candidates()from public,anon,authenticated;grant execute on function public.retention_candidates()to authenticated;
+
+create or replace function public.purge_old(p_table text,p_days integer)
+returns integer language plpgsql security definer set search_path=public as $$declare col text;n int;begin
+ if not is_owner(auth.uid())then raise exception 'Owner role required';end if;
+ col:=case p_table when'attendance_checkins'then'checkin_at'when'activity_log'then'created_at'when'login_audit'then'created_at'when'notifications'then'created_at'when'staff_clock'then'created_at'when'student_clock'then'created_at'when'cbt_results'then'created_at'when'reading_scores'then'created_at'else null end;if col is null then raise exception 'Table is not retention-purgeable';end if;
+ execute format('delete from public.%I where %I < now()-make_interval(days=>$1)',p_table,col)using greatest(coalesce(p_days,180),1);get diagnostics n=row_count;return n;
+end$$;
+revoke execute on function public.purge_old(text,integer)from public,anon;grant execute on function public.purge_old(text,integer)to authenticated;
+
+create or replace function public.sc_prevent_embedded_media()
+returns trigger language plpgsql set search_path=public as $$declare j jsonb:=to_jsonb(new);oldj jsonb:=case when tg_op='UPDATE'then to_jsonb(old)else'{}'::jsonb end;r record;begin
+ for r in select key,value from jsonb_each_text(j)where key~'(_url|_link|signature_data)$'loop
+  if(length(r.value)>4096 or r.value~*'^data:(image|video|audio|application)/'or r.value~*'^base64,')and(tg_op='INSERT'or coalesce(oldj->>r.key,'')is distinct from r.value)then raise exception 'Embedded file data is not allowed in %.%. Paste a public Google Drive/external URL instead.',tg_table_name,r.key;end if;
+ end loop;return new;
+end$$;
+do $$declare t text;begin foreach t in array array['school_settings','profiles','students','staff','parents','admissions','gallery','eresources','digital_library','certificate_designs','certificates']loop if to_regclass('public.'||t)is not null then execute format('drop trigger if exists sc_external_media_only on public.%I',t);execute format('create trigger sc_external_media_only before insert or update on public.%I for each row execute function public.sc_prevent_embedded_media()',t);end if;end loop;end$$;
+notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
+select 'School Connect V5.8 deletion, ID-format and free-tier efficiency safeguards installed ✅'as status;
+
+-- ============================================================================
+-- FINAL V5.8 SELF-SUFFICIENCY CHECK AND POSTGREST RELOAD
 -- ============================================================================
 do $$declare missing text[]:='{}';begin
  if to_regclass('public.cbt_exams')is null then missing:=array_append(missing,'table:cbt_exams');end if;
@@ -3348,13 +3403,17 @@ do $$declare missing text[]:='{}';begin
  if to_regclass('public.student_term_metrics')is null then missing:=array_append(missing,'table:student_term_metrics');end if;
  if to_regclass('public.exam_registration_links')is null then missing:=array_append(missing,'table:exam_registration_links');end if;
  if to_regclass('public.report_comment_bands')is null then missing:=array_append(missing,'table:report_comment_bands');end if;
+ if to_regclass('public.data_retention_settings')is null then missing:=array_append(missing,'table:data_retention_settings');end if;
+ if to_regclass('public.sc_install_state')is null then missing:=array_append(missing,'table:sc_install_state');end if;
+ if to_regprocedure('public.storage_health()')is null then missing:=array_append(missing,'rpc:storage_health');end if;
+ if to_regprocedure('public.retention_candidates()')is null then missing:=array_append(missing,'rpc:retention_candidates');end if;
  if to_regprocedure('public.cbt_get_public_exam_v6(text,text)')is null then missing:=array_append(missing,'rpc:cbt_get_public_exam_v6');end if;
  if to_regprocedure('public.cbt_submit_v6(jsonb)')is null then missing:=array_append(missing,'rpc:cbt_submit_v6');end if;
  if to_regprocedure('public.cbt_clear_exam_results(uuid,text)')is null then missing:=array_append(missing,'rpc:cbt_clear_exam_results');end if;
  if to_regprocedure('public.teacher_can_manage_subject_class(uuid,text,text)')is null then missing:=array_append(missing,'rpc:teacher_can_manage_subject_class');end if;
  if to_regprocedure('public.teacher_can_manage_student(uuid,uuid)')is null then missing:=array_append(missing,'rpc:teacher_can_manage_student');end if;
  if to_regprocedure('public.generate_timetable(text,text,text,integer)')is null then missing:=array_append(missing,'rpc:generate_timetable');end if;
- if coalesce(array_length(missing,1),0)>0 then raise exception 'School Connect V5.7 incomplete installation: %',array_to_string(missing,', ');end if;
+ if coalesce(array_length(missing,1),0)>0 then raise exception 'School Connect V5.8 incomplete installation: %',array_to_string(missing,', ');end if;
 end$$;
 notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
-select 'School Connect V5.7 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;
+select 'School Connect V5.8 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;

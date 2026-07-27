@@ -677,6 +677,8 @@ const CRUD = {
      - Staff/Admin see all data (no filter)
   */
   // The last visible records are session-scoped by user/role/module; never use a shared cache.
+  invalidateTableCaches(moduleId){try{const key=':'+String(moduleId)+':';Object.keys(sessionStorage).filter(k=>k.startsWith('sc-table-cache:')&&(k.includes(key)||k.includes(':'+this.canonicalId(moduleId)+':'))).forEach(k=>sessionStorage.removeItem(k));}catch(_){}},
+
   stableTableCacheKey(moduleId, suffix='') {
     const uid = (window.SC_PROFILE && SC_PROFILE.id) || 'guest';
     const role = (window.SC_PROFILE && SC_PROFILE.role) || (window.App && App.currentRole) || 'guest';
@@ -744,7 +746,7 @@ const CRUD = {
     const tb = tableEl.querySelector('tbody');
     if (error) {
       let cached = null; try { cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null'); } catch(_) {}
-      if (cached && cached.html) { tb.innerHTML = cached.html + '<tr><td colspan="' + (cols.length + (writable ? 1 : 0)) + '" style="color:#b45309;background:#fffbeb">Live refresh failed; showing the last visible records so they do not disappear. ' + esc(error.message) + '</td></tr>'; return; }
+      if(cached&&cached.html&&Date.now()-Number(cached.at||0)<60000){tb.innerHTML=cached.html+'<tr><td colspan="'+(cols.length+(writable?1:0))+'" style="color:#b45309;background:#fffbeb">Live refresh failed; showing a cache less than one minute old. It will not be reused after that to prevent deleted records reappearing. '+esc(error.message)+'</td></tr>';return;}
       tb.innerHTML = '<tr><td colspan="' + (cols.length + (writable ? 1 : 0)) + '">' + esc(error.message) + '</td></tr>'; return;
     }
 
@@ -1122,43 +1124,11 @@ const CRUD = {
     }
     // (res declared below by the self-healing save wrapper)
     
-    // === v5 FIX: Auto-generate admission_no and staff_no starting with school acronym ===
-    const getAcronym = () => {
-      try {
-        const cfg = window.SCHOOL || {};
-        let ac = (cfg.admissionAcronym || cfg.shortName || cfg.name || 'SCH').toString().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8) || 'SCH';
-        return ac;
-      } catch(_) { return 'SCH'; }
-    };
-    if (d.table === 'students' && !id && (!payload.admission_no || String(payload.admission_no).trim()==='')) {
-      try {
-        const ac = getAcronym();
-        // v12: unified with the server-side trigger public.sc_generate_admission_no()
-        // —same <ACR>-NNNNN dash format, same "<ACR>-%" search scope—so UI-created
-        // and DB-triggered (CSV import / SQL) admission numbers share one sequence.
-        const { data: maxRows } = await this.sb.from('students').select('admission_no').ilike('admission_no', ac+'-%').limit(2000);
-        let nextNum = 1;
-        (maxRows || []).forEach(r => {
-          const m = String(r.admission_no || '').match(/(\d+)$/);
-          if (m) nextNum = Math.max(nextNum, parseInt(m[1], 10) + 1);
-        });
-        payload.admission_no = ac + '-' + String(nextNum).padStart(5,'0');
-      } catch(e) { console.warn('auto-admission failed', e.message); }
-    }
-    if (d.table === 'staff' && !id && (!payload.staff_no || String(payload.staff_no).trim()==='')) {
-      try {
-        const ac = getAcronym();
-        // v12: <ACR>-STF-NNNNN — acronym-prefixed, consistent with the DB trigger.
-        // "<ACR>-%" also matches "<ACR>-STF-%", so one query covers legacy and new formats.
-        const { data: maxRows } = await this.sb.from('staff').select('staff_no').ilike('staff_no', ac+'-%').limit(4000);
-        let nextNum = 1;
-        (maxRows || []).forEach(r => {
-          const m = String(r.staff_no || '').match(/(\d+)$/);
-          if (m) nextNum = Math.max(nextNum, parseInt(m[1], 10) + 1);
-        });
-        payload.staff_no = ac + '-STF-' + String(nextNum).padStart(5,'0');
-      } catch(e) {}
-    }
+    // Admission/staff IDs are generated only by PostgreSQL triggers from the
+    // saved school_settings format. Browser-side generation formerly used stale
+    // config.js acronyms (e.g. GSA) and ignored GOSA/YYYY/NNNN settings.
+    if(d.table==='students'&&!id)delete payload.admission_no;
+    if(d.table==='staff'&&!id)delete payload.staff_no;
     // Auto-fill changed_by for role_status_log
     if (d.table === 'role_status_log' && !payload.changed_by) {
       try { payload.changed_by = (window.SC_PROFILE && SC_PROFILE.full_name) || (window.SC_PROFILE && SC_PROFILE.email) || ''; } catch(_){}
@@ -1178,7 +1148,10 @@ const CRUD = {
         return;
       }
     }
-    const runSave = async (pl) => id ? await this.sb.from(d.table).update(pl).eq('id', id).select('id').maybeSingle() : await this.sb.from(d.table).insert(pl);
+    // Free-tier guard: operational records store external links, never embedded
+    // file/base64 payloads. CSV/JSON imports are parsed locally and only rows save.
+    const packed=JSON.stringify(payload);if(/data:(?:image|video|audio|application)\//i.test(packed)||/;base64,/i.test(packed)){toast('Direct/embedded file data is disabled. Upload the file to Google Drive or another external host and paste its public link.','danger',9000);return;}
+    const runSave=async(pl)=>{if(id)return await this.sb.from(d.table).update(pl).eq('id',id).select('id').maybeSingle();if(d.table==='students')return await this.sb.from(d.table).insert(pl).select('id,admission_no').single();if(d.table==='staff')return await this.sb.from(d.table).insert(pl).select('id,staff_no').single();return await this.sb.from(d.table).insert(pl);};
     let res = await runSave(payload);
     // ENTERPRISE V6 (issues 16, 26, 32, 35): self-healing writes. If the target
     // database is missing a column (older schema), strip the unknown column —
@@ -1237,6 +1210,7 @@ const CRUD = {
         }
       }
     } catch(e) { console.warn('Notification hook skipped:', e.message || e); }
+    this.invalidateTableCaches(moduleId);
     closeModal();
     if (!id && (moduleId === 'students' || moduleId === 'staff')) {
       const email = moduleId === 'students' ? payload.guardian_email : payload.email;
@@ -1244,8 +1218,8 @@ const CRUD = {
         const role = moduleId === 'students' ? 'student/parent' : 'staff';
         const invite = 'Login invitation for '+(payload.full_name||d.title)+'\nEmail: '+email+'\nRole: '+role+'\nOpen login.html → Request access → use this email → create password → admin approves in Approvals.';
         try { navigator.clipboard && navigator.clipboard.writeText(invite); } catch(e) {}
-        toast('✅ Saved. Login invitation copied. The user must request access, then admin approves.', 'success', 8000);
-      } else toast('✅ Saved. Add an email to generate login invitation details.', 'success', 6000);
+        toast('✅ Saved'+(res.data?.admission_no?' · Admission No: '+res.data.admission_no:res.data?.staff_no?' · Staff ID: '+res.data.staff_no:'')+'. Login invitation copied. The user must request access, then admin approves.','success',8000);
+      }else toast('✅ Saved'+(res.data?.admission_no?' · Admission No: '+res.data.admission_no:res.data?.staff_no?' · Staff ID: '+res.data.staff_no:'')+'. Add an email to generate login invitation details.','success',6000);
     } else toast('✅ Saved.', 'success');
     this.renderList(moduleId);
   },
@@ -1393,8 +1367,9 @@ const CRUD = {
     if (!confirm('Delete this ' + d.title.toLowerCase() + '?')) return;
     const { data:deleted,error } = await this.sb.from(d.table).delete().eq('id', id).select('id');
     if (error) { toast(error.message, 'danger'); return; }if(!deleted||!deleted.length){toast('Nothing was deleted. You may not own this subject/class record.','danger',7000);return;}
-    if (window.App && App.logActivity) App.logActivity('delete', d.table, id);
-    toast('Deleted.', 'info'); this.renderList(moduleId);
+    this.invalidateTableCaches(moduleId);
+    if(window.App&&App.logActivity)App.logActivity('delete',d.table,id);
+    toast('Deleted permanently and verified.','success');await this.renderList(moduleId);
   },
 
   /* Issue 10: bulk-import student birthdays from the students table */

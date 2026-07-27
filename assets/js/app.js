@@ -1408,6 +1408,11 @@ const App = {
   }
 };
 
+/* Verified deletion helper: Supabase can return no error with zero affected rows
+   under RLS. Every custom page can use this to avoid false “Deleted” messages
+   and stale session-cache resurrection. */
+window.SCDelete={async byId(client,table,id){if(!client)return{ok:false,error:'Database not configured'};const{data,error}=await client.from(table).delete().eq('id',id).select('id');if(error)return{ok:false,error:error.message||String(error)};if(!data||!data.length)return{ok:false,error:'No row was deleted. It may already be removed or your role lacks permission.'};try{Object.keys(sessionStorage).filter(k=>k.startsWith('sc-table-cache:')).forEach(k=>sessionStorage.removeItem(k));}catch(_){}const v=await client.from(table).select('id').eq('id',id).maybeSingle();return v.data?{ok:false,error:'Delete verification failed; the row still exists.'}:{ok:true,deleted:data.length};}};
+
 /* ----- Modal helpers ----- */
 function openModal(title, body, footer) {
   const b = document.getElementById('modal-backdrop');

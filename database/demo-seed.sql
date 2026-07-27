@@ -206,7 +206,7 @@ begin
 end $$;
 
 -- Demo teacher-owned signature (synthetic SVG; proves class-teacher report signing).
-update public.profiles set signature_url='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMTAwIj48cGF0aCBkPSJNMTUgNjUgUTU1IDEwIDg1IDYwIFQxNTAgNDUgUTE4MCAyMCAyMDUgNjUgVDI4NSAzNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMWUzYThhIiBzdHJva2Utd2lkdGg9IjUiLz48dGV4dCB4PSI5NSIgeT0iOTIiIGZvbnQtZmFtaWx5PSJjdXJzaXZlIiBmb250LXNpemU9IjE4IiBmaWxsPSIjMWUzYThhIj5GdW5rZSBBbGFiaTwvdGV4dD48L3N2Zz4='
+update public.profiles set signature_url='assets/img/demo-signature.svg'
 where email='teacher@scdemo.school';
 update public.staff set signature_url=(select signature_url from public.profiles where email='teacher@scdemo.school' limit 1)where staff_no='SCD-STF-00001';
 

@@ -158,3 +158,10 @@ Running the new frontend without rerunning `complete-schema.sql` leaves the old 
 - Separated proprietor, principal, head teacher and bursar navigation; removed broad direct-page bypass and stale access-map persistence.
 - Normalized registered class/subject/department/arm/campus/term/session form fields to dropdowns.
 - Added owner-only site-license/role-status policy and leadership-managed settings/campaign policy.
+
+## V5.8 deletion, IDs and free-tier fixes
+- Default lookups now bootstrap once only; schema reruns do not resurrect deleted sessions.
+- Verified affected-row deletes, post-delete checks, cache invalidation and one-minute cache expiry added across CRUD and custom pages.
+- Admission/staff IDs are generated only by PostgreSQL from current school settings.
+- Storage Efficiency Centre, quota/retention policy, external-media audit and safe candidate analysis added.
+- New embedded media/Base64 writes are blocked; certificate/drawn signatures are link/local-download based.
