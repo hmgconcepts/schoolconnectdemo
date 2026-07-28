@@ -1453,4 +1453,29 @@ function handleSignUp(e){ return App.handleSignUp(e); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', App.init);
 else App.init();
 
+
+/* --------------------------------------------------------------------
+   SUPABASE FREE-TIER KEEP-ALIVE (Layer 1 — site-visit heartbeat)
+   Supabase pauses free projects after ~7 days without DB activity.
+   Every visitor automatically triggers ONE real database write per
+   24 hours via the sc_keep_alive() RPC (installed by
+   database/complete-schema.sql or database/keep-alive.sql).
+   Zero setup, zero cost, fully automated for the client.
+   Layers 2-4 (GitHub Actions, UptimeRobot/edge ping, pg_cron) are
+   documented in SUPABASE_FREE_TIER_PROTECTION.md.
+   -------------------------------------------------------------------- */
+(function(){
+  try{
+    if(!window.sb) return;                            // Supabase not configured yet
+    var KEY='sc-keepalive-at';
+    var last=+(localStorage.getItem(KEY)||0);
+    if(Date.now()-last < 24*60*60*1000) return;       // at most once per day per device
+    window.sb.rpc('sc_keep_alive',{src:'site-visit'}).then(function(r){
+      if(!r.error){ localStorage.setItem(KEY,String(Date.now()));
+        console.log('[School Connect] Supabase keep-alive heartbeat ok.'); }
+      else console.warn('[School Connect] keep-alive RPC missing — run database/keep-alive.sql:',r.error.message);
+    }).catch(function(){});
+  }catch(_){/* never break the page for a heartbeat */}
+})();
+
 console.log('%c[School Connect v15] app.js loaded — RBAC, family-safe nav, fixed notifications.', 'color:#10b981;font-weight:bold');
