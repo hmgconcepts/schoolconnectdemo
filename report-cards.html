@@ -509,10 +509,27 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         this.students = studs || [];
       } catch (e) { this.students = []; console.warn('RC students load failed', e); }
       this.renderCols();
+      // V6.5: the signed-in role can resolve after the first render — re-check
+      // once so a teacher never briefly sees (or keeps) the admin column editor.
+      clearTimeout(this._colsRoleTimer); this._colsRoleTimer=setTimeout(()=>{try{this.renderCols();}catch(_){}} ,2500);
       await this.renderGrid();
     },
 
+    _isAdminNow(){ return !!(window.App && App.isOwnerRole && App.isOwnerRole((window.SC_PROFILE||{}).role||(window.App&&App.currentRole)||document.body.dataset.currentRole)); },
     renderCols(){
+      /* V6.5 FIX #1 (root cause): this card is injected AFTER app.js applied the
+         data-admin-only visibility pass, so the token never hid it for teachers.
+         Now we branch at render time: non-admins get a READ-ONLY column listing —
+         no add form, no edit, no delete — while the RLS policy ac_admin_write
+         remains the hard database gate. */
+      if(!this._isAdminNow()){
+        $('rc-cols').innerHTML = '<div class="card"><h3>Report-card columns (read-only)</h3>'+
+          '<p style="color:var(--gray-600);font-size:.86rem">These assessment columns were designed by the administrator. As a teacher you <b>enter scores</b> into them in the Subject Broadsheet grid below — you cannot add, rename or delete columns. Need a new column? Ask an admin.</p>'+
+          '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Max mark</th><th>Source</th></tr></thead><tbody>'+
+          (this.cols.length?this.cols.map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+c.max_mark+'</td><td>'+(c.source==='cbt'?'<span class="badge">From CBT</span>':'Manual')+'</td></tr>').join(''):'<tr><td colspan="3">No columns yet — the administrator has not designed the report template for this class/term.</td></tr>')+
+          '</tbody></table></div></div>';
+        return;
+      }
       const configuredTotal=this.cols.reduce((a,c)=>a+Number(c.max_mark||0),0),suspicious=this.cols.filter(c=>!(Number(c.max_mark)>0)||Number(c.max_mark)>100),keys=this.cols.map(c=>String(c.name||'').toLowerCase().replace(/[^a-z0-9]/g,'')),duplicates=keys.filter((x,i)=>keys.indexOf(x)!==i);
       const audit='<div class="notice" style="margin:8px 0;background:'+(suspicious.length||duplicates.length?'#fef2f2':'#f0fdf4')+';border-color:'+(suspicious.length||duplicates.length?'#fca5a5':'#86efac')+';color:'+(suspicious.length||duplicates.length?'#991b1b':'#166534')+'"><b>Configured maximum: '+configuredTotal+'</b>. Printed headings use these exact names/maxima. '+(suspicious.length?'Review unusual maximum: '+suspicious.map(c=>esc(c.name)+' ('+Number(c.max_mark)+')').join(', ')+'. ':'')+(duplicates.length?'Duplicate-like headings detected; rename or delete duplicates.':'Structure looks consistent.')+'</div>';
       $('rc-cols').innerHTML =
