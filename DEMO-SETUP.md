@@ -99,3 +99,10 @@ re-run demo-seed.sql.
   are generated with a **lifetime demo license** so they never lock.
 - All guest accounts are ordinary rows in `auth.users` + `profiles`; you can
   suspend them any time on the Approvals page.
+
+
+## Rich sample data on EVERY page (30 seconds)
+Three interchangeable ways — pick any:
+1. **SQL (recommended, guaranteed):** SQL Editor → paste `database/demo-sample-data.sql` → Run. Fills payroll, inventory, application links, messages, assignments, behaviour points, support plans, library, help-desk, bonuses, gamification, cafeteria, lost & found and PTA. Idempotent — safe to re-run.
+2. **Automatic:** on demo deployments the same pack loads itself the first time an admin/teacher opens any page each day.
+3. **One click:** Admin Data → 🎬 One-Click Demo Sample Data.
