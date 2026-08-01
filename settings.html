@@ -621,7 +621,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
             <canvas id="sig-pad" width="300" height="120" style="border:1px solid var(--gray-300);background:#fff;border-radius:4px;cursor:crosshair;touch-action:none;display:block;max-width:100%"></canvas>
             <div style="margin-top:8px;display:flex;gap:8px">
               <button class="btn btn-outline btn-sm" onclick="ST.clearSigPad()">Clear Pad</button>
-              <button class="btn btn-primary btn-sm" onclick="ST.saveSigPad()">Download Signature PNG</button>
+              <button class="btn btn-primary btn-sm" onclick="ST.uploadSigPad()">☁️ Save signature to School Storage (one click)</button> <button class="btn btn-outline btn-sm" onclick="ST.saveSigPad()">⬇ Download Signature PNG</button>
             </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="ST.saveSignature()">Save signature details</button>
@@ -699,7 +699,30 @@ const ST={
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   },
-  async saveSigPad(){const canvas=document.getElementById('sig-pad');if(!canvas)return;const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='school-signature.png';a.click();toast('Signature downloaded locally. Upload it to Google Drive, make it public, then paste the link above. The image is not stored in Supabase.','success',9000);},
+  async saveSigPad(){const canvas=document.getElementById('sig-pad');if(!canvas)return;const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='school-signature.png';a.click();toast('Signature downloaded locally. You can upload it to Google Drive OR just use ☁️ Save to School Storage — one click, no Drive needed.','success',9000);},
+  /* V6.8 #4: drawn signatures are tiny (~5–20 KB) — store them straight in the
+     1 GB FILE STORAGE (public "branding" bucket, admin-only writes, 200 KB cap).
+     One click: upload → get a permanent URL → save it as the official signature
+     used on report cards, e-receipts and certificates. No Google Drive round-trip. */
+  async uploadSigPad(){
+    const canvas=document.getElementById('sig-pad'); if(!canvas)return;
+    if(!window.sb){toast('Database not configured.','warning');return;}
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+    if(!blob){toast('Draw a signature first.','warning');return;}
+    if(blob.size>190000){toast('Signature image too large — click Clear and draw again with fewer strokes.','warning');return;}
+    const path='signatures/principal-'+Date.now()+'.png';
+    const up=await sb.storage.from('branding').upload(path,blob,{contentType:'image/png',upsert:false});
+    if(up.error){toast('Upload failed: '+up.error.message+' — if the bucket is missing, run database/branding-bucket.sql once in the Supabase SQL Editor (creates the public branding bucket).','danger',10000);return;}
+    const pub=sb.storage.from('branding').getPublicUrl(path);
+    const url=(pub.data&&pub.data.publicUrl)||'';
+    if(!url){toast('Uploaded, but could not read the public URL. Check the bucket is public.','warning');return;}
+    const inp=document.getElementById('st-signature'); if(inp)inp.value=url;
+    localStorage.setItem('sc-signature-url',url);
+    try{await sb.from('school_settings').upsert({id:1,signature_url:url},{onConflict:'id'});}catch(_){}
+    this.preview&&this.preview();
+    toast('☁️ Signature saved to School Storage and set as the official signature (~'+Math.round(blob.size/1024)+' KB in the 1 GB file space). It now prints on report cards, e-receipts and certificates.','success',10000);
+    if(window.App&&App.logActivity)App.logActivity('upload-signature','school_settings',path);
+  },
   async toggle2fa(on){ const r=await Enterprise.security.setTwoFactor(on); if(r&&r.error){toast(r.error.message||r.error,'danger');return;} toast(on?'2FA enabled':'2FA disabled','success'); },
   lang(l){ Enterprise.i18n.setLang(l); toast('Language set','success'); },
   preview(){ const box=document.getElementById('st-sign-preview'); const raw=localStorage.getItem('sc-signature-url')||''; const url=(window.Super&&Super.idcard&&Super.idcard.driveDirect)?Super.idcard.driveDirect(raw):raw; if(box) box.innerHTML=url?'<img src="'+esc(url)+'" referrerpolicy="no-referrer" style="max-width:180px;max-height:80px;object-fit:contain;mix-blend-mode:multiply;filter:contrast(1.3) brightness(1.05)" onerror="this.replaceWith(document.createTextNode(&quot;Signature link saved; preview unavailable — check the Drive link is public.&quot;))">':''; },

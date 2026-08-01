@@ -740,24 +740,37 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         this.students = studs || [];
       } catch (e) { this.students = []; console.warn('RC students load failed', e); }
       this.renderCols();
-      // V6.7: poll until the signed-in role actually resolves (slow mobile networks
-      // can take many seconds), re-rendering the moment it is known. This guarantees
-      // an ADMIN always ends up with the full column editor and a teacher always
-      // ends up with the read-only list — regardless of load order.
-      clearInterval(this._colsRoleTimer); let _tries=0;
-      this._colsRoleTimer=setInterval(()=>{ _tries++;
-        if(this._roleKnown()||_tries>40){ clearInterval(this._colsRoleTimer); try{this.renderCols();}catch(_){} }
+      // V6.8: watch for role CHANGES (not just first resolution) for ~30s.
+      // A stale cached role (e.g. an earlier Staff session on the same device)
+      // could otherwise freeze the wrong view; now the moment the authoritative
+      // role differs from what was last rendered, the card re-renders.
+      clearInterval(this._colsRoleTimer); let _ticks=0;
+      this._lastRoleRendered=this._roleNow();
+      this._colsRoleTimer=setInterval(()=>{ _ticks++;
+        const r=this._roleNow();
+        if(r!==this._lastRoleRendered){ this._lastRoleRendered=r; try{this.renderCols();}catch(_){}}
+        if(_ticks>40) clearInterval(this._colsRoleTimer);
       },750);
       await this.renderGrid();
     },
 
     _roleNow(){
-      let r=(window.SC_PROFILE||{}).role||(window.App&&App.currentRole)||document.body.dataset.currentRole||'';
-      if(!r||r==='guest'||r==='demo'){ try{ const c=JSON.parse(localStorage.getItem('sc-cached-profile')||'null'); if(c&&c.role) r=c.role; }catch(_){}}
-      return String(r||'').toLowerCase();
+      // Priority: LIVE resolved profile → App runtime role → body dataset → cached profile.
+      let r=(window.SC_PROFILE||{}).role||'';
+      if(!r||['guest','demo','pending'].includes(String(r).toLowerCase())) r=(window.App&&App.currentRole)||'';
+      if(!r||['guest','demo','pending'].includes(String(r).toLowerCase())) r=document.body.dataset.currentRole||'';
+      if(!r||['guest','demo','pending'].includes(String(r).toLowerCase())){ try{ const c=JSON.parse(localStorage.getItem('sc-cached-profile')||'null'); if(c&&c.role) r=c.role; }catch(_){}}
+      return String(r||'').toLowerCase().replace(/\s+/g,'_');
     },
     _roleKnown(){ const r=this._roleNow(); return !!r && !['guest','demo','pending'].includes(r); },
-    _isAdminNow(){ return !!(window.App && App.isAdminRole && App.isAdminRole(this._roleNow())); },
+    _isAdminNow(){
+      const r=this._roleNow();
+      // Self-contained admin-tier list (matches DB is_admin) — never depends on
+      // app.js having finished loading.
+      const ADMIN=['super_admin','superadmin','admin','administrator','owner','director','principal','proprietor','head_teacher','headteacher','bursar'];
+      if(window.App&&App.isAdminRole){ try{ return !!App.isAdminRole(r); }catch(_){}}
+      return ADMIN.includes(r);
+    },
     renderCols(){
       /* V6.5 FIX #1 (root cause): this card is injected AFTER app.js applied the
          data-admin-only visibility pass, so the token never hid it for teachers.
@@ -769,7 +782,9 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         return;
       }
       if(!this._isAdminNow()){
+        this._lastRoleRendered=this._roleNow();
         $('rc-cols').innerHTML = '<div class="card"><h3>Report-card columns (read-only)</h3>'+
+          '<div style="float:right"><button class="btn btn-sm btn-outline" onclick="RC._lastRoleRendered=null;RC.renderCols()">↻ Re-check my role</button></div>'+
           '<p style="color:var(--gray-600);font-size:.86rem">These assessment columns were designed by the administrator. As a teacher you <b>enter scores</b> into them in the Subject Broadsheet grid below — you cannot add, rename or delete columns. Need a new column? Ask an admin.</p>'+
           '<div class="table-wrap"><table><thead><tr><th>Name</th><th>Max mark</th><th>Source</th></tr></thead><tbody>'+
           (this.cols.length?this.cols.map(c=>'<tr><td>'+esc(c.name)+'</td><td>'+c.max_mark+'</td><td>'+(c.source==='cbt'?'<span class="badge">From CBT</span>':'Manual')+'</td></tr>').join(''):'<tr><td colspan="3">No columns yet — the administrator has not designed the report template for this class/term.</td></tr>')+
