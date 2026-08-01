@@ -101,3 +101,30 @@ const DemoSampleData = {
   }
 };
 window.DemoSampleData = DemoSampleData;
+
+/* DEMO AUTO-FILL: on demo deployments the sample loader runs by itself the
+   moment an admin/teacher opens any page — prospects never see empty pages.
+   Idempotent (tables with data are skipped) + once-per-day per device. */
+(function(){
+  let tries=0;
+  const tick=async()=>{
+    tries++;
+    try{
+      const demo=window.SCHOOL&&window.SCHOOL.demo&&window.SCHOOL.demo.enabled;
+      if(!demo){return;}
+      const p=window.SC_PROFILE;
+      if(!p||!p.role){ if(tries<25) setTimeout(tick,1200); return; }
+      const role=String(p.role).toLowerCase();
+      if(!['super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher'].includes(role)) return;
+      const KEY='sc-demo-autofill-at';
+      if(Date.now()-(+localStorage.getItem(KEY)||0) < 24*3600000) return;
+      localStorage.setItem(KEY,String(Date.now()));
+      const log=await DemoSampleData.run();
+      const added=log.filter(x=>x.includes('✅')).length;
+      if(added&&typeof toast==='function') toast('🎬 Demo sample data topped up automatically ('+added+' section(s)). Every page now has live rows.','info',7000);
+    }catch(e){ console.warn('[DemoSampleData] auto-fill skipped:',e.message||e); }
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(tick,2500));
+  else setTimeout(tick,2500);
+})();
+
