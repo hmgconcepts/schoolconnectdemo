@@ -368,14 +368,38 @@ const App = {
           return;
         }
       } catch(_) { /* RPC not installed yet — fail open, RLS still guards report data */ }
-      /* Report-card lock (portal still open): on any results/report page,
-         show the school's BOLD message where the data would have been.
-         RLS already blanks the underlying rows server-side. */
+      /* V10.8 (#1): REPORT LOCK NOW BLOCKS THE WHOLE PAGE. V10.7 showed a
+         banner above the page; the user rightly demands that a report-locked
+         family must not see ANYTHING on results/report pages at all. When
+         EVERY linked student is report-locked, the page body is replaced by
+         the bold lock screen (nothing loads underneath — same treatment as
+         the portal lock). When only SOME children are locked (parent with a
+         mixed set), the page stays usable for the unlocked children and each
+         locked child gets the bold per-child notice; RLS keeps the locked
+         children's rows blanked server-side either way. */
       try {
         const g2 = window.SC_ACCESS_STATE || {};
-        const lockedKids = (g2.students || []).filter(k => k.report_locked);
+        const kids = g2.students || [];
+        const lockedKids = kids.filter(k => k.report_locked);
         const page = (location.pathname.split('/').pop() || '').replace('.html','');
-        if (lockedKids.length && ['report-cards','results','academic-records','transcripts','academic_records'].includes(page)) {
+        const reportPages = ['report-cards','results','academic-records','academic_records','transcripts','broadsheet','report_comments'];
+        if (lockedKids.length && reportPages.includes(page)) {
+          if (kids.length && lockedKids.length === kids.length) {
+            // ALL students locked → full-page bold lock screen; nothing renders.
+            document.body.innerHTML =
+              '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#fef2f2">' +
+              '<div style="max-width:560px;text-align:center;background:#fff;padding:44px 36px;border-radius:20px;border:3px solid #dc2626;box-shadow:0 24px 60px rgba(153,27,27,.25)">' +
+              '<div style="font-size:3rem">🔒</div>' +
+              '<h1 style="color:#b91c1c;margin:10px 0;font-size:1.45rem;letter-spacing:-.01em">Report card unavailable</h1>' +
+              '<p style="font-size:1.05rem;font-weight:800;color:#7f1d1d;background:#fee2e2;border:1px solid #fca5a5;border-radius:12px;padding:14px 16px;line-height:1.6">' + esc(lockedKids[0].report_lock_message || 'Your report card is temporarily unavailable because of outstanding school fees. Please contact the school bursary to resolve this.') + '</p>' +
+              '<p style="color:#64748b;font-size:.9rem;margin-top:14px">Once the matter is resolved, the school will restore access immediately.</p>' +
+              '<div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
+              ((window.SCHOOL && (SCHOOL.phone || SCHOOL.email)) ? '<a class="btn btn-primary" href="' + (SCHOOL.phone ? 'tel:' + esc(SCHOOL.phone) : 'mailto:' + esc(SCHOOL.email)) + '">📞 Contact the school</a>' : '') +
+              '<a class="btn btn-outline" href="dashboard.html">← Back to dashboard</a>' +
+              '</div></div></div>';
+            return;
+          }
+          // Mixed set: bold per-child notice, page continues for unlocked children.
           const content = document.querySelector('.app-content');
           if (content && !document.getElementById('sc-report-lock-banner')) {
             const div = document.createElement('div');
@@ -383,10 +407,19 @@ const App = {
             div.innerHTML = lockedKids.map(k =>
               '<div style="background:#fef2f2;border:3px solid #dc2626;border-radius:14px;padding:18px 20px;margin-bottom:14px">' +
               '<div style="font-size:1.05rem;font-weight:900;color:#b91c1c">🔒 Report card unavailable — ' + esc(k.name || 'student') + '</div>' +
-              '<p style="margin:8px 0 0;font-weight:800;color:#7f1d1d;line-height:1.6">' + esc(k.report_lock_message || 'Your report card is temporarily unavailable because of outstanding school fees. Please contact the school bursary to resolve this.') + '</p>' +
+              '<p style="margin:8px 0 0;font-weight:800;color:#7f1d1d;line-height:1.6">' + esc(k.report_lock_message || 'This report card is temporarily unavailable because of outstanding school fees. Please contact the school bursary to resolve this.') + '</p>' +
               '</div>').join('');
             content.insertBefore(div, content.firstChild);
           }
+        }
+        /* Nav honesty: when every linked student is report-locked, hide the
+           report-page links from the sidebar so the family is not invited
+           into pages that will refuse them. */
+        if (kids.length && lockedKids.length === kids.length) {
+          document.querySelectorAll('.app-nav a').forEach(a => {
+            const href = (a.getAttribute('href') || '').replace('.html','');
+            if (reportPages.includes(href)) a.style.display = 'none';
+          });
         }
       } catch(_) {}
     }

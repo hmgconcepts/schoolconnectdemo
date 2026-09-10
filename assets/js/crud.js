@@ -1921,6 +1921,16 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     }
     if (res.error) { toast(res.error.message, 'danger', 6000); return; }
     if (window.App && App.logActivity) App.logActivity(id ? 'update' : 'create', d.table, id || d.title);
+    /* V10.8 (#2): EDITING a fee payment (wrong amount, wrong student) goes
+       stale on every later row of that student's term. Recompute the whole
+       term ledger after any fee save — inserts included (a backdated entry
+       shifts later snapshots too). The DB trigger mirrors this server-side;
+       calling it here too gives instant feedback + a corrected outstanding
+       figure, and warns clearly on databases missing v10.8. */
+    if (d.table === 'fee_payments' && payload.student_id) {
+      const rr = await this.recomputeFeeLedger(payload.student_id, payload.term, payload.session);
+      if (rr && rr.ok && Number(rr.rows||0) > 0) toast('🧮 Ledger recomputed for the term: ' + rr.rows + ' payment row(s) re-aligned · grand total ' + Number(rr.grand_total||0).toLocaleString() + ' · outstanding ' + Number(rr.outstanding||0).toLocaleString() + '.', 'info', 9000);
+    }
     try {
       if (!id && window.Notifications && Notifications.create) {
         if (moduleId === 'announcements') {
@@ -2204,11 +2214,44 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
       return;
     }
     if (!confirm('Delete this ' + d.title.toLowerCase() + '?')) return;
+    /* V10.8 (#2): deleting a FEE PAYMENT must heal the student's whole term
+       ledger (later rows snapshot totals/balances that go stale). Capture the
+       row context BEFORE the delete, then call the recompute RPC afterwards —
+       the DB trigger does this too, but the explicit call also works on
+       databases that have not run v10.8, degrades with clear guidance, and
+       lets us show the corrected outstanding figure in the toast. */
+    let feeCtx = null;
+    if (d.table === 'fee_payments') {
+      try { const fr = await this.sb.from('fee_payments').select('student_id,term,session,amount_paid,student_name').eq('id', id).maybeSingle(); feeCtx = fr.data || null; } catch(_) {}
+      if (feeCtx && !confirm('Delete this payment of ' + Number(feeCtx.amount_paid||0).toLocaleString() + (feeCtx.student_name ? ' for ' + feeCtx.student_name : '') + '?\n\nThe platform will automatically RECOMPUTE every remaining payment row for this student\'s term — totals, balances, receipts and the family dashboard all adjust instantly.')) return;
+    }
     const { data:deleted,error } = await this.sb.from(d.table).delete().eq('id', id).select('id');
     if (error) { toast(error.message, 'danger'); return; }if(!deleted||!deleted.length){toast('Nothing was deleted. You may not own this subject/class record.','danger',7000);return;}
     this.invalidateTableCaches(moduleId);
     if(window.App&&App.logActivity)App.logActivity('delete',d.table,id);
+    if (feeCtx && feeCtx.student_id) {
+      const rr = await this.recomputeFeeLedger(feeCtx.student_id, feeCtx.term, feeCtx.session);
+      toast('🧾 Payment deleted' + (rr && rr.ok ? ' — ledger recomputed: ' + Number(rr.rows||0) + ' row(s) adjusted, outstanding now ' + Number(rr.outstanding||0).toLocaleString() + '.' : ' — ledger recompute pending (see warning).'), 'success', 9000);
+      await this.renderList(moduleId);
+      return;
+    }
     toast('Deleted permanently and verified.','success');await this.renderList(moduleId);
+  },
+
+  /* V10.8 (#2): recompute a student's fee snapshots for one term. Server-side
+     RPC preferred (atomic, matches the DB trigger); clear guidance if the
+     database has not run v10.8 yet. */
+  async recomputeFeeLedger(studentId, term, session) {
+    if (!this.sb || !studentId) return null;
+    try {
+      const r = await this.sb.rpc('sc_recompute_fee_rows', { p_student: studentId, p_term: term || '', p_session: session || '' });
+      if (r.error) {
+        if (/sc_recompute_fee_rows|schema cache|function/i.test(String(r.error.message||''))) toast('Ledger self-healing needs a one-time database update — admin: run database/v10.8-fee-recompute.sql in Supabase. Until then, re-check this student\'s other payment rows manually.', 'warning', 12000);
+        else toast(r.error.message, 'warning', 8000);
+        return null;
+      }
+      return r.data || null;
+    } catch(_) { return null; }
   },
 
   /* Issue 10: bulk-import student birthdays from the students table */
