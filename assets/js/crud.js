@@ -919,7 +919,31 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     // FIX V2.1 — Persistent table: never clear existing rows when filtered result is empty.
     // This resolves issue #1 where parent/student pages flashed data then disappeared.
     // Strategy: keep cached HTML or existing DOM, show informative banner above table.
+    /* V10.9 (#1) ROOT-CAUSE FIX (reported: "deleted/edited fee payments still
+       reflect at the student's portal"): this anti-flash persistence KEPT the
+       cached/existing rows whenever the role-filtered list came back EMPTY —
+       which is exactly the state after the bursar deletes a student's only
+       payment row(s). The student then stared at ghost money rows forever.
+       LEDGER-TRUTH modules (fees, online payments, results, report cards)
+       now always render the fresh database truth once the query has
+       SUCCEEDED and the viewer's identity is resolved: empty means empty,
+       and the stale cache entry is destroyed so it can never resurrect.
+       The anti-flash keep only applies while identity is still resolving. */
     if (!filteredData || !filteredData.length) {
+      const LEDGER_TRUTH = ['fees','payments_online','results','report_cards','finance'];
+      const identityReady = !!(window.App && App._roleResolved) || !!(window.SC_PROFILE && SC_PROFILE.role);
+      if (LEDGER_TRUTH.includes(key) && identityReady) {
+        try { sessionStorage.removeItem(cacheKey); } catch(_) {}
+        const wrapT = tableEl.closest('.table-wrap') || tableEl.parentNode;
+        const oldInfo = wrapT ? wrapT.querySelector('.sc-table-persist-info') : null;
+        if (oldInfo) oldInfo.remove();
+        const emptyMsg = (isParent || isStudent)
+          ? 'ℹ️ No records here right now. If a payment or result was corrected by the school, this list updates instantly — what you see IS the current official record.'
+          : 'No records yet.' + (writable ? ' Click “+ Add new”.' : '');
+        tb.innerHTML = '<tr><td colspan="' + (cols.length + (writable ? 1 : 0) + (typeof bulkable!=='undefined'&&bulkable ? 1 : 0)) + '" style="color:var(--gray-500);padding:20px;text-align:center" class="empty-msg">' + emptyMsg + '</td></tr>';
+        try { CRUD.injectTableSearch(moduleId, tableEl, 0); } catch(_) {}
+        return;
+      }
       let cached = null;
       try { cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null'); } catch(_) {}
       const wrap = tableEl.closest('.table-wrap') || tableEl.parentNode;
@@ -1884,6 +1908,30 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     }
 
 
+    /* V10.9 (#1): PRE-SAVE ENTRY GUARDS for fee payments — catch the classic
+       recording errors BEFORE they enter the ledger:
+         a) zero / negative / non-numeric amount → hard block;
+         b) same student + same amount already recorded TODAY → double-entry
+            confirm (the #1 real-world duplicate: a double-click or a retry
+            after a slow save);
+         c) implausibly large amount (>10× the current bill) → typo confirm. */
+    if (!id && d.table === 'fee_payments') {
+      const amt = Number(payload.amount_paid);
+      if (!isFinite(amt) || amt <= 0) { toast('⛔ Amount paid must be a positive number. To CORRECT an earlier entry, edit or delete that entry instead of adding a negative one — the ledger recomputes itself.', 'warning', 10000); return; }
+      if (payload.student_id) {
+        try {
+          const today = new Date(); today.setHours(0,0,0,0);
+          const dup = await this.sb.from('fee_payments').select('id,amount_paid,created_at').eq('student_id', payload.student_id).eq('amount_paid', amt).gte('created_at', today.toISOString()).limit(3);
+          if (!dup.error && dup.data && dup.data.length) {
+            if (!confirm('⚠️ POSSIBLE DOUBLE ENTRY\n\nA payment of ' + amt.toLocaleString() + ' for this SAME student was already recorded TODAY (' + dup.data.length + ' time' + (dup.data.length>1?'s':'') + ').\n\nRecord it again anyway?')) return;
+          }
+          const tot = Number(payload.fee_total || 0);
+          if (tot > 0 && amt > tot * 10) {
+            if (!confirm('⚠️ UNUSUALLY LARGE AMOUNT\n\nYou are recording ' + amt.toLocaleString() + ' against a bill of ' + tot.toLocaleString() + ' — more than 10× the total due. Is this a typo (extra zero)?\n\nSave anyway?')) return;
+          }
+        } catch(_) {}
+      }
+    }
     // parent_child duplicate guard: show a friendly message instead of Supabase unique constraint error.
     if (!id && d.table === 'parent_child' && payload.parent_id && payload.student_id) {
       const ex = await this.sb.from('parent_child').select('id').eq('parent_id', payload.parent_id).eq('student_id', payload.student_id).maybeSingle().then(r=>r, ()=>({data:null}));
@@ -1930,6 +1978,12 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     if (d.table === 'fee_payments' && payload.student_id) {
       const rr = await this.recomputeFeeLedger(payload.student_id, payload.term, payload.session);
       if (rr && rr.ok && Number(rr.rows||0) > 0) toast('🧮 Ledger recomputed for the term: ' + rr.rows + ' payment row(s) re-aligned · grand total ' + Number(rr.grand_total||0).toLocaleString() + ' · outstanding ' + Number(rr.outstanding||0).toLocaleString() + '.', 'info', 9000);
+      /* V10.9 (#1): post-save overpayment sentinel — if this entry pushed the
+         term's paid ABOVE the reconstructed bill, tell the bursar right now
+         (wrong amount / wrong student), not at end-of-term reconciliation. */
+      if (rr && rr.ok && Number(rr.grand_total||0) > 0 && Number(rr.paid||0) > Number(rr.grand_total||0)) {
+        toast('⚠️ OVERPAYMENT: this student\'s recorded payments (' + Number(rr.paid).toLocaleString() + ') now EXCEED the term bill (' + Number(rr.grand_total).toLocaleString() + ') by ' + (Number(rr.paid)-Number(rr.grand_total)).toLocaleString() + '. Check for a typo or a payment recorded on the wrong student — the 🩺 Fee Ledger Doctor lists it too.', 'warning', 14000);
+      }
     }
     try {
       if (!id && window.Notifications && Notifications.create) {

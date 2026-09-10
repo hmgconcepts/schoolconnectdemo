@@ -106,21 +106,56 @@
   var NG_WORDS = {
     yo: ['àti','ti','tí','ni','ní','wọn','won','ṣe','se','jẹ́','jẹ','kí','sí','fún','fun','náà','naa','pẹ̀lú','pelu','bí','gbogbo','ọmọ','omo','ilé','ile','kan','yìí','yii','rẹ̀','inú','inu','lati','láti','wo','ki','je','si'],
     ig: ['na','ya','ndị','ndi','nke','ihe','onye','dị','di','bụ','bu','ka','ma','gị','gi','anyị','anyi','ha','n\u0300','ga','no','n\u2019ime','nime','otu','ụlọ','ulo','mmadụ','mmadu','oge','ego','aha','kedu','gịnị','gini'],
-    ha: ['da','ba','ne','ce','ta','ya','su','shi','ita','wanda','wadda','amma','don','domin','cikin','daga','zuwa','kuma','wannan','wancan','yana','tana','suna','mutum','mutane','gida','ruwa','abinci','me','mene','yaya','nawa']
+    ha: ['da','ba','ne','ce','ta','ya','su','shi','ita','wanda','wadda','amma','don','domin','cikin','daga','zuwa','kuma','wannan','wancan','yana','tana','suna','mutum','mutane','gida','ruwa','abinci','me','mene','yaya','nawa'],
+    /* V10.9: world languages — French first (requested), then the majors. */
+    fr: ['le','la','les','un','une','des','est','sont','dans','pour','avec','que','qui','quelle','quel','quels','pas','vous','nous','ils','elles','être','avoir','fait','faire','plus','mais','comme','tout','cette','ces','son','ses','aussi','entre','réponse','question','choisissez','suivant','suivante','parmi'],
+    es: ['el','la','los','las','un','una','es','son','en','para','con','que','qué','cuál','no','usted','nosotros','ellos','ser','estar','hace','más','pero','como','todo','esta','este','estos','también','entre','respuesta','pregunta','elige','siguiente'],
+    pt: ['o','a','os','as','um','uma','é','são','em','para','com','que','qual','não','você','nós','eles','ser','estar','faz','mais','mas','como','tudo','esta','este','também','entre','resposta','pergunta','escolha','seguinte'],
+    de: ['der','die','das','ein','eine','ist','sind','in','für','mit','dass','welche','welcher','nicht','sie','wir','sein','haben','macht','mehr','aber','wie','alle','diese','dieser','auch','zwischen','antwort','frage','wählen','folgende'],
+    it: ['il','lo','la','gli','le','un','una','è','sono','in','per','con','che','quale','non','voi','noi','essere','avere','fa','più','ma','come','tutto','questa','questo','anche','tra','risposta','domanda','scegli','seguente'],
+    sw: ['na','ya','wa','ni','kwa','katika','hii','hiyo','ambayo','gani','si','sisi','wao','kuwa','ina','zaidi','lakini','kama','yote','pia','kati','jibu','swali','chagua','ifuatayo']
   };
   var NG_CHARS = {
     yo: /[ẹọṣ]|[àáèéìíòóùú][\u0300-\u036f]?|ǹ|ń/g,
     ig: /[ịọụṅ]/g,
-    ha: /[ɓɗƙ]|ʼy|'y/g
+    ha: /[ɓɗƙ]|ʼy|'y/g,
+    fr: /[àâçéèêëîïôùûüÿœ]|«|»/g,
+    es: /[áéíóúñü]|¿|¡/g,
+    pt: /[ãõáâàéêíóôúç]/g,
+    de: /[äöüß]/g,
+    it: /[àèéìòù]/g,
+    sw: null
   };
-  function detectLang(text) {
+  /* Non-Latin scripts identify their language family DETERMINISTICALLY —
+     one regex hit is certainty, no scoring needed. */
+  var SCRIPTS = [
+    [/[\u0600-\u06FF\u0750-\u077F]/, 'ar'],   // Arabic
+    [/[\u3040-\u30FF]/, 'ja'],                  // Kana FIRST: Japanese mixes Kanji(Han)+Kana, Chinese never uses Kana
+    [/[\u4E00-\u9FFF\u3400-\u4DBF]/, 'zh'],   // Han (Chinese)
+    [/[\uAC00-\uD7AF]/, 'ko'],                  // Hangul (Korean)
+    [/[\u0400-\u04FF]/, 'ru'],                  // Cyrillic
+    [/[\u0900-\u097F]/, 'hi'],                  // Devanagari (Hindi)
+    [/[\u0590-\u05FF]/, 'he'],                  // Hebrew
+    [/[\u0E00-\u0E7F]/, 'th'],                  // Thai
+    [/[\u0370-\u03FF]/, 'el'],                  // Greek
+    [/[\u0980-\u09FF]/, 'bn'],                  // Bengali
+    [/[\u0B80-\u0BFF]/, 'ta']                   // Tamil
+  ];
+    function detectLang(text) {
     var t = String(text || '');
     if (!t.trim()) return 'en';
+    /* 1. Non-Latin scripts: deterministic. */
+    for (var si = 0; si < SCRIPTS.length; si++) {
+      if (SCRIPTS[si][0].test(t)) return SCRIPTS[si][1];
+    }
+    /* 2. Latin languages: orthography (×3) + stop-word (×2) scoring. */
     var lower = t.toLowerCase();
-    var scores = { yo: 0, ig: 0, ha: 0 };
+    var scores = {};
+    Object.keys(NG_WORDS).forEach(function (L) { scores[L] = 0; });
     Object.keys(NG_CHARS).forEach(function (L) {
+      if (!NG_CHARS[L]) return;
       var m = lower.match(NG_CHARS[L]);
-      if (m) scores[L] += m.length * 3;              // orthography is strong evidence
+      if (m) scores[L] += m.length * 3;
     });
     var words = lower.replace(/[^\p{L}\p{M}''\u2019\s-]/gu, ' ').split(/\s+/).filter(Boolean);
     var total = words.length || 1;
@@ -129,12 +164,12 @@
       words.forEach(function (wd) { if (NG_WORDS[L].indexOf(wd) > -1) hits++; });
       scores[L] += hits * 2;
     });
-    var best = 'en', bestScore = Math.max(2, total * 0.08);  // threshold: real signal, not one stray word
+    var best = 'en', bestScore = Math.max(2, total * 0.08);
     Object.keys(scores).forEach(function (L) { if (scores[L] > bestScore) { best = L; bestScore = scores[L]; } });
     return best;
   }
-  var LANG_LABEL = { en: 'English', yo: 'Yorùbá', ig: 'Igbo', ha: 'Hausa' };
-  var LANG_TAG   = { en: 'en-US', yo: 'yo-NG', ig: 'ig-NG', ha: 'ha-NG' };
+  var LANG_LABEL = { en:'English', yo:'Yorùbá', ig:'Igbo', ha:'Hausa', fr:'Français', es:'Español', pt:'Português', de:'Deutsch', it:'Italiano', sw:'Kiswahili', ar:'العربية (Arabic)', zh:'中文 (Chinese)', ja:'日本語 (Japanese)', ko:'한국어 (Korean)', ru:'Русский (Russian)', hi:'हिन्दी (Hindi)', he:'עברית (Hebrew)', th:'ไทย (Thai)', el:'Ελληνικά (Greek)', bn:'বাংলা (Bengali)', ta:'தமிழ் (Tamil)' };
+  var LANG_TAG   = { en:'en-US', yo:'yo-NG', ig:'ig-NG', ha:'ha-NG', fr:'fr-FR', es:'es-ES', pt:'pt-BR', de:'de-DE', it:'it-IT', sw:'sw-KE', ar:'ar-SA', zh:'zh-CN', ja:'ja-JP', ko:'ko-KR', ru:'ru-RU', hi:'hi-IN', he:'he-IL', th:'th-TH', el:'el-GR', bn:'bn-BD', ta:'ta-IN' };
 
   /* Per-language saved voice choices ride inside prefs.voiceByLang. */
   if (!prefs.voiceByLang || typeof prefs.voiceByLang !== 'object') prefs.voiceByLang = {};
@@ -157,12 +192,20 @@
       var local = m.filter(function (v) { return v.localService; });
       return local[0] || m[0];
     };
-    if (L === 'yo') { var vy = prefer(/^yo(-|_|$)/i) || prefer(/yoruba/i); if (vy) return vy; }
-    if (L === 'ig') { var vi = prefer(/^ig(-|_|$)/i) || prefer(/igbo/i); if (vi) return vi; }
-    if (L === 'ha') { var vh = prefer(/^ha(-|_|$)/i) || prefer(/hausa/i); if (vh) return vh; }
-    // African English handles Nigerian names/tone marks far better than en-US
-    var vng = prefer(/^en[-_](NG|GH|KE|ZA)/i);
-    if (L !== 'en' && vng) return vng;
+    /* 1. Exact language match by BCP-47 prefix (fr → fr-FR, fr-CA…). */
+    if (L !== 'en') {
+      var vx = prefer(new RegExp('^' + L + '(-|_|$)', 'i'));
+      if (vx) return vx;
+      /* 2. Named-voice fallback for languages engines label by name. */
+      var NAMES = { yo:/yoruba/i, ig:/igbo/i, ha:/hausa/i, sw:/swahili/i, zh:/chinese|mandarin/i, ar:/arabic/i, hi:/hindi/i, el:/greek/i, he:/hebrew/i, bn:/bengali/i, ta:/tamil/i };
+      if (NAMES[L]) { var vn = prefer(NAMES[L]); if (vn) return vn; }
+      /* 3. African languages degrade to African English (tone-mark friendly);
+            everything else degrades to any English rather than silence. */
+      if (L === 'yo' || L === 'ig' || L === 'ha' || L === 'sw') {
+        var vng = prefer(/^en[-_](NG|GH|KE|ZA)/i);
+        if (vng) return vng;
+      }
+    }
     var en = voices.filter(function (v) { return /^en(-|_|$)/i.test(v.lang || ''); });
     var pool = en.length ? en : voices;
     var local = pool.filter(function (v) { return v.localService; });
@@ -382,9 +425,10 @@
       '<button type="button" class="tcs-cog" title="Voice settings" aria-label="Voice settings">⚙</button>' +
       '<div class="tcs-panel">' +
         '<label>Language <select class="tcs-lang">' +
-          '<option value="">Auto-detect (English · Yorùbá · Igbo · Hausa)</option>' +
-          '<option value="en">English</option><option value="yo">Yorùbá</option>' +
-          '<option value="ig">Igbo</option><option value="ha">Hausa</option>' +
+          '<option value="">Auto-detect (21 languages)</option>' +
+          Object.keys(LANG_LABEL).map(function (L) {
+            return '<option value="' + L + '">' + LANG_LABEL[L] + '</option>';
+          }).join('') +
         '</select></label>' +
         '<label>Voice <select class="tcs-voice"></select></label>' +
         '<label>Speed <input class="tcs-rate" type="range" min="0.6" max="1.6" step="0.05"></label>' +
@@ -441,7 +485,24 @@
       var samples = {
         yo: 'Báwo ni? Èyí ni bí a ó ṣe ka àwọn ìbéèrè fún ọ. Àṣàyàn A.',
         ig: 'Kedu? Nke a bụ ka a ga-esi gụọra gị ajụjụ ndị ahụ. Nhọrọ A.',
-        ha: 'Sannu! Ga yadda za a karanta muku tambayoyin. Zaɓi na A.'
+        ha: 'Sannu! Ga yadda za a karanta muku tambayoyin. Zaɓi na A.',
+        fr: 'Bonjour ! Voici comment les questions vous seront lues. Option A. La fraction trois x plus six, sur neuf.',
+        es: '¡Hola! Así es como se le leerán las preguntas. Opción A.',
+        pt: 'Olá! É assim que as perguntas serão lidas para você. Opção A.',
+        de: 'Hallo! So werden Ihnen die Fragen vorgelesen. Option A.',
+        it: 'Ciao! Ecco come ti verranno lette le domande. Opzione A.',
+        sw: 'Habari! Hivi ndivyo maswali yatakavyosomwa kwako. Chaguo A.',
+        ar: 'مرحبا! هكذا ستُقرأ الأسئلة لك. الخيار أ.',
+        zh: '你好！这就是为你朗读问题的方式。选项A。',
+        ja: 'こんにちは。このように問題を読み上げます。選択肢A。',
+        ko: '안녕하세요. 이렇게 문제를 읽어 드립니다. 보기 A.',
+        ru: 'Здравствуйте! Вот как вам будут читать вопросы. Вариант А.',
+        hi: 'नमस्ते! प्रश्न आपको इस प्रकार पढ़कर सुनाए जाएँगे। विकल्प A।',
+        he: 'שלום! כך יוקראו לך השאלות. אפשרות א.',
+        th: 'สวัสดี! นี่คือวิธีที่จะอ่านคำถามให้คุณฟัง ตัวเลือก A',
+        el: 'Γεια σας! Έτσι θα σας διαβάζονται οι ερωτήσεις. Επιλογή Α.',
+        bn: 'নমস্কার! এভাবে প্রশ্নগুলো আপনাকে পড়ে শোনানো হবে। বিকল্প A।',
+        ta: 'வணக்கம்! கேள்விகள் இப்படித்தான் உங்களுக்கு வாசிக்கப்படும். விருப்பம் A.'
       };
       speak(samples[L] || 'This is how the questions will be read to you. Option A. The fraction 3 x plus 6, over 9.', L || undefined);
     });
