@@ -116,6 +116,7 @@ textarea.form-input{min-height:80px;resize:vertical}
 <script src="assets/js/cbt-engine.js"></script>
 <script src="assets/js/cbt-types.js"></script>
 <script src="assets/js/cbt-richtext.js"></script>
+<script src="assets/js/cbt-speech.js"></script>
 <script src="assets/js/proctor.js"></script>
 <script>
 /* ===================================================================
@@ -390,6 +391,29 @@ textarea.form-input{min-height:80px;resize:vertical}
 
     this.root().innerHTML = html;
 
+    /* V10.8 (#3): READ-ALOUD (Adewale Classroom parity + Nigerian languages).
+       A 🔊 Read-aloud bar mounts under the exam header: candidate-initiated,
+       per-question, reads question + options via the device's free Web
+       Speech voices (never the answer key), auto-cancels on question change/
+       submit/tab-blur. School Connect extension: Yorùbá, Igbo and Hausa
+       papers are DETECTED from their orthography and read with a matching
+       device voice (or the closest African-English voice, with a tip to
+       install the language pack). Maths is spoken via CBTRich.plain so
+       \\frac{3x+6}{9} reads naturally. */
+    try {
+      if (window.CBTSpeech && CBTSpeech.available()) {
+        CBTSpeech.stop();                       // never let audio leak across questions
+        const card = this.root().querySelector('.card');
+        const anchorEl = card ? card.querySelector('.actions') : null;
+        if (card) {
+          const host = document.createElement('div');
+          host.className = 'sc-speech-host';
+          if (anchorEl) card.insertBefore(host, anchorEl); else card.appendChild(host);
+          CBTSpeech.mount(host, { getQuestion: () => this.qs()[this.idx] });
+        }
+      }
+    } catch(_) {}
+
     /* V10.3: wire the advanced control — restore any saved answer, activate
        drag/chips/word-count behaviour, and stream every change into the
        standard answer store so drafts, palettes and submission all keep
@@ -661,6 +685,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     if (this._done) return;
     this._done = true;
     clearInterval(this.timer);
+    try { if (window.CBTSpeech) CBTSpeech.stop(); } catch(_) {}   /* V10.8: audio never outlives the exam */
     if (this.monitor) try { this.monitor.stop(); } catch (e) {}
     if (window.Proctor && Proctor.active) try { Proctor.stop(); } catch (e) {}
     const graded = (window.CBT && window.CBT.gradeSubmission) ? window.CBT.gradeSubmission(this.data, this.answers) : { score: 0, total: 0, percent: 0, grade: 'F', correct: 0, wrong: 0, skipped: 0 };
