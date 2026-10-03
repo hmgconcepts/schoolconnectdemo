@@ -160,7 +160,10 @@ const CRUD = {
       {key:'title',label:'Title',type:'text',required:true},{key:'description',label:'Description',type:'textarea'},
       {key:'class',label:'Class',type:'ref',refTable:'classes',refValue:'name'},
       {key:'subject',label:'Subject',type:'ref',refTable:'subjects',refValue:'name',refStore:'value'},
-      {key:'due_date',label:'Due date',type:'date'},{key:'drive_link',label:'Drive link',type:'text'}
+      {key:'due_date',label:'Due date',type:'date'},{key:'drive_link',label:'Drive link',type:'text'},
+      {key:'is_cbt',label:'CBT Assignment?',type:'checkbox',adminOnly:true,help:'V12.8: auto-ticked when this assignment is mirrored from a CBT exam (assessment_type=assignment). Clearly differentiates CBT assignments (multiple per term, cumulative) from mid-term CAs and terminal exams.'},
+      {key:'source',label:'Source',type:'select',options:['manual','cbt_assignment','cbt_mirror'],adminOnly:true,help:'V12.8: manual=physical/paper, cbt_assignment=auto-mirrored from CBT assignment exam'},
+      {key:'cbt_exam_id',label:'Linked CBT Exam ID',type:'text',adminOnly:true,help:'V12.8: when is_cbt, stores the cbt_exams.id — scores auto-fill from CBT results when Score class is clicked'}
     ]},
     library: { table:'library', title:'Book', cols:[
       {key:'title',label:'Title',type:'text',required:true},{key:'author',label:'Author',type:'text'},
