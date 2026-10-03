@@ -508,6 +508,20 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         <p style="color:var(--gray-600);margin:6px 0 10px">The Prompt Studio writes a professional prompt that makes any free AI chat produce a <b>ready-to-post assignment brief</b> — task steps, your <b>resource link</b> (Drive/web, links only), submission expectations and a <b>marks rubric a parent can read</b> — plus an optional self-check quiz you can import on the CBT page.</p>
         <a class="btn btn-sm btn-primary" href="cbt-prompts.html?pack=assignment">📝 Open the Assignment prompt pack</a>
       </div>
+      <!-- V12.8 Assignment + CBT Assignment Bridge — robust differentiation and cumulative collation -->
+      <div class="card" style="margin-bottom:16px;border:2px solid #10b981;background:#f0fdf4" data-staff-only>
+        <h3 style="margin-top:0">🖥️ CBT Assignments — Auto-fill from CBT Results (V12.8)</h3>
+        <p style="color:#475569;margin-top:4px;line-height:1.7"><b>Blueprint:</b> Unlike mid-term (CA1/CA2) and terminal exams which are done ONCE per term, assignments are given MORE THAN ONCE. This page already collates individual assignments cumulatively → push to Assignment column. Now <b>CBT assignments</b> work the SAME way: when you give a CBT assignment (Assessment type = Assignment), its scores auto-fill when you click <b>Score class</b> for THAT CBT assignment, accumulating with other assignments → push to Assignment column at end of term.</p>
+        <div style="background:#fff;border:1px solid #86efac;border-radius:10px;padding:10px;margin:8px 0">
+          <b>Clear differentiation (unambiguous):</b><br>
+          <span style="display:inline-block;margin:2px 6px"><span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac">🟢 CBT Assignment</span> = Homework — multiple per term, cumulative → Assignment column</span>
+          <span style="display:inline-block;margin:2px 6px"><span class="badge" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd">🔵 Mid-term CA</span> = CA1/CA2 — once per term → CA columns</span>
+          <span style="display:inline-block;margin:2px 6px"><span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5">🔴 Terminal Exam</span> = Exam — once per term → Exam column</span>
+          <span style="display:inline-block;margin:2px 6px"><span class="badge" style="background:#f3e8ff;color:#6b21a8;border:1px solid #c4b5fd">🟣 Project</span> / <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">🟡 Quiz</span> / 🟠 Practical = other purposes</span>
+        </div>
+        <div id="ap-cbt-list"><span class="pulse">Loading CBT assignments…</span></div>
+      </div>
+
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
         <button class="btn btn-primary" onclick="CRUD.openForm('assignments')" data-staff-only>+ Add new</button>
         <button class="btn btn-outline" onclick="CRUD.renderList('assignments')">↻ Refresh</button>
@@ -578,6 +592,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <script src="assets/js/super.js"></script>
 <script src="assets/js/enterprise.js"></script>
 <script src="assets/js/crud.js"></script>
+<script src="assets/js/assignment-cbt.js"></script>
 <script src="assets/js/report-engine.js"></script>
 <script src="assets/js/analytics.js"></script>
 <script src="assets/js/app.js"></script>
