@@ -157,13 +157,15 @@ const CRUD = {
       {key:'teacher',label:'Teacher',type:'ref',refTable:'staff',refValue:'full_name',refStore:'value'}
     ]},
     assignments: { table:'assignments', title:'Assignment', cols:[
-      {key:'title',label:'Title',type:'text',required:true},{key:'description',label:'Description',type:'textarea'},
-      {key:'class',label:'Class',type:'ref',refTable:'classes',refValue:'name'},
-      {key:'subject',label:'Subject',type:'ref',refTable:'subjects',refValue:'name',refStore:'value'},
-      {key:'due_date',label:'Due date',type:'date'},{key:'drive_link',label:'Drive link / CBT link',type:'text',help:'For physical assignments: paste Drive link. For CBT assignments: auto-filled as ./cbt-exam.html?code=CODE — students click to take it.'},
-      {key:'is_cbt',label:'CBT Assignment? (auto-managed)',type:'checkbox',adminOnly:true,readonly:true,help:'V12.8-12.9: auto-ticked when mirrored from CBT assignment exam. Clearly differentiates 🟢 CBT assignments (multiple per term, cumulative) from 🔵 Mid-term CAs and 🔴 Terminal exams. Do not tick manually — set via CBT page.'},
-      {key:'source',label:'Source (auto-managed)',type:'select',options:['manual','cbt_assignment','cbt_mirror'],adminOnly:true,readonly:true,help:'V12.9: manual=physical/paper, cbt_assignment=auto-mirrored from CBT. Auto-filled, not for manual editing.'},
-      {key:'cbt_exam_id',label:'Linked CBT Exam ID (auto-managed)',type:'text',adminOnly:true,readonly:true,help:'V12.9: auto-filled with cbt_exams.id when is_cbt. Link is not redundant — it powers auto-fill of scores when Score class is clicked. Students use drive_link to take exam.'}
+      {key:'title',label:'Title',type:'text',required:true,help:'Assignment title — e.g., Homework 1: Algebra, Essay: My Holiday. For CBT assignments, auto-filled from CBT exam title.'},
+      {key:'description',label:'Description',type:'textarea',help:'Brief task description for students. For CBT assignments, auto-filled with purpose and instructions.'},
+      {key:'class',label:'Class',type:'ref',refTable:'classes',refValue:'name',required:true},
+      {key:'subject',label:'Subject',type:'ref',refTable:'subjects',refValue:'name',refStore:'value',required:true},
+      {key:'due_date',label:'Due date',type:'date',required:true},
+      {key:'drive_link',label:'Drive link / CBT link',type:'text',help:'For physical assignments: paste Google Drive link to resources (optional). For CBT assignments: auto-filled as ./cbt-exam.html?code=CODE — students click to take it. Auto-managed for CBT.'},
+      {key:'is_cbt',label:'CBT Assignment? (auto-managed)',type:'checkbox',adminOnly:true,readonly:true,form:false,list:true,help:'V12.8-12.9: auto-ticked when mirrored from CBT assignment exam. Clearly differentiates 🟢 CBT assignments (multiple per term, cumulative) from 🔵 Mid-term CAs and 🔴 Terminal exams. Do not tick manually — set via CBT page. Hidden from Add new form because CBT assignments auto-fill from CBT page.'},
+      {key:'source',label:'Source (auto-managed)',type:'select',options:['manual','cbt_assignment','cbt_mirror'],adminOnly:true,readonly:true,form:false,list:false,help:'V12.9: manual=physical/paper, cbt_assignment=auto-mirrored from CBT. Auto-filled, not for manual editing. Hidden from Add new — not needed, auto-managed.'},
+      {key:'cbt_exam_id',label:'Linked CBT Exam ID (auto-managed)',type:'text',adminOnly:true,readonly:true,form:false,list:false,help:'V12.9: auto-filled with cbt_exams.id when is_cbt. Powers auto-fill of scores when Score class clicked. Not redundant — enables multiple CBT assignments per term to accumulate separately. Hidden from Add new form.'}
     ]},
     library: { table:'library', title:'Book', cols:[
       {key:'title',label:'Title',type:'text',required:true},{key:'author',label:'Author',type:'text'},
@@ -1017,9 +1019,16 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
         const nv = k2 => Number(row[k2]) || 0;
         v = Math.max(0, (nv('basic')+nv('allowances')+nv('bonus')+nv('overtime')) - (nv('tax')+nv('pension')+nv('loan_deduction')+nv('other_deductions')+nv('deductions')));
       }
-      if (c.type === 'checkbox') v = v ? '✓' : '';
+      // V12.9: assignments is_cbt badge — clear differentiation
+      if (c.key === 'is_cbt'){
+        v = v ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac">🟢 CBT Assignment</span>' : '<span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0">📄 Physical</span>';
+      } else if (c.type === 'checkbox') v = v ? '✓' : '';
       if (c.type === 'multiref' && Array.isArray(v)) v = v.join(', ');
       if (v && (c.type === 'date' || c.type === 'datetime' || /(^|_)(date|dob|created_at|issued_on|due_date|ref_date)$/i.test(c.key))) v = CRUD.formatDate(v);
+      // V12.9: is_cbt badge should render as HTML, not escaped
+      if (c.key === 'is_cbt'){
+        return '<td>'+String(v||'')+'</td>';
+      }
       // Issue 11: render link columns as image/video thumbnails when possible.
       if (v && isLinkCol(c.key) && window.Super && Super.media) {
         const k = Super.media.kind(String(v));
@@ -1434,6 +1443,9 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     const getVal = (k) => k.indexOf('data.') === 0 ? ((row.data || {})[k.slice(5)]) : row[k];
     const fields = [];
     for (const c of d.cols) {
+      // V12.9: auto-managed fields (is_cbt, source, cbt_exam_id) should NOT appear in Add new form — they are auto-filled via CBT page trigger
+      // Only needed fields (Title, Description, Class, Subject, Due date, Drive link) are shown for manual assignments
+      if (c.form === false) continue;
       // V6.3: columns marked adminOnly are hidden from non-admin users entirely
       // (e.g. leave-request status — only admin approves/rejects; RLS enforces it too).
       if (c.adminOnly && !(window.App && App.isOwnerRole && App.isOwnerRole((window.SC_PROFILE||{}).role))) continue;

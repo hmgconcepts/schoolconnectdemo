@@ -337,14 +337,19 @@ AssignmentCBT.patchAP = function(){
   const origScoreModal=AP.scoreModal;
   AP.scoreModal=async function(assignmentId){
     if(!window.sb){ toast('Database not configured','warning'); return; }
+    // V12.9: handle virtual CBT assignments first (not yet in assignments table)
+    if(String(assignmentId).startsWith('virtual-')){
+      const realCbtId=String(assignmentId).replace('virtual-','');
+      if(realCbtId) return await AssignmentCBT.uiScoreCBT(realCbtId);
+    }
     try{
       const {data:ass}=await sb.from('assignments').select('id,title,class,subject,cbt_exam_id,is_cbt,source').eq('id', assignmentId).maybeSingle();
       if(ass && (ass.is_cbt || ass.cbt_exam_id)){
-        let realCbtId=ass.cbt_exam_id;
-        if(!realCbtId && String(assignmentId).startsWith('virtual-')) realCbtId=String(assignmentId).replace('virtual-','');
+        const realCbtId=ass.cbt_exam_id;
         if(realCbtId) return await AssignmentCBT.uiScoreCBT(realCbtId);
       }
     }catch(_){}
+    // Physical assignment — manual entry for kind/max/scores
     return await origScoreModal.call(AP, assignmentId);
   };
 
