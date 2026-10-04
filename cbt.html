@@ -585,19 +585,39 @@ window.CBTUI = {
     const help=document.getElementById('ex-type-help');
     if(!help) return;
     const t=String(val||'').toLowerCase();
-    if(t==='assignment') help.innerHTML='<b>🟢 Assignment / Homework:</b> Multiple per term, cumulatively collated. When you create this, it auto-appears in <b>Assignments page</b> → Score class auto-fills from CBT results → accumulates → push to Assignment column.';
+    if(t==='assignment') help.innerHTML='<b>🟢 Assignment / Homework:</b> Multiple per term, cumulatively collated. When you create this, it auto-appears in <b>Assignments page</b> for every student of that class with auto-filled link — students click to take it. Score class auto-fills kind/max/scores from CBT results → accumulates → push to Assignment column.';
     else if(t==='ca' || t==='test') help.innerHTML='<b>🔵 Mid-term CA/Test:</b> Once per term (CA1/CA2). Scores pushed to CA1/CA2 columns via Report Cards → Bulk Push CBT.';
     else if(t==='exam') help.innerHTML='<b>🔴 Terminal Exam:</b> Once per term. Scores pushed to Exam column.';
     else help.innerHTML='<b>'+this._purposeLabel(val)+':</b> Other purpose — project/quiz/practical. Can be mapped to any report column.';
+    // V12.9: auto-select Assignment column when assignment type chosen
+    try{
+      const sel=document.getElementById('ex-col');
+      if(sel && t==='assignment'){
+        for(let i=0;i<sel.options.length;i++){
+          const opt=sel.options[i];
+          if(/assignment/i.test(opt.textContent||opt.value)){ sel.selectedIndex=i; const maxEl=document.getElementById('ex-max'); if(maxEl) maxEl.value=Number(opt.dataset.max||10); break; }
+        }
+      }
+    }catch(_){}
   },
   onEditTypeChange(val){
     const help=document.getElementById('ed-type-help');
     if(!help) return;
     const t=String(val||'').toLowerCase();
-    if(t==='assignment') help.innerHTML='<b>🟢 Assignment / Homework:</b> Multiple per term, cumulative → Assignments page auto-fills, Score class auto-fills scores. Changing to this will auto-mirror into Assignments.';
+    if(t==='assignment') help.innerHTML='<b>🟢 Assignment / Homework:</b> Multiple per term, cumulative → Assignments page auto-fills for every student with link, Score class auto-fills kind/max/scores from CBT results. Changing to this will auto-mirror into Assignments with link.';
     else if(t==='ca' || t==='test') help.innerHTML='<b>🔵 Mid-term CA/Test:</b> Once per term → CA columns. Changing from assignment will remove its Assignment mirror.';
     else if(t==='exam') help.innerHTML='<b>🔴 Terminal Exam:</b> Once → Exam column.';
     else help.innerHTML='<b>'+this._purposeLabel(val)+':</b> Other purpose.';
+    // V12.9: auto-select Assignment column in edit when assignment chosen
+    try{
+      const sel=document.getElementById('ed-col');
+      if(sel && t==='assignment'){
+        for(let i=0;i<sel.options.length;i++){
+          const opt=sel.options[i];
+          if(/assignment/i.test(opt.textContent||opt.value)){ sel.selectedIndex=i; const maxEl=document.getElementById('ed-max'); if(maxEl) maxEl.value=Number(opt.dataset.max||10); break; }
+        }
+      }
+    }catch(_){}
   },
   canManageExam(e){ const r=String((window.App&&App.currentRole)||(window.SC_PROFILE&&SC_PROFILE.role)||'').toLowerCase(); const admin=['super_admin','admin','administrator','owner','director','principal','proprietor','head_teacher','bursar']; return admin.includes(r) || (['staff','teacher'].includes(r) && e && (!e.teacher_id || e.teacher_id === (window.SC_PROFILE&&SC_PROFILE.id))); },
   async refresh(){
