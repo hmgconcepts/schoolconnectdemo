@@ -1039,6 +1039,12 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     }).join('') + (!writable ? '' : (row._ghost ?
       '<td><span class="badge" style="background:#fef9c3;color:#a16207" title="Built-in demo preview — load the real sample data from Admin Data to edit">🎬 sample</span></td>' :
       '<td style="white-space:nowrap">' +
+        // V12.10: assignments — student Take assignment button for every assignment in table (admin has Score, student has Take)
+        (moduleId === 'assignments' ? 
+          (row.is_cbt || row.cbt_exam_id ? 
+            '<a class="btn btn-sm btn-primary ap-take-cbt" href="'+(row.drive_link||'./cbt-exam.html?code='+ (row.cbt_exam_id||'') )+'" target="_blank" title="Take this CBT assignment — auto-marked, multiple per term cumulative">🖥️ Take Assignment</a> ' : 
+            (row.drive_link ? '<a class="btn btn-sm btn-outline" href="'+row.drive_link+'" target="_blank" title="View assignment resources">🔗 View Assignment</a> ' : '<span class="badge">📄 Physical</span> ')
+          ) : '') +
         (moduleId === 'students' ? '<a class="btn btn-sm btn-primary" href="student-profile.html?student=' + row.id + '">Dashboard</a> ' : '') +
         /* V10.7 (#6): one-click fee-discipline locks — admin tier only. 🔓/🔒
            toggles the whole portal for the student+parents; 🧾 toggles just
