@@ -160,10 +160,10 @@ const CRUD = {
       {key:'title',label:'Title',type:'text',required:true},{key:'description',label:'Description',type:'textarea'},
       {key:'class',label:'Class',type:'ref',refTable:'classes',refValue:'name'},
       {key:'subject',label:'Subject',type:'ref',refTable:'subjects',refValue:'name',refStore:'value'},
-      {key:'due_date',label:'Due date',type:'date'},{key:'drive_link',label:'Drive link',type:'text'},
-      {key:'is_cbt',label:'CBT Assignment?',type:'checkbox',adminOnly:true,help:'V12.8: auto-ticked when this assignment is mirrored from a CBT exam (assessment_type=assignment). Clearly differentiates CBT assignments (multiple per term, cumulative) from mid-term CAs and terminal exams.'},
-      {key:'source',label:'Source',type:'select',options:['manual','cbt_assignment','cbt_mirror'],adminOnly:true,help:'V12.8: manual=physical/paper, cbt_assignment=auto-mirrored from CBT assignment exam'},
-      {key:'cbt_exam_id',label:'Linked CBT Exam ID',type:'text',adminOnly:true,help:'V12.8: when is_cbt, stores the cbt_exams.id — scores auto-fill from CBT results when Score class is clicked'}
+      {key:'due_date',label:'Due date',type:'date'},{key:'drive_link',label:'Drive link / CBT link',type:'text',help:'For physical assignments: paste Drive link. For CBT assignments: auto-filled as ./cbt-exam.html?code=CODE — students click to take it.'},
+      {key:'is_cbt',label:'CBT Assignment? (auto-managed)',type:'checkbox',adminOnly:true,readonly:true,help:'V12.8-12.9: auto-ticked when mirrored from CBT assignment exam. Clearly differentiates 🟢 CBT assignments (multiple per term, cumulative) from 🔵 Mid-term CAs and 🔴 Terminal exams. Do not tick manually — set via CBT page.'},
+      {key:'source',label:'Source (auto-managed)',type:'select',options:['manual','cbt_assignment','cbt_mirror'],adminOnly:true,readonly:true,help:'V12.9: manual=physical/paper, cbt_assignment=auto-mirrored from CBT. Auto-filled, not for manual editing.'},
+      {key:'cbt_exam_id',label:'Linked CBT Exam ID (auto-managed)',type:'text',adminOnly:true,readonly:true,help:'V12.9: auto-filled with cbt_exams.id when is_cbt. Link is not redundant — it powers auto-fill of scores when Score class is clicked. Students use drive_link to take exam.'}
     ]},
     library: { table:'library', title:'Book', cols:[
       {key:'title',label:'Title',type:'text',required:true},{key:'author',label:'Author',type:'text'},
