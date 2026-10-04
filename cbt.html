@@ -590,6 +590,15 @@ window.CBTUI = {
     else if(t==='exam') help.innerHTML='<b>🔴 Terminal Exam:</b> Once per term. Scores pushed to Exam column.';
     else help.innerHTML='<b>'+this._purposeLabel(val)+':</b> Other purpose — project/quiz/practical. Can be mapped to any report column.';
   },
+  onEditTypeChange(val){
+    const help=document.getElementById('ed-type-help');
+    if(!help) return;
+    const t=String(val||'').toLowerCase();
+    if(t==='assignment') help.innerHTML='<b>🟢 Assignment / Homework:</b> Multiple per term, cumulative → Assignments page auto-fills, Score class auto-fills scores. Changing to this will auto-mirror into Assignments.';
+    else if(t==='ca' || t==='test') help.innerHTML='<b>🔵 Mid-term CA/Test:</b> Once per term → CA columns. Changing from assignment will remove its Assignment mirror.';
+    else if(t==='exam') help.innerHTML='<b>🔴 Terminal Exam:</b> Once → Exam column.';
+    else help.innerHTML='<b>'+this._purposeLabel(val)+':</b> Other purpose.';
+  },
   canManageExam(e){ const r=String((window.App&&App.currentRole)||(window.SC_PROFILE&&SC_PROFILE.role)||'').toLowerCase(); const admin=['super_admin','admin','administrator','owner','director','principal','proprietor','head_teacher','bursar']; return admin.includes(r) || (['staff','teacher'].includes(r) && e && (!e.teacher_id || e.teacher_id === (window.SC_PROFILE&&SC_PROFILE.id))); },
   async refresh(){
     const box = document.getElementById('cbt-list');
@@ -832,7 +841,7 @@ window.CBTUI = {
         <div class="form-group"><label>Class *</label><select class="form-select" id="ed-class" onchange="CBTUI.refreshEditReportColumns()">${opts(this._classes,e.class,'select class')}</select></div>
         <div class="form-group"><label>Term *</label><select class="form-select" id="ed-term" onchange="CBTUI.refreshEditReportColumns()">${opts(this._terms,e.term,'select term')}</select></div>
         <div class="form-group"><label>Session *</label><select class="form-select" id="ed-session" onchange="CBTUI.refreshEditReportColumns()">${opts(this._sessions,e.session,'select session')}</select></div>
-        <div class="form-group"><label>Assessment type</label><select class="form-select" id="ed-type"><option value="exam">🔴 Terminal Exam (once per term → Exam column)</option><option value="test">🔵 Mid-term Test</option><option value="ca">🔵 Mid-term CA (CA1/CA2)</option><option value="assignment">🟢 Assignment / Homework (multiple per term, cumulative → Assignment column)</option><option value="project">🟣 Project</option><option value="quiz">🟡 Quiz</option><option value="practical">🟠 Practical</option></select></div>
+        <div class="form-group"><label>Assessment type — purpose (clear differentiation)</label><select class="form-select" id="ed-type" onchange="if(window.CBTUI) CBTUI.onEditTypeChange(this.value)">${['exam','test','ca','assignment','project','quiz','practical'].map(x=>{const labels={exam:'🔴 Terminal Exam (once per term → Exam column)',test:'🔵 Mid-term Test (once → CA column)',ca:'🔵 Mid-term CA (CA1/CA2, once)',assignment:'🟢 Assignment / Homework (multiple per term, cumulative → Assignment column)',project:'🟣 Project (other)',quiz:'🟡 Quiz (other)',practical:'🟠 Practical (other)'};return '<option value="'+x+'" '+(String(e.assessment_type||'exam').toLowerCase()===x?'selected':'')+'>'+labels[x]+'</option>';}).join('')}</select><div id="ed-type-help" style="font-size:.82rem;color:#475569;margin-top:6px"></div></div>
         <div class="form-group"><label>Candidate mode</label><select class="form-select" id="ed-mode"><option value="registered" ${e.exam_mode!=='open'?'selected':''}>Registered students</option><option value="open" ${e.exam_mode==='open'?'selected':''}>Open / anonymous</option></select></div>
         <div class="form-group"><label>Report-card destination</label><select class="form-select" id="ed-col" onchange="CBTUI.syncEditMax()"></select><small>Loaded from Report Card columns for the selected class/term/session.</small></div>
         <div class="form-group"><label>Maximum report contribution</label><input class="form-input" type="number" id="ed-max" value="${Number(e.max_score||0)}" min="0" step="0.5" readonly><small>Automatically follows the selected report column.</small></div>
