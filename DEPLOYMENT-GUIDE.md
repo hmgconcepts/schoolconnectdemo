@@ -144,3 +144,36 @@ After deployment, add `https://YOUR-DOMAIN/change-password.html?recovery=1` to S
 
 ## V5.6.1 complete schema / CBT / demo SQL repair
 Run the full updated `database/complete-schema.sql`; it now includes all V5.1–V5.6.1 SQL, the open/multi-subject unassigned-record repair, Lagos daily fees, CBT reset and teacher RLS. Do not run any focused SQL afterward. The demo seed `exam_id` ambiguity is fixed; run demo users/seed only in the demo project.
+
+## V12.10 Assignment + CBT Bridge — Final Fixes (this build)
+
+This build implements the blueprint you requested for assignments:
+
+**Differentiation (clear, unambiguous):**
+- 🟢 CBT Assignment / Homework = multiple per term, cumulative → Assignment column (Assignments page)
+- 🔵 Mid-term CA/Test = once per term → CA1/CA2 columns (Report Cards → Bulk Push CBT)
+- 🔴 Terminal Exam = once per term → Exam column
+- Other = Project/Quiz/Practical
+
+**How it works (robust, all-inclusive, self-contained, seamless):**
+
+1. **Teacher creates CBT assignment:** CBT → + New Exam → Assessment type = 🟢 Assignment / Homework (multiple per term, cumulative → Assignment column) → set Class/Subject/Term/Session → create. DB trigger `trg_cbt_assignment_mirror` auto-creates assignment mirror in `assignments` table with `cbt_exam_id`, `is_cbt=true`, `source='cbt_assignment'`, `drive_link='./cbt-exam.html?code=CODE'` — so it appears in Assignments page for every student of that class with auto-filled Take link.
+
+2. **Student takes assignment:** Assignments page → student dashboard → table shows every assignment (physical 📄 + CBT 🟢) with **Take Assignment** button (for CBT, links to `./cbt-exam.html?code=CODE`; for physical, View link). Student clicks Take → does CBT assignment → result saved in `cbt_results`.
+
+3. **Teacher scores class (auto-fill):** Assignments → pick Class + Subject → see 🖥️ CBT Assignments section → for THAT CBT assignment click **Score class (auto-fill)** → modal auto-fills:
+   - Assignment kind (auto-filled) = CBT assignment (auto-marked) disabled
+   - Maximum mark (auto-filled) = from CBT exam max_score readonly
+   - Scores = from CBT results (robust matching by admission_no, full_name, no-space, fuzzy) for every student of that class
+   - Teacher can adjust before saving → Save → scores saved into `assignment_scores` with `cbt_exam_id` + `assignment_id`, accumulating cumulatively (each CBT assignment separate column)
+
+4. **Cumulative collation:** Assignments → 📋 Term score sheet shows each assignment (physical + each CBT assignment) as separate column, Total accumulates ALL → Push totals → Report card Assignment column (scaled to column max). At end of term, Assignment column contains cumulative % of ALL assignments (physical + multiple CBT).
+
+**For physical assignments:** Score class shows manual entry for kind/max/scores (teacher manually enters).
+
+**Add new form clarity:** Assignments → Add Physical Assignment → form shows only needed fields: Title, Description, Class, Subject, Due date, Drive link / CBT link. Auto-managed fields `is_cbt`, `source`, `cbt_exam_id` are `form:false, readonly:true, adminOnly` — hidden from Add new, not confusing. `cbt_exam_id` is NOT redundant — it enables multiple CBT assignments per term to accumulate separately and powers auto-fill.
+
+**SQL to run:** `database/v12.10-final-fixes.sql` once (or complete-schema.sql — idempotent, contains V12.8-12.10). Backfills drive_link for existing CBT mirrors.
+
+**SW:** `sc-builder-v12.10-20260925-17` / `sc-client-v12.10-20260925-17` — includes `assignment-cbt.js` for offline.
+

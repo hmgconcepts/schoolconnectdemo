@@ -673,42 +673,80 @@ const AP={
     }catch(_){box.innerHTML='';}
   },
   async pullCBT(){
+    // V12.10: robust pull — uses new bridge RPC sc_assignment_cbt_sync_all, handles multiple CBT assignments per term cumulatively
+    // Clearly differentiated: only 🟢 CBT Assignments (assessment_type=assignment) are pulled, not 🔵 Mid-term CAs or 🔴 Terminal Exams
     const cls=(document.getElementById('ap-class')||{}).value,sub=(document.getElementById('ap-subject')||{}).value;
     if(!cls||!sub){toast('Pick a class AND subject first.','warning');return;}
     let cp={};try{cp=await (window.CRUD&&CRUD.currentPeriod?CRUD.currentPeriod():{});}catch(_){ }
-    let eq=sb.from('cbt_exams').select('id,title,class,subject,term,session,assessment_type,max_score').eq('class',cls).eq('subject',sub);
-    if(cp.term)eq=eq.eq('term',cp.term);
+    // Try server RPC first (atomic, handles multiple per term)
+    try{
+      if(window.AssignmentCBT){
+        const res=await AssignmentCBT.syncAll({class:cls, subject:sub, term:cp.term||null, session:cp.session||null});
+        toast(`🖥️ Pulled ${res.total_scores_synced||0} score(s) from ${res.exams_synced||0} CBT assignment(s) — each assignment separate, accumulating cumulatively.`, 'success', 9000);
+        this.matrix(); this.totals();
+        if(window.AssignmentCBT) AssignmentCBT.renderCBTSection();
+        return;
+      }
+      const {data, error}=await sb.rpc('sc_assignment_cbt_sync_all',{p_class:cls, p_subject:sub, p_term:cp.term||null, p_session:cp.session||null});
+      if(!error && data && data.ok){
+        toast(`🖥️ Synced ${data.total_scores_synced||0} score(s) from ${data.exams_synced||0} CBT assignment(s) — cumulative collation.`, 'success', 9000);
+        this.matrix(); this.totals();
+        return;
+      }
+    }catch(e){ console.warn('RPC syncAll failed, fallback to client', e.message); }
+    // Client fallback: exact assignment type only (clear differentiation)
+    let eq=sb.from('cbt_exams').select('id,title,class,subject,term,session,assessment_type,max_score,code').eq('class',cls).eq('subject',sub).eq('is_archived', false);
+    if(cp.term) eq=eq.eq('term',cp.term);
     const er=await eq.limit(200);
     if(er.error){toast(er.error.message,'danger');return;}
-    const exams=(er.data||[]).filter(e=>/assign|homework|home work/i.test(String(e.assessment_type||'')+String(e.title||'')));
-    if(!exams.length){toast('No CBT ASSIGNMENTS found for '+cls+' · '+sub+' this term. Tip: put the word "Assignment" in the CBT title or assessment type, then pull again.','info',9000);return;}
+    const exams=(er.data||[]).filter(e=>String(e.assessment_type||'').toLowerCase()==='assignment');
+    if(!exams.length){toast('No 🟢 CBT ASSIGNMENTS found for '+cls+' · '+sub+' this term. Differentiation: only assessment_type=Assignment are pulled here (multiple per term, cumulative). Mid-term CAs (🔵) and Terminal Exams (🔴) are pushed via Report Cards → Bulk Push CBT. Create assignment on CBT page → type Assignment.','info',9000);return;}
     const rr=await sb.from('cbt_results').select('*').in('exam_id',exams.map(e=>e.id)).limit(5000);
     if(rr.error){toast(rr.error.message,'danger');return;}
     const studs=(await sb.from('students').select('id,full_name,admission_no').eq('class',cls)).data||[];
-    const byName=new Map(studs.map(s0=>[String(s0.full_name||'').toLowerCase(),s0]));
+    const norm=s=> String(s||'').trim().toLowerCase();
+    const byAdm=new Map(studs.map(s=>[norm(s.admission_no), s]).filter(k=>k[0]));
+    const byName=new Map(studs.map(s=>[norm(s.full_name), s]).filter(k=>k[0]));
     let rows=[];
     (rr.data||[]).forEach(x=>{
-      const st=byName.get(String(x.student_name||'').toLowerCase());
+      let st = byAdm.get(norm(x.student_id_ref)) || byName.get(norm(x.student_name));
       const ex=exams.find(e=>e.id===x.exam_id)||{};
-      if(!st)return;
-      rows.push({assignment_id:null,student_id:st.id,student_id_ref:st.admission_no||'',student_name:st.full_name,
-        class:cls,subject:sub,term:cp.term||null,session:cp.session||null,
-        score:Number(x.score)||0,max_score:Number(x.total||ex.max_score)||10,recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
+      if(!st) return;
+      rows.push({assignment_id:null, cbt_exam_id:ex.id, student_id:st.id, student_id_ref:st.admission_no||x.student_id_ref||'', student_name:st.full_name, class:cls, subject:sub, term:cp.term||null, session:cp.session||null, score:Number(x.score)||0, max_score:Number(x.total||ex.max_score)||10, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
     });
-    if(!rows.length){toast('CBT assignments exist but no student results yet.','info');return;}
+    if(!rows.length){toast('CBT assignments exist but no student results yet. Students must take them via Take link.','info');return;}
     let saved=0;
     for(const row of rows){
-      const {error}=await sb.from('assignment_scores').insert(row);
-      if(!error)saved++;
+      const {error}=await sb.from('assignment_scores').upsert(row,{onConflict:'cbt_exam_id,student_id'});
+      if(!error) saved++;
     }
-    toast('🖥️ Pulled '+saved+' CBT assignment result(s) — they now sit beside the physical assignments in the score sheet.',saved?'success':'warning',9000);
-    if(saved)this.matrix(); /* V9.2 (issue 4): physical + CBT together, no extra click */
+    toast('🖥️ Pulled '+saved+' CBT assignment result(s) — each assignment separate column, accumulating cumulatively for Assignment column.',saved?'success':'warning',9000);
+    if(saved){ this.matrix(); this.totals(); if(window.AssignmentCBT) AssignmentCBT.renderCBTSection(); }
   },
   async scoreModal(assignmentId){
+    // V12.10: robust handling — for CBT assignments, auto-fill scores/kind/max from CBT results; for physical, manual entry
+    // This fixes: "when score class is clicked, scores should be automatically filled and also assignment kind and max mark should be auto-filled"
     if(!window.sb){toast('Database not configured','warning');return;}
-    const a=(await sb.from('assignments').select('*').eq('id',assignmentId).maybeSingle()).data;
+    // Handle virtual CBT assignments (not yet in assignments table)
+    if(String(assignmentId).startsWith('virtual-')){
+      const realCbtId=String(assignmentId).replace('virtual-','');
+      if(window.AssignmentCBT) return await AssignmentCBT.uiScoreCBT(realCbtId);
+    }
+    const {data:a} = await sb.from('assignments').select('*').eq('id',assignmentId).maybeSingle();
     if(!a){toast('Assignment not found','warning');return;}
-    /* V8.6 #2: a teacher scores only THEIR OWN assignment; admin scores any. */
+    // If CBT assignment (is_cbt or cbt_exam_id), delegate to auto-fill modal
+    if(a.is_cbt || a.cbt_exam_id){
+      const cbtId = a.cbt_exam_id;
+      if(cbtId && window.AssignmentCBT) return await AssignmentCBT.uiScoreCBT(cbtId);
+      // If cbt_exam_id missing but is_cbt true, try to find linked exam by title/class/subject
+      if(a.is_cbt){
+        try{
+          const {data:ex} = await sb.from('cbt_exams').select('id').eq('class',a.class||'').eq('subject',a.subject||'').eq('title',a.title||'').eq('is_archived', false).limit(1).maybeSingle();
+          if(ex && ex.id && window.AssignmentCBT) return await AssignmentCBT.uiScoreCBT(ex.id);
+        }catch(_){}
+      }
+    }
+    // Physical/manual assignment — manual entry for kind/max/scores (teacher enters)
     const rSc=String((window.App&&App.currentRole)||(window.SC_PROFILE&&SC_PROFILE.role)||'').toLowerCase();
     const isAdminSc=!!(window.App&&App.isAdminRole&&App.isAdminRole(rSc));
     if(!isAdminSc&&a.posted_by&&String(a.posted_by)!==String((window.SC_PROFILE&&SC_PROFILE.id)||'')){toast('This assignment belongs to another teacher — only that teacher or an admin can score it.','warning',7000);return;}
@@ -719,11 +757,12 @@ const AP={
     const prior=new Map(existing.map(x=>[String(x.student_id),x]));
     const maxDefault=10;
     const rows=studs.map(s0=>{const pv=prior.get(String(s0.id));return '<tr data-sid="'+s0.id+'" data-ref="'+AP.esc(s0.admission_no||'')+'" data-name="'+AP.esc(s0.full_name)+'"><td>'+AP.esc(s0.full_name)+'<br><small>'+AP.esc(s0.admission_no||'')+'</small></td><td><input class="form-input ap-sc" type="number" min="0" style="width:90px" value="'+(pv?pv.score:'')+'" placeholder="—"></td></tr>';}).join('');
-    openModal('✍️ Score: '+AP.esc(a.title)+' ('+AP.esc(a.class||'')+' · '+AP.esc(a.subject||'')+')',
-      '<div style="display:flex;gap:12px;flex-wrap:wrap"><div class="form-group"><label>Assignment kind</label><select class="form-select" id="ap-kind" style="width:220px"><option>Written homework</option><option>Class exercise</option><option>Project</option><option>Practical</option><option>Presentation</option><option>Group work</option><option>Reading task</option><option>CBT assignment (auto-marked)</option></select></div>'+
-      '<div class="form-group"><label>Maximum mark for THIS assignment</label><input class="form-input" id="ap-max" type="number" value="'+((existing[0]&&existing[0].max_score)||maxDefault)+'" min="1" style="width:120px"></div></div>'+
-      '<div class="table-wrap" style="max-height:50vh;overflow:auto"><table><thead><tr><th>Student</th><th>Score</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-      '<p style="font-size:.8rem;color:var(--gray-500)">Blank = not submitted (excluded from totals). Saved scores accumulate on the Σ totals below.</p>',
+    openModal('✍️ Score Physical Assignment: '+AP.esc(a.title)+' ('+AP.esc(a.class||'')+' · '+AP.esc(a.subject||'')+') — Manual entry',
+      '<div class="notice" style="background:#fffbeb;border-color:#fcd34d;color:#92400e"><b>📄 Physical/manual assignment</b> — teacher manually enters kind, max and each student\'s score. For 🟢 CBT assignments, scores auto-fill from CBT results (see CBT Assignments section above).</div>'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap"><div class="form-group"><label>Assignment kind (manual)</label><select class="form-select" id="ap-kind" style="width:220px"><option>Written homework</option><option>Class exercise</option><option>Project</option><option>Practical</option><option>Presentation</option><option>Group work</option><option>Reading task</option></select><small>Physical assignments: choose kind manually</small></div>'+
+      '<div class="form-group"><label>Maximum mark for THIS assignment (manual)</label><input class="form-input" id="ap-max" type="number" value="'+((existing[0]&&existing[0].max_score)||maxDefault)+'" min="1" style="width:120px"><small>Physical: enter max manually</small></div></div>'+
+      '<div class="table-wrap" style="max-height:50vh;overflow:auto"><table><thead><tr><th>Student</th><th>Score (manual)</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<p style="font-size:.8rem;color:var(--gray-500)">Blank = not submitted (excluded from totals). Saved scores accumulate cumulatively → push to Assignment column.</p>',
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="AP.saveScores(\''+assignmentId+'\')">💾 Save scores</button>');
     this._ctx={a:a,cp:cp};
   },
@@ -757,7 +796,7 @@ const AP={
     this._totals={list:list,cls:cls,sub:sub,cp:cp};
     box.innerHTML=list.length?'<div class="table-wrap"><table><thead><tr><th>Student</th><th>Assignments scored</th><th>Points</th><th>%</th></tr></thead><tbody>'+list.map(t=>'<tr><td><b>'+AP.esc(t.name)+'</b><br><small>'+AP.esc(t.ref||'')+'</small></td><td>'+t.n+'</td><td>'+t.got+' / '+t.max+'</td><td><b>'+(t.max?Math.round(t.got/t.max*1000)/10:0)+'%</b></td></tr>').join('')+'</tbody></table></div>':'<p style="color:var(--gray-500)">No assignment scores recorded yet for '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+'. Use ✍️ Score class on an assignment above.</p>';
   },
-  /* ==== V9.1 (4f): TERM SCORE SHEET — every assignment as a column ==== */
+  /* ==== V12.10: TERM SCORE SHEET — every assignment (physical + each CBT) as separate column, cumulative ==== */
   async matrix(){
     const cls=(document.getElementById('ap-class')||{}).value,sub=(document.getElementById('ap-subject')||{}).value;
     const box=document.getElementById('ap-totals');
@@ -768,21 +807,53 @@ const AP={
     const r=await q.limit(8000);
     if(r.error){box.innerHTML='<p style="color:#b91c1c">'+AP.esc(r.error.message)+'</p>';return;}
     const scores=r.data||[];
-    if(!scores.length){box.innerHTML='<p style="color:var(--gray-500)">No assignment scores yet for '+AP.esc(cls)+' · '+AP.esc(sub)+' this term.</p>';return;}
-    /* resolve assignment titles */
+    if(!scores.length){box.innerHTML='<p style="color:var(--gray-500)">No assignment scores yet for '+AP.esc(cls)+' · '+AP.esc(sub)+' this term. Use ✍️ Score class on assignments above — CBT assignments auto-fill kind/max/scores.</p>';return;}
+    // Resolve titles for physical assignments and CBT exams
     const aids=[...new Set(scores.map(x=>x.assignment_id).filter(Boolean))];
+    const cbtIds=[...new Set(scores.map(x=>x.cbt_exam_id).filter(Boolean))];
     let titles={};
-    if(aids.length){const ar=await sb.from('assignments').select('id,title,due_date').in('id',aids);(ar.data||[]).forEach(a=>titles[a.id]=a.title||'Assignment');}
-    const colKeys=[...new Set(scores.map(x=>x.assignment_id||'cbt-pull'))];
-    const colLabel=k=>k==='cbt-pull'?'🖥️ CBT assignments':(titles[k]?'📄 '+titles[k]:'📄 Assignment');
-    /* rows: full class register so unscored students are visible too */
+    if(aids.length){
+      const ar=await sb.from('assignments').select('id,title,cbt_exam_id,is_cbt').in('id',aids);
+      (ar.data||[]).forEach(a=>{titles[a.id]= (a.is_cbt? '🖥️ ':'📄 ') + (a.title||'Assignment');});
+    }
+    if(cbtIds.length){
+      const cr=await sb.from('cbt_exams').select('id,code,title').in('id',cbtIds);
+      (cr.data||[]).forEach(c=>{ 
+        titles[c.id]= '🖥️ '+ (c.title||c.code||'CBT Assignment');
+        scores.filter(s=>s.cbt_exam_id===c.id && s.assignment_id).forEach(s=>{ if(!titles[s.assignment_id]) titles[s.assignment_id]=titles[c.id]; });
+      });
+    }
+    // Column keys: each physical assignment_id AND each cbt_exam_id as separate columns (multiple CBT assignments per term)
+    const colKeysSet=new Set();
+    scores.forEach(x=>{ if(x.cbt_exam_id) colKeysSet.add(x.cbt_exam_id); else if(x.assignment_id) colKeysSet.add(x.assignment_id); else colKeysSet.add('orphan'); });
+    const colKeys=[...colKeysSet];
+    const colLabel=k=>{ if(k==='orphan') return '📄 Assignment (legacy)'; return titles[k] || '📄 Assignment'; };
     const studs=(await sb.from('students').select('id,full_name,admission_no').eq('class',cls).order('full_name')).data||[];
-    const byStud={};scores.forEach(x=>{const k=String(x.student_id);(byStud[k]=byStud[k]||{}); const ck=x.assignment_id||'cbt-pull'; (byStud[k][ck]=byStud[k][ck]||{got:0,max:0}); byStud[k][ck].got+=Number(x.score)||0; byStud[k][ck].max+=Number(x.max_score)||0;});
-    let h='<div class="table-wrap" id="ap-matrix-print"><h4 style="margin:6px 0">📋 Term score sheet · '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+(cp.session?' · '+AP.esc(cp.session):'')+'</h4><table><thead><tr><th>Student</th>'+colKeys.map(k=>'<th style="font-size:.75rem">'+AP.esc(colLabel(k)).slice(0,24)+'</th>').join('')+'<th>Total</th><th>%</th></tr></thead><tbody>';
-    studs.forEach(s0=>{const row=byStud[String(s0.id)]||{};let got=0,max=0;
-      h+='<tr><td><b>'+AP.esc(s0.full_name)+'</b><br><small>'+AP.esc(s0.admission_no||'')+'</small></td>'+colKeys.map(k=>{const c=row[k];if(c){got+=c.got;max+=c.max;return '<td>'+c.got+'/'+c.max+'</td>';}return '<td style="color:var(--gray-400)">—</td>';}).join('')+'<td><b>'+got+' / '+max+'</b></td><td><b>'+(max?Math.round(got/max*1000)/10:0)+'%</b></td></tr>';});
-    h+='</tbody></table></div><p style="font-size:.78rem;color:var(--gray-500);margin:6px 0 0">📄 = physical/manual assignment · 🖥️ = auto-marked CBT assignment (via Pull CBT). Both accumulate into the same Total and %.</p><div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="AP.printMatrix()">🖨️ Print score sheet</button><button class="btn btn-outline btn-sm" onclick="AP.exportMatrixCSV()">⬇ CSV</button><button class="btn btn-primary btn-sm" onclick="AP.pushModal()">🚀 Push totals → Report card</button></div>';
-    this._matrix={studs:studs,byStud:byStud,colKeys:colKeys,colLabel:colLabel,cls:cls,sub:sub,cp:cp};
+    const byStud={};
+    scores.forEach(x=>{
+      const sid=String(x.student_id);
+      (byStud[sid]=byStud[sid]||{});
+      const ck=x.cbt_exam_id || x.assignment_id || 'orphan';
+      (byStud[sid][ck]=byStud[sid][ck]||{got:0,max:0,count:0});
+      byStud[sid][ck].got+=Number(x.score)||0;
+      byStud[sid][ck].max+=Number(x.max_score)||0;
+      byStud[sid][ck].count++;
+    });
+    let h='<div class="table-wrap" id="ap-matrix-print"><h4 style="margin:6px 0">📋 Term score sheet · '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+(cp.session?' · '+AP.esc(cp.session):'')+'</h4>';
+    h+='<p style="font-size:.82rem;color:#475569">📄 = Physical/manual (teacher manually enters kind/max/scores) · 🖥️ = CBT Assignment (auto-marked, multiple per term, auto-fills kind/max/scores when Score class clicked). Each column is ONE assignment; Total accumulates ALL → push to Assignment column.</p>';
+    h+='<table><thead><tr><th>Student</th>'+colKeys.map(k=>'<th style="font-size:.72rem;min-width:90px">'+AP.esc(colLabel(k)).slice(0,30)+'</th>').join('')+'<th>Total</th><th>%</th></tr></thead><tbody>';
+    studs.forEach(s0=>{
+      const row=byStud[String(s0.id)]||{};
+      let got=0,max=0;
+      Object.values(row).forEach(c=>{ got+=c.got; max+=c.max; });
+      h+='<tr><td><b>'+AP.esc(s0.full_name)+'</b><br><small>'+AP.esc(s0.admission_no||'')+'</small></td>'+colKeys.map(k=>{
+        const c=row[k];
+        if(c){ return '<td>'+c.got+'/'+c.max+'</td>'; }
+        return '<td style="color:#cbd5e1">—</td>';
+      }).join('')+'<td><b>'+got+' / '+max+'</b></td><td><b>'+(max?Math.round(got/max*1000)/10:0)+'%</b></td></tr>';
+    });
+    h+='</tbody></table></div><p style="font-size:.78rem;color:#64748b;margin:6px 0 0">Each CBT assignment is separate column — e.g., Assignment 1 (CBT), Assignment 2 (CBT), Assignment 3 (physical) — all accumulate cumulatively → Assignment column.</p><div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="AP.printMatrix()">🖨️ Print score sheet</button><button class="btn btn-outline btn-sm" onclick="AP.exportMatrixCSV()">⬇ CSV</button><button class="btn btn-primary btn-sm" onclick="AP.pushModal()">🚀 Push totals → Report card Assignment column</button></div>';
+    this._matrix={studs:studs,byStud:byStud,colKeys:colKeys,colLabel:colLabel,cls:cls,sub:sub,cp:cp, scores:scores};
     box.innerHTML=h;
   },
   printMatrix(){const el=document.getElementById('ap-matrix-print');if(!el){toast('Open the score sheet first.','warning');return;}const w=window.open('','_blank');if(!w){toast('Allow popups to print.','warning');return;}w.document.write('<html><head><title>Assignment Score Sheet</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:10px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #111;padding:5px;text-align:center;font-size:11px}th{background:#e2e8f0}</style></head><body>'+el.innerHTML+'<script>window.onload=()=>window.print()<\/script></body></html>');w.document.close();},
