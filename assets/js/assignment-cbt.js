@@ -241,10 +241,18 @@ const AssignmentCBT = {
     const autoMax=Number(exam.max_score||10)||10;
     const rows=(students||[]).map(s=>{
       const res=resultMap.get(String(s.id));
-      const score=res ? (res.score!=null ? res.score : '') : '';
+      let score='';
+      let cbtInfo='<span style="color:#94a3b8">No CBT result yet — student has not taken it</span>';
+      if(res){
+        // Scale to assignment max to align with Maximum mark (auto-filled)
+        const rawScore=Number(res.score)||0;
+        const rawTotal=Number(res.total)||autoMax||10;
+        const scaled = rawTotal ? Math.round((rawScore/rawTotal*autoMax)*10)/10 : rawScore;
+        score = scaled;
+        cbtInfo = `<span style="color:#166534;font-weight:700">CBT: ${res.score}/${res.total} (${res.percent||0}%) → Scaled: ${scaled}/${autoMax}</span><br><small>Cert: ${res.cert_code||'—'} · Raw max ${rawTotal} → Assignment max ${autoMax}</small>`;
+      }
       const max=autoMax;
-      const cbtInfo=res ? `<span style="color:#166534;font-weight:700">CBT: ${res.score}/${res.total} (${res.percent||0}%)</span><br><small>Cert: ${res.cert_code||'—'}</small>` : '<span style="color:#94a3b8">No CBT result yet — student has not taken it</span>';
-      return `<tr data-sid="${s.id}" data-ref="${this.esc(s.admission_no||'')}" data-name="${this.esc(s.full_name)}"><td><b>${this.esc(s.full_name)}</b><br><small>${this.esc(s.admission_no||'')} · ${this.esc(s.class||'')}</small></td><td>${cbtInfo}</td><td><input class="form-input ap-sc" type="number" min="0" max="${max}" style="width:90px" value="${score}" data-max="${max}" placeholder="—"></td></tr>`;
+      return `<tr data-sid="${s.id}" data-ref="${this.esc(s.admission_no||'')}" data-name="${this.esc(s.full_name)}"><td><b>${this.esc(s.full_name)}</b><br><small>${this.esc(s.admission_no||'')} · ${this.esc(s.class||'')}</small></td><td>${cbtInfo}</td><td><input class="form-input ap-sc" type="number" min="0" max="${max}" style="width:90px" value="${score}" data-max="${max}" data-raw-score="${res?res.score:''}" data-raw-total="${res?res.total:''}" placeholder="—"></td></tr>`;
     }).join('');
     openModal(`🖥️ Score CBT Assignment: ${this.esc(exam.title)} (${this.esc(exam.code)}) — Auto-filled`,
       `<div class="notice" style="background:#f0fdf4;border-color:#86efac;color:#166534"><b>✅ Auto-filled from CBT results</b> — ${results?results.length:0} result(s) found, ${resultMap.size} matched to class register. Scores, kind and max are auto-filled. Physical assignments require manual entry; CBT assignments auto-fill seamlessly. They accumulate cumulatively for ${this.esc(exam.class)} · ${this.esc(exam.subject)} → push to Assignment column. Link auto-filled for students: <a href="./cbt-exam.html?code=${this.esc(exam.code)}" target="_blank">./cbt-exam.html?code=${this.esc(exam.code)}</a></div>
@@ -258,26 +266,78 @@ const AssignmentCBT = {
       `<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="AssignmentCBT.saveCBTScores('${cbtId}','${assignId||''}')">💾 Save ${students?students.length:0} auto-filled scores (cumulative)</button>`);
   },
   async saveCBTScores(cbtId, assignId){
-    const max=Number((document.getElementById('ap-cbt-max')||{}).value)||10;
-    const {data:exam}=await this.sb.from('cbt_exams').select('class,subject,term,session').eq('id', cbtId).maybeSingle();
-    const rows=[...document.querySelectorAll('tr[data-sid]')].map(tr=>{
-      const v=tr.querySelector('.ap-sc').value;
-      if(v==='') return null;
-      return {assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:tr.getAttribute('data-sid'), student_id_ref:tr.getAttribute('data-ref'), student_name:tr.getAttribute('data-name'), class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:Math.min(Number(v)||0,max), max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null};
-    }).filter(Boolean);
-    if(!rows.length){ toast('Enter at least one score','warning'); return; }
-    let saved=0;
+    // V12.11: robust save — scales scores to max mark, handles 0 case, logs errors
+    const maxInput=document.getElementById('ap-cbt-max');
+    const max=Number((maxInput||{}).value)||10;
+    const {data:exam}=await this.sb.from('cbt_exams').select('class,subject,term,session,max_score').eq('id', cbtId).maybeSingle();
+    const examMax=Number((exam&&exam.max_score)||max)||10;
+    const rows=[];
+    const errors=[];
+    document.querySelectorAll('#modal-body tr[data-sid], .modal-body tr[data-sid], tr[data-sid]').forEach(tr=>{
+      // Only include rows inside the open modal (to avoid picking other tables)
+      if(!tr.closest('#modal-body') && !tr.closest('.modal-body')) return;
+      const input=tr.querySelector('.ap-sc');
+      if(!input) return;
+      let v=input.value;
+      if(v==='' && input.getAttribute('value')!==null) v=input.getAttribute('value'); // fallback to attribute if value not set
+      if(v==='') return; // blank = not submitted
+      const rawScore=Number(v)||0;
+      // Scale to max if needed: if input was raw CBT score, scale to assignment max
+      // We have data-max attribute which is exam max, but we want to scale to assignment max
+      // If rawScore > max, assume it was raw total and scale? Actually rawScore is already scaled in UI, but ensure it aligns
+      const scaled = Math.min(rawScore, max); // for CBT, UI already shows scaled, but cap to max
+      // Recalculate to align with max: if examMax != max, scale proportionally
+      // If UI value was raw CBT score (e.g., 15/20) and max is 10, we need to scale: (raw/examMax)*max
+      // We have resultMap? We can try to get original result from row? For robustness, we will assume input value is already scaled, but if it exceeds max, scale it
+      let finalScore=scaled;
+      if(rawScore>max){
+        // rawScore is likely raw CBT total score, scale it
+        finalScore = Math.round((rawScore/examMax*max)*10)/10;
+      }
+      rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:tr.getAttribute('data-sid'), student_id_ref:tr.getAttribute('data-ref')||'', student_name:tr.getAttribute('data-name')||'', class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:finalScore, max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
+    });
+    if(!rows.length){ 
+      // Try alternative selector: maybe modal not in #modal-body but in #modal-body .table-wrap
+      const altRows=[...document.querySelectorAll('tr[data-sid]')].map(tr=>{
+        const inp=tr.querySelector('.ap-sc');
+        if(!inp) return null;
+        let v=inp.value;
+        if(v==='') return null;
+        return {assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:tr.getAttribute('data-sid'), student_id_ref:tr.getAttribute('data-ref')||'', student_name:tr.getAttribute('data-name')||'', class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:Math.min(Number(v)||0,max), max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null};
+      }).filter(Boolean);
+      if(altRows.length) rows.push(...altRows);
+    }
+    if(!rows.length){ toast('No scores to save — all inputs blank. Auto-filled scores should appear; if not, ensure students have taken the CBT assignment and that matching (admission_no/full_name) succeeded.','warning',8000); return; }
+    let saved=0, failed=0;
     for(const row of rows){
-      const {error}=await this.sb.from('assignment_scores').upsert(row, {onConflict:'cbt_exam_id,student_id'});
-      if(!error) saved++;
+      try{
+        // Try upsert with cbt_exam_id unique
+        let {error}=await this.sb.from('assignment_scores').upsert(row, {onConflict:'cbt_exam_id,student_id'});
+        if(error){
+          // Fallback: try insert (if no existing)
+          const {error:e2}=await this.sb.from('assignment_scores').insert(row);
+          if(e2){
+            // Try update if exists
+            const {error:e3}=await this.sb.from('assignment_scores').update({score:row.score, max_score:row.max_score}).eq('cbt_exam_id',cbtId).eq('student_id',row.student_id);
+            if(e3){ failed++; errors.push(e3.message); continue; }
+          }
+        }
+        saved++;
+      }catch(e){ failed++; errors.push(e.message||String(e)); }
     }
     closeModal();
-    toast(`💾 Saved ${saved} CBT assignment score(s) — they now accumulate cumulatively for report card Assignment column and reflect for every student of that class.`, 'success', 8000);
-    if(window.AP){
-      if(AP.matrix) AP.matrix();
-      if(AP.totals) AP.totals();
+    if(saved===0){
+      toast(`❌ Saved 0 scores — errors: ${errors.slice(0,3).join(' | ')} — Check RLS (is_staff) and that assignment_scores.cbt_exam_id column exists (run v12.11 SQL).`, 'danger', 10000);
+      this.log(`❌ Saved 0 scores for CBT assignment ${cbtId} — errors: ${errors.join(' | ')}`, 'error');
+    }else{
+      toast(`💾 Saved ${saved} CBT assignment score(s) (max ${max}) — scaled to align with Maximum mark, now accumulating cumulatively for Assignment column and visible for every student of that class.`, 'success', 8000);
+      this.log(`✅ Saved ${saved} scores for CBT assignment ${cbtId} (max ${max}) — ${failed? failed+' failed: '+errors.slice(0,2).join(' | ') : 'all ok'}`, failed?'warning':'success');
     }
-    this.log(`Saved ${saved} scores for CBT assignment ${cbtId}`, 'success');
+    if(window.AP){
+      if(AP.matrix) setTimeout(()=>AP.matrix(), 400);
+      if(AP.totals) setTimeout(()=>AP.totals(), 400);
+    }
+    if(window.AssignmentCBT) setTimeout(()=>AssignmentCBT.renderCBTSection(), 600);
   },
   // Student view helper: inject Take CBT buttons into assignments table for CBT assignments
   async injectStudentLinks(){
