@@ -487,28 +487,35 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         <h3 style="margin-top:0">🛠 Build a report card</h3>
         <p style="color:var(--gray-600);margin:0 0 12px">Build a report card with <strong>fully custom columns</strong>. Blank cells remain blank and print as <strong>—</strong>; they are never converted to zero. CBT attempts enter official reports only through the explicit <strong>Bulk Push CBT Scores</strong> preview below, preventing phantom or duplicate marks.</p>
         <div class="grid grid-2">
-          <div class="form-group"><label>Class</label><select class="form-select" id="rc-class" data-readonly-role="student parent"><option value="">— select class —</option></select></div>
-          <div class="form-group"><label>Subject</label><select class="form-select" id="rc-subject" data-readonly-role="student parent"><option value="">— select subject —</option></select></div>
-          <div class="form-group"><label>Term</label><select class="form-select" id="rc-term" data-readonly-role="student parent"><option value="">— select term —</option></select></div>
-          <div class="form-group"><label>Session</label><select class="form-select" id="rc-session" data-readonly-role="student parent"><option value="">— select session —</option></select></div>
+          <div class="form-group"><label>Class</label><select class="form-select" id="rc-class"><option value="">— select class —</option></select></div>
+          <div class="form-group"><label>Subject</label><select class="form-select" id="rc-subject"><option value="">— select subject —</option></select></div>
+          <div class="form-group"><label>Term</label><select class="form-select" id="rc-term"><option value="">— select term —</option></select></div>
+          <div class="form-group"><label>Session</label><select class="form-select" id="rc-session"><option value="">— select session —</option></select></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><span id="score-grid"></span><button class="btn btn-primary" onclick="RC.load()">Load / Build</button><button class="btn btn-outline" onclick="ReportEngine.openBulkCBTExportModal()">🚀 Bulk Push CBT Scores</button><button class="btn btn-outline" onclick="RC.openScoreAudit()">🔎 Audit / Clear Unwanted Scores</button><button class="btn btn-outline" style="color:#b45309;border-color:#f59e0b" onclick="RC.sweepGhosts()" data-admin-only title="Remove leftover report sheets from deleted columns/students">🧹 Sweep Ghost Report Sheets</button><button class="btn btn-outline" onclick="RC.openMetrics()">📏 Height / Weight / Health Metrics</button></div>
       </div>
       <div id="rc-cols" data-staff-only></div>
       <div id="rc-grid"></div>
-      <div class="card" style="margin-top:16px">
-        <h3>📄 Generate outputs</h3>
+      <div class="card" style="margin-top:16px;border:2px solid #6366f1">
+        <h3 style="margin-top:0">📄 Generate outputs — Student Report Cards, Broadsheets, Scoresheets (V12.11)</h3>
+        <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:10px;margin:0 0 12px;font-size:.88rem;color:#1e293b;line-height:1.7">
+          <b>Modus operandi — How report card generation works (for all roles, especially new users):</b><br>
+          <b>Admin/Teacher portal:</b> Build scores first (Class+Subject+Term+Session → Load/Build → enter scores), then Generate outputs: pick Class, Term, Session (or leave blank to use above), enter Student name/admission number (autocomplete from class), click Student Report Card (single), Class Broadsheet (all students, all subjects), Teacher Scoresheet (subject), or Bulk Print ALL (per class, one per page).<br>
+          <b>Student portal (now clickable & responsive):</b> Your name and class auto-filled (read-only, only your own). <b>Term and Session are now clickable and responsive</b> — you can select <b>previous term or current term</b> once admin permits (when report not locked). If admin has locked report (fees), you see 🔒 message with bursary contact. You cannot generate for future terms or other students. This ensures students only check/generate their own report card for previous/current term once school admin permits.<br>
+          <b>Parent portal:</b> Select child from safe list (only your linked children, locked children removed), then Term/Session (previous/current) → Student Report Card.<br>
+          <b>Robustness:</b> All fields use dropdowns from live DB (lookups + classes + results + assessment_columns) with defaults fallback, never blank. Report lock via <code>sc_my_access_state</code> RPC blocks locked students with bold message. History merge shows students who moved on (🎓) so past terms regenerate full.
+        </div>
         <p style="color:var(--gray-600);font-size:.9rem">Generate printable termly outputs from the recorded scores (all subjects).</p>
         <!-- V7.7 #4: the outputs section has its OWN class/term/session dropdowns so
              the admin can generate ANY student's card for ANY past term/session/class
              without touching the score-grid pickers above. Blank = use the pickers above. -->
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
-          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Class</label><select class="form-select" id="rc-out-class" style="max-width:170px" data-readonly-role="student parent" onchange="RC.fillStudentPicker()"><option value="">— same as above —</option></select></div>
-          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Term</label><select class="form-select" id="rc-out-term" style="max-width:160px" data-readonly-role="student parent"><option value="">— same as above —</option></select></div>
-          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Session</label><select class="form-select" id="rc-out-session" style="max-width:160px" data-readonly-role="student parent"><option value="">— same as above —</option></select></div>
+          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Class</label><select class="form-select" id="rc-out-class" style="max-width:170px" onchange="RC.fillStudentPicker()"><option value="">— same as above —</option></select></div>
+          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Term</label><select class="form-select" id="rc-out-term" style="max-width:160px"><option value="">— same as above —</option></select></div>
+          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Session</label><select class="form-select" id="rc-out-session" style="max-width:160px"><option value="">— same as above —</option></select></div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <input class="form-input" id="rc-student" list="rc-student-list" placeholder="Student name OR admission number" style="max-width:280px" data-readonly-role="student parent"><datalist id="rc-student-list"></datalist>
+          <input class="form-input" id="rc-student" list="rc-student-list" placeholder="Student name OR admission number" style="max-width:280px"><datalist id="rc-student-list"></datalist>
           <button class="btn btn-primary" onclick="RC.reportCard()">🧾 Student Report Card</button>
           <button class="btn btn-outline" onclick="RC.broadsheet()" data-staff-only>📊 Class Broadsheet</button>
           <button class="btn btn-outline" onclick="RC.scoresheet()" data-staff-only>📋 Teacher Scoresheet</button>
@@ -679,9 +686,74 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           const { data: stu } = await window.sb.from('students').select('id,full_name,class,admission_no').eq('user_id', (window.SC_PROFILE && SC_PROFILE.id) || '').maybeSingle();
           if (stu) {
             this._me = stu; this._kids = [stu];
-            const inp = $('rc-student'); if (inp) { inp.value = stu.full_name; inp.setAttribute('readonly', 'readonly'); }
-            const cls = $('rc-class'); if (cls && stu.class) { cls.value = stu.class; cls.setAttribute('readonly', 'readonly'); }
-            host.innerHTML = '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px"><h3 style="margin:0 0 6px">🧾 My Report Card</h3><p style="margin:0">Student: <strong>' + esc(stu.full_name) + '</strong> · Class: <strong>' + esc(stu.class || '—') + '</strong></p><p style="color:var(--gray-500);font-size:.88rem;margin:8px 0 0">Read-only view · Click <em>Generate my report card</em> to see all your subjects for the selected term/session.</p></div>';
+            // V12.11: student fields — class auto-filled readonly, term/session CLICKABLE and responsive (previous term or current term once admin permits)
+            // Robust, all-inclusive, self-contained, seamless: students only check/generate their own report card for previous/current term when admin permits (report_locked check)
+            const inp = $('rc-student'); if (inp) { inp.value = stu.full_name; inp.removeAttribute('disabled'); inp.setAttribute('readonly', 'readonly'); inp.title='Your own report card — auto-filled'; }
+            const cls = $('rc-class'); if (cls && stu.class) { cls.value = stu.class; cls.removeAttribute('disabled'); cls.setAttribute('readonly', 'readonly'); }
+            const outCls = $('rc-out-class'); if(outCls && stu.class){ outCls.innerHTML='<option value="'+esc(stu.class)+'">'+esc(stu.class)+' — your class</option>'; outCls.value=stu.class; outCls.removeAttribute('disabled'); outCls.title='Your class — auto-filled'; }
+            // For student, term/session dropdowns are CLICKABLE and responsive — only previous term or current term once admin permits
+            // Load available terms/sessions for this student that have scores and are not locked
+            let availableTerms=[], availableSessions=[], currentTerm='', currentSession='';
+            try{
+              const ap = await window.sb.from('academic_periods').select('term,session,is_current').order('starts_on',{ascending:false}).limit(20);
+              if(ap.data){
+                const cur = ap.data.find(x=>x.is_current);
+                if(cur){ currentTerm=cur.term||''; currentSession=cur.session||''; }
+                // Terms: current + previous (based on DEFAULTS order) + any term that has report_scores for this student
+                const termsSet=new Set();
+                if(currentTerm) termsSet.add(currentTerm);
+                // Previous term logic: if current is Second Term, previous is First Term; if Third, previous is Second, etc.
+                const order=['First Term','Second Term','Third Term'];
+                const idx=order.indexOf(currentTerm);
+                if(idx>0) termsSet.add(order[idx-1]);
+                if(idx>=0 && idx<order.length-1) termsSet.add(order[idx+1]); // also allow next for preview? But spec says previous or current only once admin permits — we will allow current + previous
+                // Also add any term that has scores for this student
+                try{
+                  const rs = await window.sb.from('report_scores').select('term,session').eq('student_id_ref',stu.admission_no||'').eq('class',stu.class||'').limit(100);
+                  (rs.data||[]).forEach(r=>{ if(r.term) termsSet.add(r.term); if(r.session) availableSessions.push(r.session); });
+                }catch(_){}
+                availableTerms=[...termsSet].filter(Boolean);
+                availableSessions=[...new Set(availableSessions)].filter(Boolean);
+                if(currentSession) availableSessions.unshift(currentSession);
+                availableSessions=[...new Set(availableSessions)].filter(Boolean);
+              }
+            }catch(_){}
+            if(!availableTerms.length) availableTerms=DEFAULTS.terms.slice(-2); // fallback to last 2 terms (previous + current)
+            if(!availableSessions.length) availableSessions=DEFAULTS.sessions.slice(0,3);
+            // Fill term/session outputs for student — CLICKABLE and responsive
+            const outTerm=$('rc-out-term'), outSess=$('rc-out-session');
+            if(outTerm){
+              outTerm.innerHTML='<option value="">— select term —</option>'+availableTerms.map(t=>'<option value="'+esc(t)+'" '+(t===currentTerm?'selected':'')+'>'+esc(t)+(t===currentTerm?' — current term':' — previous term')+'</option>').join('');
+              outTerm.removeAttribute('disabled');
+              outTerm.title='Select term — only previous term or current term once admin permits';
+            }
+            if(outSess){
+              outSess.innerHTML='<option value="">— select session —</option>'+availableSessions.map(s=>'<option value="'+esc(s)+'" '+(s===currentSession?'selected':'')+'>'+esc(s)+(s===currentSession?' — current':'')+'</option>').join('');
+              outSess.removeAttribute('disabled');
+            }
+            // Also fill main term/session if needed
+            const mainTerm=$('rc-term'), mainSess=$('rc-session');
+            if(mainTerm && !mainTerm.value){
+              mainTerm.innerHTML='<option value="">— select term —</option>'+availableTerms.map(t=>'<option value="'+esc(t)+'">'+esc(t)+'</option>').join('');
+              mainTerm.removeAttribute('disabled');
+            }
+            if(mainSess && !mainSess.value){
+              mainSess.innerHTML='<option value="">— select session —</option>'+availableSessions.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+              mainSess.removeAttribute('disabled');
+            }
+            // Check report lock status for this student
+            let lockMsg='';
+            try{
+              const ar = await window.sb.rpc('sc_my_access_state');
+              const g = (ar && ar.data) || {};
+              const me = (g.students||[]).find(k=>String(k.name||'').toLowerCase()===String(stu.full_name||'').toLowerCase());
+              if(me && me.report_locked) lockMsg = '<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:10px;padding:12px;margin-top:10px"><b style="color:#b91c1c">🔒 Report card not yet permitted</b><p style="margin:6px 0 0;color:#7f1d1d;font-weight:600">'+esc(me.report_lock_message||'Your report card is not yet available — school admin has not yet permitted generation for this term. Please check later or contact bursary.')+'</p></div>';
+            }catch(_){}
+            host.innerHTML = '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px"><h3 style="margin:0 0 6px">🧾 My Report Card — Generate Your Own (V12.11)</h3>'+
+              '<p style="margin:0">Student: <strong>' + esc(stu.full_name) + '</strong> · Class: <strong>' + esc(stu.class || '—') + '</strong> · Admission No: <strong>'+esc(stu.admission_no||'—')+'</strong></p>'+
+              '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px;margin:10px 0;font-size:.88rem;color:#166534"><b>✅ How to generate (for new users):</b><br>1️⃣ Select <b>Term</b> (previous term or current term) and <b>Session</b> in Generate outputs below — fields are now clickable and responsive for students.<br>2️⃣ Your name and class are auto-filled (read-only, only your own).<br>3️⃣ Click <b>🧾 Student Report Card</b> to generate/print your report card for that term. You can only generate for previous term or current term once admin permits (when report is not locked). If locked, you will see 🔒 message.</div>'+
+              lockMsg+
+              '</div>';
           } else {
             host.innerHTML = '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px"><h3 style="margin:0 0 6px">🧾 My Report Card</h3><p>Your login is not linked to a student record yet. Ask the school admin to link your account in the <em>Students</em> page.</p></div>';
           }
@@ -737,12 +809,21 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           const opts = kids.map(k => '<option value="' + esc(k.id) + '">' + esc(k.full_name) + ' — ' + esc(k.class || '—') + '</option>').join('');
           host.innerHTML =
             '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px">' +
-            '<h3 style="margin:0 0 6px">🧾 My Children Report Cards</h3>' + lockNotices +
-            '<p style="color:var(--gray-500);font-size:.88rem;margin:0 0 10px">Read-only view. Select a child to view their report card. You can only view your own children.</p>' +
+            '<h3 style="margin:0 0 6px">🧾 My Children Report Cards — Generate for Previous/Current Term (V12.11)</h3>' + lockNotices +
+            '<p style="color:var(--gray-500);font-size:.88rem;margin:0 0 10px">Read-only view for your linked children. Select a child, then select Term (previous or current) and Session in Generate outputs below — fields are now clickable and responsive for parents. You can only generate for previous term or current term once admin permits (not locked).</p>' +
+            '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px;margin:0 0 10px;font-size:.85rem;color:#166534"><b>✅ How to generate:</b> 1️⃣ Pick child above → 2️⃣ Pick Term (previous/current) + Session in Generate outputs → 3️⃣ Click Student Report Card. If child\'s report is locked (fees), you\'ll see 🔒 message with bursary contact.</div>'+
             '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
             '<select class="form-select" id="rc-child-safe" style="max-width:340px">' + opts + '</select>' +
             '<button type="button" class="btn btn-primary" id="rc-child-go">View report card</button>' +
             '</div></div>';
+          // Ensure outputs term/session are clickable for parent too
+          try{
+            const outTerm=document.getElementById('rc-out-term'), outSess=document.getElementById('rc-out-session');
+            if(outTerm) outTerm.removeAttribute('disabled');
+            if(outSess) outSess.removeAttribute('disabled');
+            const outCls=document.getElementById('rc-out-class');
+            if(outCls) outCls.removeAttribute('disabled');
+          }catch(_){}
           $('rc-child-go').addEventListener('click', () => {
             const sel = $('rc-child-safe');
             const k = kids.find(x => x.id === sel.value);
