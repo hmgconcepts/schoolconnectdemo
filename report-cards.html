@@ -496,6 +496,31 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       </div>
       <div id="rc-cols" data-staff-only></div>
       <div id="rc-grid"></div>
+      <!-- V12.16: One-Click Student Report Access Control -->
+      <div class="card" style="margin-top:16px;border:2px solid #10b981;background:#f0fdf4" data-admin-only id="rc-allow-card">
+        <h3 style="margin-top:0">🔓 Student Report Access Control — One-Click Allow/Disallow (V12.16)</h3>
+        <div style="background:#fff;border:1px solid #86efac;border-radius:10px;padding:10px;margin:0 0 12px;font-size:.88rem;color:#1e293b;line-height:1.7">
+          <b>Modus operandi — Admin one-click allow/disallow (robust, all-inclusive, self-contained, seamless):</b><br>
+          At end of term, admin can <b>allow or disallow</b> students from automatically generating/checking their report cards for that term with <b>just one click</b>. Select Term + Session below, then click <b>✅ Allow Students</b> or <b>🔒 Disallow Students</b>. Status shows instantly.<br>
+          <b>How it works:</b> Sets <code>academic_periods.allow_student_report</code> boolean for that Term/Session (one-click via RPC <code>sc_set_report_generation_allowed</code>). Student portal checks via <code>sc_is_report_generation_allowed</code> — if not allowed, student sees bold "🔒 Report generation not yet allowed by admin — contact school" and cannot generate, even if report not locked by fees. If allowed, student can generate own report (auto-filled name) for previous/current term once admin permits. Also has global toggle (fallback) via <code>school_settings.allow_student_report_global</code>.<br>
+          <b>Robustness:</b> Per-term control overrides global. Admin sees current status per term, can toggle any term/session in one click. Works for parent too (allow_parent_report). RLS: only admin/principal can set.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Term *</label><select class="form-select" id="rc-allow-term" style="max-width:160px"><option value="">— select term —</option></select></div>
+          <div class="form-group" style="margin:0"><label style="font-size:.75rem">Session</label><select class="form-select" id="rc-allow-session" style="max-width:160px"><option value="">— select session —</option></select></div>
+          <button class="btn btn-primary" style="background:#10b981;border-color:#10b981" onclick="RC.setReportAllow(true)">✅ Allow Students (One-Click)</button>
+          <button class="btn btn-outline" style="color:#dc2626;border-color:#fca5a5" onclick="RC.setReportAllow(false)">🔒 Disallow Students (One-Click)</button>
+          <button class="btn btn-outline" onclick="RC.loadReportAllowStatus()">🔄 Check Status</button>
+          <span id="rc-allow-status" style="font-size:.85rem;font-weight:700;color:#065f46"></span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+          <span style="font-weight:800;color:#065f46">Global fallback:</span>
+          <button class="btn btn-sm btn-outline" onclick="RC.setGlobalAllow(true)">🌐 Allow All Terms Globally</button>
+          <button class="btn btn-sm btn-outline" onclick="RC.setGlobalAllow(false)">🌐 Disallow All Globally</button>
+          <span id="rc-allow-global-status" style="font-size:.82rem;color:#475569"></span>
+        </div>
+        <div id="rc-allow-log" style="margin-top:10px;font-size:.82rem;color:#475569"></div>
+      </div>
       <div class="card" style="margin-top:16px;border:2px solid #6366f1">
         <h3 style="margin-top:0">📄 Generate outputs — Student Report Cards, Broadsheets, Scoresheets (V12.14)</h3>
         <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:10px;margin:0 0 12px;font-size:.88rem;color:#1e293b;line-height:1.7">
@@ -665,6 +690,9 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       /* V7.7 #4: fill the Generate-outputs dropdowns too (default = inherit). */
       const fillOut=(id,vals)=>{const el=$(id);if(!el)return;const keep=el.value;el.innerHTML='<option value="">— same as above —</option>'+(vals||[]).map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');if(keep&&(vals||[]).includes(keep))el.value=keep;};
       fillOut('rc-out-class', classes); fillOut('rc-out-term', terms); fillOut('rc-out-session', sessions);
+      // V12.16: also fill allow-control dropdowns
+      const fillAllow=(id,vals)=>{const el=$(id);if(!el)return;const keep=el.value;el.innerHTML='<option value="">— select —</option>'+(vals||[]).map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');if(keep&&(vals||[]).includes(keep))el.value=keep;};
+      fillAllow('rc-allow-term', terms); fillAllow('rc-allow-session', sessions);
     },
 
     async _safe(table, select, extra, limit){
@@ -1375,6 +1403,28 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       /* the student's OWN class beats the grid class when no explicit outputs
          class was chosen — a student from any class generates correctly. */
       const cls = ($('rc-out-class')||{}).value || resolvedClass || ($('rc-class')||{}).value || this.ctx.class || '';
+      // V12.16: One-click allow/disallow check for student/parent generation
+      // Admin can allow/disallow per term with one click — students blocked when not allowed
+      if(this._familyMode && term){
+        try{
+          const {data:allowData, error:allowErr}=await sb.rpc('sc_is_report_generation_allowed',{p_term:term, p_session:ses||null});
+          if(!allowErr && allowData){
+            const isAllowed = allowData.allowed===true || allowData.allowed==='true';
+            const isAdmin = window.App && App.isAdminRole && App.isAdminRole(this._role);
+            if(!isAllowed && !isAdmin){
+              const out = document.getElementById('rc-output') || document.getElementById('rc-out') || null;
+              const msgHtml = '<div style="background:#fef2f2;border:3px solid #dc2626;border-radius:14px;padding:22px;text-align:center">'+
+                '<div style="font-size:2.2rem">🔒</div>'+
+                '<h3 style="color:#b91c1c;margin:8px 0">Report generation not yet allowed by admin — '+esc(term)+(ses?' ('+esc(ses)+')':'')+'</h3>'+
+                '<p style="font-weight:800;color:#7f1d1d;line-height:1.6">Your report card for '+esc(term)+(ses?' '+esc(ses):'')+' is not yet available. The school admin has not yet allowed students to check/generate report cards for this term. Please check later or contact the school admin. Admin can allow with one click in Report Cards → Student Report Access Control.</p>'+
+                '<p style="font-size:.82rem;color:#64748b;margin-top:10px">Source: '+(allowData.source||'default')+' — Allowed: '+(isAllowed?'Yes':'No')+'</p></div>';
+              if(out) out.innerHTML=msgHtml;
+              else toast('🔒 Report generation not yet allowed by admin for '+term+(ses?' '+ses:'')+'. Contact school admin.', 'warning', 10000);
+              return;
+            }
+          }
+        }catch(e){ console.warn('allow check failed', e.message||e); }
+      }
       try {
         ReportEngine.init(window.sb);
         const html=await ReportEngine.renderStudent({student:name,class:cls,term:term,session:ses});
@@ -1439,6 +1489,84 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         const html=await ReportEngine.renderSubject({class:cls,subject:sub,term:term,session:ses});
         ReportEngine.print('Subject Broadsheet — '+sub+' ('+cls+')',html,false);
       } catch(e) { console.error(e); toast('Could not generate subject broadsheet: '+(e.message||e),'danger',8000); }
+    },
+
+    // V12.16: One-click allow/disallow student report generation per term
+    async loadReportAllowStatus(){
+      const statusEl=$('rc-allow-status');
+      const globalEl=$('rc-allow-global-status');
+      const logEl=$('rc-allow-log');
+      const term=($('rc-allow-term')||{}).value || ($('rc-out-term')||{}).value || ($('rc-term')||{}).value || this.ctx.term || '';
+      const sess=($('rc-allow-session')||{}).value || ($('rc-out-session')||{}).value || ($('rc-session')||{}).value || this.ctx.session || '';
+      if(!term){ if(statusEl) statusEl.textContent='Select term first'; return; }
+      try{
+        if(statusEl) statusEl.textContent='⏳ Checking…';
+        const {data, error}=await sb.rpc('sc_is_report_generation_allowed',{p_term:term, p_session:sess||null});
+        if(error) throw error;
+        const allowed=data && (data.allowed || data.allowed===true);
+        const src=data && data.source;
+        if(statusEl){
+          statusEl.textContent=allowed?`✅ Allowed for ${term}${sess?' · '+sess:''} (source: ${src})`:`🔒 Disallowed for ${term}${sess?' · '+sess:''} (source: ${src})`;
+          statusEl.style.color=allowed?'#065f46':'#b91c1c';
+        }
+        if(logEl){
+          logEl.innerHTML=`<div style="background:${allowed?'#f0fdf4':'#fef2f2'};border:1px solid ${allowed?'#86efac':'#fca5a5'};border-radius:8px;padding:8px">Term: <b>${esc(term)}</b>${sess?' · Session: <b>'+esc(sess)+'</b>':''} — <b style="color:${allowed?'#065f46':'#b91c1c'}">${allowed?'✅ Students CAN generate':'🔒 Students CANNOT generate'}</b><br>Source: ${esc(src||'unknown')} — ${allowed?'Students can check/generate own report cards for this term':'Students blocked until admin allows with one click'}</div>`+logEl.innerHTML;
+        }
+        // Also check global
+        try{
+          const {data:gdata}=await sb.from('school_settings').select('allow_student_report_global').eq('id',1).maybeSingle();
+          if(globalEl && gdata){
+            globalEl.textContent=gdata.allow_student_report_global?`🌐 Global: Allowed`:`🌐 Global: Disallowed (per-term overrides)`;
+          }
+        }catch(_){}
+      }catch(e){
+        if(statusEl) statusEl.textContent='❌ Check failed: '+(e.message||e);
+      }
+    },
+    async setReportAllow(allowed){
+      const term=($('rc-allow-term')||{}).value || ($('rc-out-term')||{}).value || ($('rc-term')||{}).value || this.ctx.term || '';
+      const sess=($('rc-allow-session')||{}).value || ($('rc-out-session')||{}).value || ($('rc-session')||{}).value || this.ctx.session || '';
+      const statusEl=$('rc-allow-status');
+      const logEl=$('rc-allow-log');
+      if(!term){ toast('Select term first (Term dropdown in this card or Generate outputs).','warning'); return; }
+      if(!confirm((allowed?'✅ Allow':'🔒 Disallow')+` students from generating report cards for ${term}${sess?' · '+sess:''}? One click.`)) return;
+      try{
+        if(statusEl) statusEl.textContent='⏳ Saving…';
+        const {data, error}=await sb.rpc('sc_set_report_generation_allowed',{p_term:term, p_session:sess||null, p_allowed:!!allowed});
+        if(error) throw error;
+        if(!data.ok) throw Error(data.error||'Failed');
+        if(statusEl){
+          statusEl.textContent=data.allowed?`✅ Now Allowed for ${data.term}${data.session?' · '+data.session:''}`:`🔒 Now Disallowed for ${data.term}${data.session?' · '+data.session:''}`;
+          statusEl.style.color=data.allowed?'#065f46':'#b91c1c';
+        }
+        if(logEl){
+          logEl.innerHTML=`<div style="background:${data.allowed?'#f0fdf4':'#fef2f2'};border:1px solid ${data.allowed?'#86efac':'#fca5a5'};border-radius:8px;padding:8px">✅ One-click ${data.allowed?'Allow':'Disallow'} for <b>${esc(data.term)}</b>${data.session?' · '+esc(data.session):''} — ${data.allowed?'Students CAN now generate':'Students CANNOT generate until allowed'}<br><small>${new Date().toLocaleString()}</small></div>`+logEl.innerHTML;
+        }
+        toast((data.allowed?'✅ Allowed':'🔒 Disallowed')+` students for ${data.term}${data.session?' · '+data.session:''} — one click done.`, data.allowed?'success':'warning', 6000);
+        if(window.App&&App.logActivity) App.logActivity('report-allow', 'academic_periods', term+'|'+sess+'|'+allowed);
+      }catch(e){
+        if(statusEl) statusEl.textContent='❌ Save failed: '+(e.message||e);
+        toast('Failed to set report allow: '+(e.message||e),'danger',8000);
+      }
+    },
+    async setGlobalAllow(allowed){
+      const globalEl=$('rc-allow-global-status');
+      const logEl=$('rc-allow-log');
+      if(!confirm((allowed?'✅ Allow globally':'🔒 Disallow globally')+` student report generation for ALL terms (fallback)? Per-term settings still override.`)) return;
+      try{
+        if(globalEl) globalEl.textContent='⏳ Saving global…';
+        const {data, error}=await sb.rpc('sc_set_report_generation_global',{p_allowed:!!allowed});
+        if(error) throw error;
+        if(!data.ok) throw Error(data.error||'Failed');
+        if(globalEl) globalEl.textContent=data.allowed?`🌐 Global: Allowed`:`🌐 Global: Disallowed`;
+        if(logEl){
+          logEl.innerHTML=`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:8px">🌐 Global ${data.allowed?'Allowed':'Disallowed'} — fallback for terms without per-term setting<br><small>${new Date().toLocaleString()}</small></div>`+logEl.innerHTML;
+        }
+        toast((data.allowed?'✅ Globally allowed':'🔒 Globally disallowed')+' — per-term overrides still work.', data.allowed?'success':'warning', 6000);
+      }catch(e){
+        if(globalEl) globalEl.textContent='❌ Global save failed: '+(e.message||e);
+        toast('Global set failed: '+(e.message||e),'danger',8000);
+      }
     }
   };
 
@@ -1481,4 +1609,59 @@ document.addEventListener('DOMContentLoaded',function(){try{
     } else if(tries>20)clearInterval(t);
   },600);
 }catch(_){}});
-</script></body></html>
+</script>
+<!-- V12.16: Ultra-robust student auto-fill on landing — runs immediately, no typing needed, only own result -->
+<script>
+/* V12.16: Ensures student name field auto-fills the moment student lands on report-cards page, without typing, only own result, no access to others.
+   Runs on DOMContentLoaded + 300ms + 1s + 2s + 5s intervals to survive async role resolution and late overwrites.
+   Uses cached profile (sc-cached-profile) + SC_PROFILE + students table where user_id = current user.
+   For student, sets readonly, removes list, datalist only own.
+*/
+(function(){
+  function immediateFill(){
+    try{
+      var role='';
+      try{ role=String((window.App&&App.currentRole)||(window.SC_PROFILE&&SC_PROFILE.role)||'').toLowerCase(); }catch(_){}
+      if(!role || role==='guest'){
+        try{
+          var c=JSON.parse(localStorage.getItem('sc-cached-profile')||'null');
+          if(c&&c.role) role=String(c.role).toLowerCase();
+        }catch(_){}
+      }
+      if(role!=='student') return;
+      var inp=document.getElementById('rc-student');
+      if(!inp) return;
+      var cached=null;
+      try{ cached=JSON.parse(localStorage.getItem('sc-cached-profile')||'null'); }catch(_){}
+      var name=(cached&&cached.full_name)||(window.SC_PROFILE&&window.SC_PROFILE.full_name)||'';
+      var adm=(cached&&cached.admission_no)||'';
+      if(name && !inp.value){
+        inp.value=name;
+      }
+      if(inp.value){
+        inp.setAttribute('readonly','readonly');
+        inp.removeAttribute('list');
+        inp.title='Your own report card — auto-filled on landing, only your result, no access to other students';
+        inp.placeholder='Auto-filled: '+inp.value+(adm?' ('+adm+')':'')+' — only your result (no typing needed)';
+        var dl=document.getElementById('rc-student-list');
+        if(dl && dl.children.length!==1){
+          dl.innerHTML='<option value="'+inp.value+(adm?' — '+adm:'')+'">'+inp.value+' — your result</option>';
+        }
+      }
+    }catch(_){}
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    immediateFill();
+    setTimeout(immediateFill, 300);
+    setTimeout(immediateFill, 1000);
+    setTimeout(immediateFill, 2000);
+    setTimeout(immediateFill, 5000);
+    // Also observe App role changes
+    var iv=setInterval(function(){
+      immediateFill();
+    }, 800);
+    setTimeout(function(){ clearInterval(iv); }, 10000);
+  });
+})();
+</script>
+</body></html>
