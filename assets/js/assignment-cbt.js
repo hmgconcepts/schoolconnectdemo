@@ -340,6 +340,72 @@ const AssignmentCBT = {
     if(window.AssignmentCBT) setTimeout(()=>AssignmentCBT.renderCBTSection(), 600);
   },
   // Student view helper: inject Take CBT buttons into assignments table for CBT assignments
+  // V12.13: multi-subject CBT assignments — per subject auto-fill
+  async uiScoreMultiCBT(cbtId){
+    if(!this.sb){ toast('Database not configured','warning'); return; }
+    const {data:exam}=await this.sb.from('cbt_exams').select('*').eq('id', cbtId).maybeSingle();
+    if(!exam){ toast('CBT assignment not found','warning'); return; }
+    const subjects = exam.anti_cheat_config && Array.isArray(exam.anti_cheat_config.subjects) && exam.anti_cheat_config.subjects.length ? exam.anti_cheat_config.subjects : String(exam.subject||'').replace(/^MULTI-SUBJECT:\s*/i,'').split(',').map(s=>s.trim()).filter(Boolean);
+    const {data:students}=await this.sb.from('students').select('id,full_name,admission_no,class').eq('class', exam.class||'').order('full_name');
+    const {data:results}=await this.sb.from('cbt_results').select('*').eq('exam_id', cbtId).limit(5000);
+    const norm=s=> String(s||'').trim().toLowerCase();
+    const byAdm=new Map(), byName=new Map();
+    (students||[]).forEach(s=>{
+      const adm=norm(s.admission_no); if(adm) byAdm.set(adm, s);
+      const name=norm(s.full_name); if(name) byName.set(name, s);
+    });
+    const resultMap=new Map();
+    (results||[]).forEach(r=>{
+      let st=byAdm.get(norm(r.student_id_ref)) || byName.get(norm(r.student_name));
+      if(st) resultMap.set(String(st.id), r);
+    });
+    let {data:assign}=await this.sb.from('assignments').select('id').eq('cbt_exam_id', cbtId).maybeSingle();
+    let assignId=assign && assign.id;
+    if(!assignId){
+      try{
+        const {data:ins}=await this.sb.from('assignments').insert({title:exam.title, class:exam.class, subject:exam.subject, cbt_exam_id:exam.id, is_cbt:true, source:'cbt_assignment', posted_by:exam.teacher_id, drive_link: exam.code ? './cbt-exam.html?code='+exam.code : null}).select('id').maybeSingle();
+        assignId=ins && ins.id;
+      }catch(_){ assignId=null; }
+    }
+    const autoMax=Number(exam.max_score||10)||10;
+    const tableHead='<tr><th>Student</th>'+subjects.map(sub=>'<th style="font-size:.75rem">'+this.esc(sub)+'<br><small>Score</small></th>').join('')+'<th>Total</th></tr>';
+    const rowsHtml=(students||[]).map(s=>{
+      const res=resultMap.get(String(s.id));
+      let totalGot=0, totalMax=0;
+      const cells=subjects.map(sub=>{
+        let score='';
+        let info='';
+        if(res){
+          const subjScores=res.subject_scores||{};
+          const subData=subjScores[sub]||{};
+          if(subData && subData.score!=null){
+            const rawScore=Number(subData.score||0);
+            const rawTotal=Number(subData.total||autoMax);
+            const scaled=rawTotal ? Math.round((rawScore/rawTotal*autoMax)*10)/10 : rawScore;
+            score=scaled;
+            totalGot+=Number(scaled)||0;
+            totalMax+=autoMax;
+            info='<small style="color:#166534">'+subData.score+'/'+subData.total+' → '+scaled+'</small>';
+          }else if(res){
+            const pct=Number(res.percent||0);
+            const scaledOverall=Math.round((pct/100*autoMax)*10)/10;
+            score=scaledOverall;
+            totalGot+=Number(scaledOverall)||0;
+            totalMax+=autoMax;
+            info='<small style="color:#64748b">Overall '+pct+'% → '+scaledOverall+'</small>';
+          }
+        }
+        return '<td><input class="form-input ap-sc" type="number" min="0" max="'+autoMax+'" style="width:70px" value="'+score+'" data-max="'+autoMax+'" data-subject="'+this.esc(sub)+'" data-sid="'+s.id+'" data-ref="'+this.esc(s.admission_no||'')+'" data-name="'+this.esc(s.full_name)+'"><br>'+info+'</td>';
+      }).join('');
+      return '<tr><td><b>'+this.esc(s.full_name)+'</b><br><small>'+this.esc(s.admission_no||'')+'</small></td>'+cells+'<td><b>'+totalGot+' / '+totalMax+'</b></td></tr>';
+    }).join('');
+    openModal('🖥️ Score Multi-Subject CBT Assignment: '+this.esc(exam.title)+' ('+this.esc(exam.code)+') — Auto-filled per subject',
+      '<div class="notice" style="background:#eef2ff;border-color:#93c5fd;color:#1e40af"><b>🧪 Multi-subject:</b> '+subjects.length+' subjects ('+subjects.map(s=>this.esc(s)).join(', ')+'). Scores auto-filled per subject, push fills each subject Assignment column.</div>'+
+      '<div class="notice" style="background:#f0fdf4;border-color:#86efac;color:#166534"><b>✅ Auto-filled per subject</b> — '+(results?results.length:0)+' results, '+resultMap.size+' matched. Kind and max auto-filled.</div>'+
+      '<div class="grid g3" style="margin:8px 0"><div class="form-group"><label>Kind (auto)</label><select class="form-select" id="ap-cbt-kind" disabled><option selected>CBT assignment (auto-marked)</option></select></div><div class="form-group"><label>Max (auto)</label><input class="form-input" id="ap-cbt-max" type="number" value="'+autoMax+'" readonly></div><div class="form-group"><label>Purpose</label><input class="form-input" value="'+this.esc(this.purposeLabel(exam))+' — multi, cumulative per subject" readonly></div></div>'+
+      '<div class="table-wrap" style="max-height:50vh;overflow:auto"><table><thead>'+tableHead+'</thead><tbody>'+(rowsHtml||'<tr><td>No students</td></tr>')+'</tbody></table></div>',
+      '<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="AssignmentCBT.saveCBTScores(\''+cbtId+'\',\''+(assignId||'')+'\', true)">💾 Save per subject (cumulative)</button>');
+  },
   async injectStudentLinks(){
     try{
       const table=document.getElementById('assignments-table');

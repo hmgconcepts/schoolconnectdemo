@@ -833,7 +833,9 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
        Promotion. Works together with the search box and column filters. */
     const bulkable = writable && this.BULK_MODULES.includes(key) && window.App && App.isAdminRole && App.isAdminRole(currentRole);
     const cellVal = (row, c) => c.key.indexOf('data.') === 0 ? ((row.data || {})[c.key.slice(5)]) : row[c.key];
-    const head = '<tr>' + (bulkable ? '<th style="width:34px"><input type="checkbox" title="Select all visible" onclick="CRUD.bulkToggleAll(\'' + moduleId + '\',this.checked)"></th>' : '') + cols.map(c => '<th>' + esc(c.label) + '</th>').join('') + (writable ? '<th>Actions</th>' : '') + '</tr>';
+    // V12.13: assignments — student Take button needs Actions column even when not writable (student portal) — fixes Take not showing beside every CBT assignment
+    const needsActions = writable || (moduleId === 'assignments');
+    const head = '<tr>' + (bulkable ? '<th style="width:34px"><input type="checkbox" title="Select all visible" onclick="CRUD.bulkToggleAll(\'' + moduleId + '\',this.checked)"></th>' : '') + cols.map(c => '<th>' + esc(c.label) + '</th>').join('') + (needsActions ? '<th>Actions</th>' : '') + '</tr>';
     tableEl.querySelector('thead').innerHTML = head;
     const tb = tableEl.querySelector('tbody');
     if (error) {
@@ -1005,66 +1007,67 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     }
     
     const isLinkCol = (key) => /(_link|link|media_url|photo_url|video|image|thumbnail|read_link|drive)$/i.test(key) || /^(media_url|read_link|drive_link|photo_url)$/i.test(key);
-    const renderedRows = filteredData.map(row => '<tr data-id="' + esc(String(row.id == null ? '' : row.id)) + '">' +
-      (bulkable ? '<td>' + (row._ghost ? '' : '<input type="checkbox" class="sc-bulk-cb" value="' + esc(String(row.id)) + '" onclick="CRUD.bulkBarRefresh(\'' + moduleId + '\')">') + '</td>' : '') +
-      cols.map(c => {
-      let v = cellVal(row, c);
-      // ENTERPRISE FINAL V2 (#8): fee balance reflects in every record —
-      // auto-compute for display when the stored value is missing.
-      if (c.key === 'balance' && v == null && row.fee_total != null) v = Math.max(0, (Number(row.fee_total) || 0) - (Number(row.amount_paid) || 0));
-      /* V8.7 (c): payroll table shows the ARITHMETIC net, never a stale stored
-         value — earnings incl. bonus/overtime minus every deduction. Displays
-         correctly even before the v8.7 SQL rebuild is run on old databases. */
-      if (c.key === 'net_pay' && ['payroll','hr'].includes(key)) {
-        const nv = k2 => Number(row[k2]) || 0;
-        v = Math.max(0, (nv('basic')+nv('allowances')+nv('bonus')+nv('overtime')) - (nv('tax')+nv('pension')+nv('loan_deduction')+nv('other_deductions')+nv('deductions')));
+    const renderedRows = filteredData.map(row => {
+      const bulkCb = bulkable ? '<td>' + (row._ghost ? '' : '<input type="checkbox" class="sc-bulk-cb" value="' + esc(String(row.id)) + '" onclick="CRUD.bulkBarRefresh(\'' + moduleId + '\')">') + '</td>' : '';
+      const dataCells = cols.map(c => {
+        let v = cellVal(row, c);
+        if (c.key === 'is_cbt'){
+          v = v ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac">🟢 CBT Assignment</span>' : '<span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0">📄 Physical</span>';
+          return '<td>'+String(v||'')+'</td>';
+        } else if (c.type === 'checkbox') v = v ? '✓' : '';
+        if (c.type === 'multiref' && Array.isArray(v)) v = v.join(', ');
+        if (v && (c.type === 'date' || c.type === 'datetime' || /(^|_)(date|dob|created_at|issued_on|due_date|ref_date)$/i.test(c.key))) v = CRUD.formatDate(v);
+        if (c.key === 'is_cbt'){
+          return '<td>'+String(v||'')+'</td>';
+        }
+        if (v && isLinkCol(c.key) && window.Super && Super.media) {
+          const k = Super.media.kind(String(v));
+          if (k !== 'none' && k !== 'link') return '<td>' + Super.media.thumb(String(v), { w: 96, h: 64 }) + '</td>';
+          return '<td><a href="' + esc(String(v)) + '" target="_blank" rel="noopener">🔗 link</a></td>';
+        }
+        return '<td>' + esc(String(v == null ? '' : v)).slice(0, 80) + '</td>';
+      }).join('');
+      // V12.13: assignments — Take assignment button ONLY for student/parent portal, Score placeholder for teacher/admin portal
+      // Fixes: Take appearing in teacher/admin + Take not showing beside every CBT assignment for student
+      let actionCell='';
+      if(moduleId === 'assignments'){
+        if(isStudent || isParent){
+          // Student/parent portal: Take Assignment button for every CBT assignment in table (robust, all-inclusive)
+          const takeBtn = (row.is_cbt || row.cbt_exam_id) ?
+            '<a class="btn btn-sm btn-primary ap-take-cbt" href="'+esc(row.drive_link||'./cbt-exam.html?code='+(row.cbt_exam_id||''))+'" target="_blank" title="Take this CBT assignment — auto-marked, multiple per term cumulative per subject">🖥️ Take Assignment</a> ' :
+            (row.drive_link ? '<a class="btn btn-sm btn-outline" href="'+esc(row.drive_link)+'" target="_blank" title="View assignment resources">🔗 View Assignment</a> ' : '<span class="badge" style="background:#f1f5f9;color:#475569">📄 Physical — no link</span> ');
+          actionCell = '<td style="white-space:nowrap">'+takeBtn+'</td>';
+        }else if(writable){
+          const badge = row.is_cbt ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac">🟢 CBT Assignment</span> ' : '<span class="badge" style="background:#f1f5f9;color:#475569">📄 Physical</span> ';
+          actionCell = '<td style="white-space:nowrap">'+badge+'<span class="mut" style="font-size:.75rem">Score via button</span></td>';
+        }else{
+          actionCell = '<td></td>';
+        }
+      }else{
+        if(!writable) actionCell='';
+        else if(row._ghost) actionCell='<td><span class="badge" style="background:#fef9c3;color:#a16207" title="Built-in demo preview — load the real sample data from Admin Data to edit">🎬 sample</span></td>';
+        else {
+          actionCell='<td style="white-space:nowrap">' +
+            (moduleId === 'students' ? '<a class="btn btn-sm btn-primary" href="student-profile.html?student=' + row.id + '">Dashboard</a> ' : '') +
+            (moduleId === 'students' && window.App && App.isAdminRole && App.isAdminRole(currentRole) ?
+              '<button class="btn btn-sm ' + (row.portal_locked ? 'btn-primary' : 'btn-outline') + '" style="' + (row.portal_locked ? 'background:#dc2626;border-color:#dc2626' : 'color:#dc2626;border-color:#fca5a5') + '" onclick="CRUD.toggleStudentLock(\'' + row.id + '\',\'portal\',' + (row.portal_locked ? 'false' : 'true') + ',\'' + esc(String(row.full_name||'').replace(/'/g,'')) + '\')" title="' + (row.portal_locked ? 'Portal is LOCKED — click to restore access' : 'Lock this student (and their parents) out of the portal') + '">' + (row.portal_locked ? '🔒 Locked' : '🔓 Lock portal') + '</button> ' +
+              '<button class="btn btn-sm btn-outline" style="' + (row.report_locked ? 'background:#f59e0b;border-color:#f59e0b;color:#fff' : 'color:#b45309;border-color:#fcd34d') + '" onclick="CRUD.toggleStudentLock(\'' + row.id + '\',\'report\',' + (row.report_locked ? 'false' : 'true') + ',\'' + esc(String(row.full_name||'').replace(/'/g,'')) + '\')" title="' + (row.report_locked ? 'Report card is HIDDEN — click to restore' : 'Hide this student\'s report card / results') + '">' + (row.report_locked ? '🧾 Report hidden' : '🧾 Hide report') + '</button> ' : '') +
+            (moduleId === 'staff' ? '<a class="btn btn-sm btn-primary" href="teacher-overview.html?staff=' + row.id + '">Teacher overview</a> ' : '') +
+            (moduleId === 'parent_child' ? '<button class="btn btn-sm btn-outline" onclick="CRUD.remove(\'parent_child\',\'' + row.id + '\')">Unlink</button> ' : '') +
+            ((moduleId === 'payroll' || moduleId === 'hr') ? '<button class="btn btn-sm btn-primary" onclick="CRUD.printPayslip(\'' + row.id + '\')">Payslip</button> ' : '') +
+            (moduleId === 'fees' ? '<button class="btn btn-sm btn-primary" onclick="CRUD.printReceipt(\'' + row.id + '\')">Print E-Receipt</button> ' : '') +
+            (moduleId === 'admissions' ? '<button class="btn btn-sm btn-primary" onclick="CRUD.previewAdmission(\'' + row.id + '\')">Preview</button> ' : '') +
+            (moduleId === 'document_builder' ? '<button class="btn btn-sm btn-primary" onclick="CRUD.printDocument(\'' + row.id + '\')">🖨 Print</button> ' : '') +
+            (CRUD.rowLockedForMe(moduleId, row, currentRole, currentUserId)
+              ? '<span class="badge" title="Entered by another teacher — only that teacher or an admin can change it">🔒 another teacher\'s record</span>'
+              : '<button class="btn btn-sm btn-outline" onclick="CRUD.openForm(\'' + moduleId + '\',\'' + row.id + '\')">Edit</button> ' +
+                '<button class="btn btn-sm btn-outline" onclick="CRUD.remove(\'' + moduleId + '\',\'' + row.id + '\')">Delete</button>') +
+          '</td>';
+        }
       }
-      // V12.9: assignments is_cbt badge — clear differentiation
-      if (c.key === 'is_cbt'){
-        v = v ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac">🟢 CBT Assignment</span>' : '<span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0">📄 Physical</span>';
-      } else if (c.type === 'checkbox') v = v ? '✓' : '';
-      if (c.type === 'multiref' && Array.isArray(v)) v = v.join(', ');
-      if (v && (c.type === 'date' || c.type === 'datetime' || /(^|_)(date|dob|created_at|issued_on|due_date|ref_date)$/i.test(c.key))) v = CRUD.formatDate(v);
-      // V12.9: is_cbt badge should render as HTML, not escaped
-      if (c.key === 'is_cbt'){
-        return '<td>'+String(v||'')+'</td>';
-      }
-      // Issue 11: render link columns as image/video thumbnails when possible.
-      if (v && isLinkCol(c.key) && window.Super && Super.media) {
-        const k = Super.media.kind(String(v));
-        if (k !== 'none' && k !== 'link') return '<td>' + Super.media.thumb(String(v), { w: 96, h: 64 }) + '</td>';
-        return '<td><a href="' + esc(String(v)) + '" target="_blank" rel="noopener">🔗 link</a></td>';
-      }
-      return '<td>' + esc(String(v == null ? '' : v)).slice(0, 80) + '</td>';
-    }).join('') + (!writable ? '' : (row._ghost ?
-      '<td><span class="badge" style="background:#fef9c3;color:#a16207" title="Built-in demo preview — load the real sample data from Admin Data to edit">🎬 sample</span></td>' :
-      '<td style="white-space:nowrap">' +
-        // V12.11: assignments — Take assignment button ONLY for student/parent portal (teacher/admin has Score class button via AP.init)
-        // Fixes bug where Take appeared in teacher/admin portal
-        (moduleId === 'assignments' && (isStudent || isParent) ? 
-          (row.is_cbt || row.cbt_exam_id ? 
-            '<a class="btn btn-sm btn-primary ap-take-cbt" href="'+(row.drive_link||'./cbt-exam.html?code='+ (row.cbt_exam_id||'') )+'" target="_blank" title="Take this CBT assignment — auto-marked, multiple per term cumulative">🖥️ Take Assignment</a> ' : 
-            (row.drive_link ? '<a class="btn btn-sm btn-outline" href="'+row.drive_link+'" target="_blank" title="View assignment resources">🔗 View Assignment</a> ' : '<span class="badge">📄 Physical</span> ')
-          ) : '') +
-        (moduleId === 'students' ? '<a class="btn btn-sm btn-primary" href="student-profile.html?student=' + row.id + '">Dashboard</a> ' : '') +
-        /* V10.7 (#6): one-click fee-discipline locks — admin tier only. 🔓/🔒
-           toggles the whole portal for the student+parents; 🧾 toggles just
-           the report card. Both prompt for the bold message shown to the
-           family. Bulk locking lives in the 🔒 bar above the table. */
-        (moduleId === 'students' && window.App && App.isAdminRole && App.isAdminRole(currentRole) ?
-          '<button class="btn btn-sm ' + (row.portal_locked ? 'btn-primary' : 'btn-outline') + '" style="' + (row.portal_locked ? 'background:#dc2626;border-color:#dc2626' : 'color:#dc2626;border-color:#fca5a5') + '" onclick="CRUD.toggleStudentLock(\'' + row.id + '\',\'portal\',' + (row.portal_locked ? 'false' : 'true') + ',\'' + esc(String(row.full_name||'').replace(/'/g,'')) + '\')" title="' + (row.portal_locked ? 'Portal is LOCKED — click to restore access' : 'Lock this student (and their parents) out of the portal') + '">' + (row.portal_locked ? '🔒 Locked' : '🔓 Lock portal') + '</button> ' +
-          '<button class="btn btn-sm btn-outline" style="' + (row.report_locked ? 'background:#f59e0b;border-color:#f59e0b;color:#fff' : 'color:#b45309;border-color:#fcd34d') + '" onclick="CRUD.toggleStudentLock(\'' + row.id + '\',\'report\',' + (row.report_locked ? 'false' : 'true') + ',\'' + esc(String(row.full_name||'').replace(/'/g,'')) + '\')" title="' + (row.report_locked ? 'Report card is HIDDEN — click to restore' : 'Hide this student\'s report card / results') + '">' + (row.report_locked ? '🧾 Report hidden' : '🧾 Hide report') + '</button> ' : '') +
-        (moduleId === 'staff' ? '<a class="btn btn-sm btn-primary" href="teacher-overview.html?staff=' + row.id + '">Teacher overview</a> ' : '') +
-        (moduleId === 'parent_child' ? '<button class="btn btn-sm btn-outline" onclick="CRUD.remove(\'parent_child\',\'' + row.id + '\')">Unlink</button> ' : '') +
-        ((moduleId === 'payroll' || moduleId === 'hr') ? '<button class="btn btn-sm btn-primary" onclick="CRUD.printPayslip(\'' + row.id + '\')">Payslip</button> ' : '') +
-        (moduleId === 'fees' ? '<button class="btn btn-sm btn-primary" onclick="CRUD.printReceipt(\'' + row.id + '\')">Print E-Receipt</button> ' : '') +
-        (moduleId === 'admissions' ? '<button class="btn btn-sm btn-primary" onclick="CRUD.previewAdmission(\'' + row.id + '\')">Preview</button> ' : '') +
-        (moduleId === 'document_builder' ? '<button class="btn btn-sm btn-primary" onclick="CRUD.printDocument(\'' + row.id + '\')">🖨 Print</button> ' : '') +
-        (CRUD.rowLockedForMe(moduleId, row, currentRole, currentUserId)
-          ? '<span class="badge" title="Entered by another teacher — only that teacher or an admin can change it">🔒 another teacher\'s record</span>'
-          : '<button class="btn btn-sm btn-outline" onclick="CRUD.openForm(\'' + moduleId + '\',\'' + row.id + '\')">Edit</button> ' +
-            '<button class="btn btn-sm btn-outline" onclick="CRUD.remove(\'' + moduleId + '\',\'' + row.id + '\')">Delete</button>') +
-      '</td>')) + '</tr>').join('');
+      return '<tr data-id="' + esc(String(row.id == null ? '' : row.id)) + '">' + bulkCb + dataCells + actionCell + '</tr>';
+    }).join('');
+
     tb.innerHTML = renderedRows;
     if (demoGhost) {
       tb.innerHTML += '<tr><td colspan="' + (cols.length + (writable ? 1 : 0) + (typeof bulkable!=='undefined'&&bulkable ? 1 : 0)) + '" style="background:#fefce8;color:#a16207;font-size:.82rem;font-weight:700">🎬 Built-in sample preview — this table is empty in the demo database. Sign in as the demo Admin and click “Load sample data” (Admin Data page) to make these rows real and editable.</td></tr>';
