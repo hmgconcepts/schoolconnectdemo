@@ -497,15 +497,16 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       <div id="rc-cols" data-staff-only></div>
       <div id="rc-grid"></div>
       <div class="card" style="margin-top:16px;border:2px solid #6366f1">
-        <h3 style="margin-top:0">📄 Generate outputs — Student Report Cards, Broadsheets, Scoresheets (V12.11)</h3>
+        <h3 style="margin-top:0">📄 Generate outputs — Student Report Cards, Broadsheets, Scoresheets (V12.14)</h3>
         <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:10px;margin:0 0 12px;font-size:.88rem;color:#1e293b;line-height:1.7">
-          <b>Modus operandi — How report card generation works (for all roles, especially new users):</b><br>
-          <b>Admin/Teacher portal:</b> Build scores first (Class+Subject+Term+Session → Load/Build → enter scores), then Generate outputs: pick Class, Term, Session (or leave blank to use above), enter Student name/admission number (autocomplete from class), click Student Report Card (single), Class Broadsheet (all students, all subjects), Teacher Scoresheet (subject), or Bulk Print ALL (per class, one per page).<br>
-          <b>Student portal (now clickable & responsive):</b> Your name and class auto-filled (read-only, only your own). <b>Term and Session are now clickable and responsive</b> — you can select <b>previous term or current term</b> once admin permits (when report not locked). If admin has locked report (fees), you see 🔒 message with bursary contact. You cannot generate for future terms or other students. This ensures students only check/generate their own report card for previous/current term once school admin permits.<br>
+          <b>Modus operandi — How report card generation works (for all roles, especially new users) — V12.14 robust, all-inclusive, self-contained, seamless:</b><br>
+          <b>Admin/Teacher portal:</b> Build scores first (Class+Subject+Term+Session → Load/Build → enter scores), then Generate outputs: pick Class, Term, Session (or leave blank to use above), enter Student name/admission number (autocomplete from class), click Student Report Card (single), Class Broadsheet (all students, all subjects), Teacher Scoresheet (subject), or Bulk Print ALL (per class, one per page). Edit/Delete restored on Assignments — never drop pre-existing features.<br>
+          <b>Student portal (V12.14 — auto-fill on landing, clickable & responsive, only own):</b> Your <b>student name field is auto-filled the moment you land</b> — no typing needed, already shows your full name + admission no, readonly, only your result (cannot access other students). Your class also auto-filled readonly. <b>Term and Session are now clickable and responsive</b> — <b>Term and Session are clickable and responsive</b> — select <b>previous term or current term</b> once admin permits (when report not locked). If locked, you see 🔒 message with bursary contact. You cannot generate for future terms or other students. This ensures students only check/generate their own report card for previous/current term once school admin permits. Auto-fill uses cached profile for instant landing, then verified via DB (students.user_id = your account). Datalist cleared so you cannot pick others. V12.12: Term and Session are now clickable and responsive — previous/current term once admin permits.<br>
           <b>Parent portal:</b> Select child from safe list (only your linked children, locked children removed), then Term/Session (previous/current) → Student Report Card.<br>
-          <b>Robustness:</b> All fields use dropdowns from live DB (lookups + classes + results + assessment_columns) with defaults fallback, never blank. Report lock via <code>sc_my_access_state</code> RPC blocks locked students with bold message. History merge shows students who moved on (🎓) so past terms regenerate full.
+          <b>Multi-subject CBT Assignments (V12.14):</b> When Score class clicked for multi-subject CBT assignments, scores auto-fill per subject (just like exams/mid-term), and push fills each subject Assignment column. Works for pre-existing multi-subject assignments too (fallback uses overall %). Assignment page now shows Edit/Delete for admin/tutor + Take beside every CBT assignment for student.<br>
+          <b>Robustness:</b> All fields use dropdowns from live DB (lookups + classes + results + assessment_columns) with defaults fallback, never blank. Report lock via <code>sc_my_access_state</code> RPC blocks locked students with bold message. History merge shows students who moved on (🎓) so past terms regenerate full. Student auto-fill: immediate from localStorage cache + verified DB.
         </div>
-        <p style="color:var(--gray-600);font-size:.9rem">Generate printable termly outputs from the recorded scores (all subjects).</p>
+        <p style="color:var(--gray-600);font-size:.9rem">Generate printable termly outputs from the recorded scores (all subjects). Student name auto-filled on landing — no typing needed.</p>
         <!-- V7.7 #4: the outputs section has its OWN class/term/session dropdowns so
              the admin can generate ANY student's card for ANY past term/session/class
              without touching the score-grid pickers above. Blank = use the pickers above. -->
@@ -679,16 +680,41 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 
     async _initFamilyMode(){
       const host = $('rc-family-safe'); if (!host) return;
-      host.innerHTML = '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px"><span class="pulse">Loading…</span></div>';
+      host.innerHTML = '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px"><span class="pulse">Loading your report card…</span></div>';
       const sc = window.SCHOOL || {}; const name = sc.name || 'your school';
+      // V12.14: Immediate auto-fill from cached profile for instant landing (robust, all-inclusive, self-contained, seamless)
+      // Ensures student name field is already filled even before DB fetch, so student lands and already sees own details
+      try{
+        const cachedProfile = window.SC_PROFILE || (function(){ try{return JSON.parse(localStorage.getItem('sc-cached-profile')||'null');}catch(_){return null;}})();
+        const immediateName = cachedProfile && (cachedProfile.full_name || cachedProfile.email || '');
+        const inpEarly = $('rc-student');
+        if(immediateName && inpEarly && this._role==='student'){
+          inpEarly.value = immediateName;
+          inpEarly.setAttribute('readonly','readonly');
+          inpEarly.removeAttribute('list');
+          inpEarly.title='Your own report card — auto-filled on landing, only your result';
+          inpEarly.placeholder='Auto-filled: '+immediateName;
+        }
+      }catch(_){}
       try {
         if (this._role === 'student') {
           const { data: stu } = await window.sb.from('students').select('id,full_name,class,admission_no').eq('user_id', (window.SC_PROFILE && SC_PROFILE.id) || '').maybeSingle();
           if (stu) {
             this._me = stu; this._kids = [stu];
-            // V12.11: student fields — class auto-filled readonly, term/session CLICKABLE and responsive (previous term or current term once admin permits)
+            // V12.14: student fields — auto-fill without typing, readonly, only own result, already filled on landing
             // Robust, all-inclusive, self-contained, seamless: students only check/generate their own report card for previous/current term when admin permits (report_locked check)
-            const inp = $('rc-student'); if (inp) { inp.value = stu.full_name; inp.removeAttribute('disabled'); inp.setAttribute('readonly', 'readonly'); inp.title='Your own report card — auto-filled'; }
+            const inp = $('rc-student'); 
+            if (inp) { 
+              inp.value = stu.full_name; 
+              inp.removeAttribute('disabled'); 
+              inp.setAttribute('readonly', 'readonly'); 
+              inp.removeAttribute('list');
+              inp.title='Your own report card — auto-filled (only your result, no access to other students)'; 
+              inp.placeholder='Auto-filled: '+stu.full_name+' ('+(stu.admission_no||'')+') — only your result';
+              // Ensure datalist is cleared for student so they cannot pick others
+              const dl=document.getElementById('rc-student-list');
+              if(dl) dl.innerHTML='';
+            }
             const cls = $('rc-class'); if (cls && stu.class) { cls.value = stu.class; cls.removeAttribute('disabled'); cls.setAttribute('readonly', 'readonly'); }
             const outCls = $('rc-out-class'); if(outCls && stu.class){ outCls.innerHTML='<option value="'+esc(stu.class)+'">'+esc(stu.class)+' — your class</option>'; outCls.value=stu.class; outCls.removeAttribute('disabled'); outCls.title='Your class — auto-filled'; }
             // For student, term/session dropdowns are CLICKABLE and responsive — only previous term or current term once admin permits
