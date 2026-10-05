@@ -1027,19 +1027,27 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
         }
         return '<td>' + esc(String(v == null ? '' : v)).slice(0, 80) + '</td>';
       }).join('');
-      // V12.13: assignments — Take assignment button ONLY for student/parent portal, Score placeholder for teacher/admin portal
-      // Fixes: Take appearing in teacher/admin + Take not showing beside every CBT assignment for student
+      // V12.14: assignments — Take assignment button ONLY for student/parent portal, Edit/Delete restored for admin/tutor (fix dropped features)
+      // Fixes: Take appearing in teacher/admin + Take not showing beside every CBT assignment for student + Edit/Delete missing in admin/tutor
       let actionCell='';
       if(moduleId === 'assignments'){
         if(isStudent || isParent){
-          // Student/parent portal: Take Assignment button for every CBT assignment in table (robust, all-inclusive)
+          // Student/parent portal: Take Assignment button for every CBT assignment in table (robust, all-inclusive, self-contained, seamless)
           const takeBtn = (row.is_cbt || row.cbt_exam_id) ?
             '<a class="btn btn-sm btn-primary ap-take-cbt" href="'+esc(row.drive_link||'./cbt-exam.html?code='+(row.cbt_exam_id||''))+'" target="_blank" title="Take this CBT assignment — auto-marked, multiple per term cumulative per subject">🖥️ Take Assignment</a> ' :
             (row.drive_link ? '<a class="btn btn-sm btn-outline" href="'+esc(row.drive_link)+'" target="_blank" title="View assignment resources">🔗 View Assignment</a> ' : '<span class="badge" style="background:#f1f5f9;color:#475569">📄 Physical — no link</span> ');
           actionCell = '<td style="white-space:nowrap">'+takeBtn+'</td>';
         }else if(writable){
           const badge = row.is_cbt ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #86efac">🟢 CBT Assignment</span> ' : '<span class="badge" style="background:#f1f5f9;color:#475569">📄 Physical</span> ';
-          actionCell = '<td style="white-space:nowrap">'+badge+'<span class="mut" style="font-size:.75rem">Score via button</span></td>';
+          // Respect teacher ownership lock (same as other modules) but ALWAYS show Edit/Delete for admin/owner
+          if(CRUD.rowLockedForMe(moduleId, row, currentRole, currentUserId)){
+            actionCell = '<td style="white-space:nowrap">'+badge+'<span class="badge" title="Entered by another teacher — only that teacher or an admin can change it">🔒 another teacher\'s record</span> <span class="mut" style="font-size:.70rem">Score via button</span></td>';
+          }else{
+            actionCell = '<td style="white-space:nowrap">'+badge+
+              '<button class="btn btn-sm btn-outline" onclick="CRUD.openForm(\''+moduleId+'\',\''+row.id+'\')">Edit</button> '+
+              '<button class="btn btn-sm btn-outline" onclick="CRUD.remove(\''+moduleId+'\',\''+row.id+'\')">Delete</button> '+
+              '<span class="mut" style="font-size:.70rem;margin-left:4px">Score via button</span></td>';
+          }
         }else{
           actionCell = '<td></td>';
         }
