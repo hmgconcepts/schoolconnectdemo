@@ -363,6 +363,18 @@ const AssignmentCBT = {
     const maxInput=document.getElementById('ap-cbt-max');
     const max=Number((maxInput||{}).value)||10;
     const {data:exam}=await this.sb.from('cbt_exams').select('class,subject,term,session,max_score,anti_cheat_config').eq('id', cbtId).maybeSingle();
+    // V12.15: use current academic period for term/session to ensure scores appear in current term score sheet (robust)
+    // If current period exists, use it; otherwise fallback to exam term/session
+    let curTerm='', curSession='';
+    try{
+      if(window.CRUD && CRUD.currentPeriod){
+        const cp=await CRUD.currentPeriod();
+        curTerm=cp.term||'';
+        curSession=cp.session||'';
+      }
+    }catch(_){}
+    const effTerm = curTerm || (exam&&exam.term) || '';
+    const effSession = curSession || (exam&&exam.session) || '';
     const rows=[];
     const errors=[];
     // Detect multi by flag or by presence of data-subject inputs
@@ -383,7 +395,7 @@ const AssignmentCBT = {
         const name = inp.getAttribute('data-name') || '';
         const raw = Number(v)||0;
         const finalScore = Math.min(raw, max);
-        rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:sid, student_id_ref:ref, student_name:name, class:(exam&&exam.class)||'', subject:subj, term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:finalScore, max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
+        rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:sid, student_id_ref:ref, student_name:name, class:(exam&&exam.class)||'', subject:subj, term:effTerm, session:effSession, score:finalScore, max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
       });
       // Also support inputs where data-sid on tr but data-subject on input (fallback)
       if(!rows.length){
@@ -396,7 +408,7 @@ const AssignmentCBT = {
             const v = inp.value.trim();
             if(v==='') return;
             const subj = inp.getAttribute('data-subject')||'';
-            rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:sid, student_id_ref:ref, student_name:name, class:(exam&&exam.class)||'', subject:subj, term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:Math.min(Number(v)||0,max), max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
+            rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:sid, student_id_ref:ref, student_name:name, class:(exam&&exam.class)||'', subject:subj, term:effTerm, session:effSession, score:Math.min(Number(v)||0,max), max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
           });
         });
       }
@@ -412,7 +424,7 @@ const AssignmentCBT = {
           if(v==='') return;
           const rawScore=Number(v)||0;
           const finalScore=Math.min(rawScore, max);
-          rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:tr.getAttribute('data-sid'), student_id_ref:tr.getAttribute('data-ref')||'', student_name:tr.getAttribute('data-name')||'', class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:finalScore, max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
+          rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:tr.getAttribute('data-sid'), student_id_ref:tr.getAttribute('data-ref')||'', student_name:tr.getAttribute('data-name')||'', class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:effTerm, session:effSession, score:finalScore, max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
         });
       };
       collect('#modal-body tr[data-sid], .modal-body tr[data-sid]');
@@ -425,7 +437,7 @@ const AssignmentCBT = {
         scope.querySelectorAll('input.ap-sc[data-sid]').forEach(inp=>{
           const v=inp.value.trim();
           if(v==='') return;
-          rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:inp.getAttribute('data-sid'), student_id_ref:inp.getAttribute('data-ref')||'', student_name:inp.getAttribute('data-name')||'', class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:(exam&&exam.term)||'', session:(exam&&exam.session)||'', score:Math.min(Number(v)||0,max), max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
+          rows.push({assignment_id:assignId||null, cbt_exam_id:cbtId, student_id:inp.getAttribute('data-sid'), student_id_ref:inp.getAttribute('data-ref')||'', student_name:inp.getAttribute('data-name')||'', class:(exam&&exam.class)||'', subject:(exam&&exam.subject)||'', term:effTerm, session:effSession, score:Math.min(Number(v)||0,max), max_score:max, recorded_by:(window.SC_PROFILE&&SC_PROFILE.id)||null});
         });
       }
     }
@@ -629,18 +641,29 @@ AssignmentCBT.patchAP = function(){
     const box=document.getElementById('ap-totals');
     if(!cls||!sub){box.innerHTML='<p style="color:var(--gray-500)">Pick a class AND subject first.</p>';return;}
     let cp={};try{cp=await (window.CRUD&&CRUD.currentPeriod?CRUD.currentPeriod():{});}catch(_){ }
-    // V12.14: include MULTI-SUBJECT containing subject via ILIKE logic client-side filtering after fetch
+    // V12.15: robust term score sheet — includes MULTI-SUBJECT containing subject + term/session robust (null term allowed)
+    // Fetches all for class, then client filters by subject containment + term/session (null allowed) so multi-subject scores always show
     let q=sb.from('assignment_scores').select('*').eq('class',cls).limit(8000);
-    if(cp.term)q=q.eq('term',cp.term); if(cp.session)q=q.eq('session',cp.session);
     const r=await q;
     if(r.error){box.innerHTML='<p style="color:#b91c1c">'+AP.esc(r.error.message)+'</p>';return;}
     let scores=(r.data||[]).filter(s=>{
       const sSubj = String(s.subject||'').toLowerCase();
       const req = String(sub||'').toLowerCase();
-      if(!req) return true;
-      if(sSubj===req) return true;
-      if(sSubj.includes(req)) return true;
-      return false;
+      if(req){
+        if(sSubj!==req && !sSubj.includes(req)) return false;
+      }
+      // Term/session filter — allow null term/session (pre-existing) or matching current period
+      if(cp.term){
+        const sTerm=String(s.term||'').toLowerCase();
+        const cTerm=String(cp.term||'').toLowerCase();
+        if(sTerm && cTerm && sTerm!==cTerm) return false;
+      }
+      if(cp.session){
+        const sSess=String(s.session||'').toLowerCase();
+        const cSess=String(cp.session||'').toLowerCase();
+        if(sSess && cSess && sSess!==cSess) return false;
+      }
+      return true;
     });
     if(!scores.length){box.innerHTML='<p style="color:var(--gray-500)">No assignment scores yet for '+AP.esc(cls)+' · '+AP.esc(sub)+' this term. Use ✍️ Score class on assignments above or auto-fill CBT assignments (single + multi containing '+AP.esc(sub)+').</p>';return;}
     const aids=[...new Set(scores.map(x=>x.assignment_id).filter(Boolean))];
@@ -686,7 +709,7 @@ AssignmentCBT.patchAP = function(){
       byStud[sid][ck].count++;
     });
     let h='<div class="table-wrap" id="ap-matrix-print"><h4 style="margin:6px 0">📋 Term score sheet · '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+(cp.session?' · '+AP.esc(cp.session):'')+'</h4>';
-    h+='<p style="font-size:.82rem;color:#475569">📄 = Physical/manual · 🖥️ = CBT Assignment (auto-marked, multiple per term, per subject for multi). Each column is ONE assignment (or ONE subject of a multi-assignment); Total accumulates ALL → push to Assignment column per subject.</p>';
+    h+='<p style="font-size:.82rem;color:#475569">📄 = Physical/manual · 🖥️ = CBT Assignment (auto-marked, multiple per term, per subject for multi). Each column is ONE assignment (or ONE subject of a multi-assignment); Total accumulates ALL → push to Assignment column per subject. Multi-subject assignments show per subject (e.g., Maths — Assignment1, English — Assignment1) and accumulate cumulatively.</p>';
     h+='<table><thead><tr><th>Student</th>'+colKeys.map(k=>'<th style="font-size:.72rem;min-width:90px">'+AP.esc(colLabel(k)).slice(0,40)+'</th>').join('')+'<th>Total</th><th>%</th></tr></thead><tbody>';
     studs.forEach(s0=>{
       const row=byStud[String(s0.id)]||{};
@@ -701,6 +724,38 @@ AssignmentCBT.patchAP = function(){
     h+='</tbody></table></div><p style="font-size:.78rem;color:#64748b;margin:6px 0 0">Each CBT assignment is a separate column — for multi-subject, each subject of the multi-assignment is a separate column (e.g., Maths Assignment1, English Assignment1) — all accumulate per subject → Assignment column.</p><div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="AP.printMatrix()">🖨️ Print</button><button class="btn btn-outline btn-sm" onclick="AP.exportMatrixCSV()">⬇ CSV</button><button class="btn btn-primary btn-sm" onclick="AP.pushModal()">🚀 Push totals → Report card Assignment column</button></div>';
     this._matrix={studs:studs,byStud:byStud,colKeys:colKeys,colLabel:colLabel,cls:cls,sub:sub,cp:cp, scores:scores};
     box.innerHTML=h;
+  };
+
+  // V12.15: also patch totals to be robust for multi-subject per subject + term/session null allowed
+  const origTotals=AP.totals;
+  AP.totals=async function(){
+    const cls=(document.getElementById('ap-class')||{}).value,sub=(document.getElementById('ap-subject')||{}).value;
+    const box=document.getElementById('ap-totals');
+    if(!cls||!sub){box.innerHTML='<p style="color:var(--gray-500)">Pick a class AND subject first.</p>';return;}
+    let cp={};try{cp=await (window.CRUD&&CRUD.currentPeriod?CRUD.currentPeriod():{});}catch(_){ }
+    let q=sb.from('assignment_scores').select('*').eq('class',cls).limit(5000);
+    const r=await q;
+    if(r.error){box.innerHTML='<p style="color:#b91c1c">'+AP.esc(r.error.message)+'</p>';return;}
+    let filtered=(r.data||[]).filter(s=>{
+      const sSubj=String(s.subject||'').toLowerCase();
+      const req=String(sub||'').toLowerCase();
+      if(req && sSubj!==req && !sSubj.includes(req)) return false;
+      if(cp.term){
+        const sTerm=String(s.term||'').toLowerCase();
+        const cTerm=String(cp.term||'').toLowerCase();
+        if(sTerm && cTerm && sTerm!==cTerm) return false;
+      }
+      if(cp.session){
+        const sSess=String(s.session||'').toLowerCase();
+        const cSess=String(cp.session||'').toLowerCase();
+        if(sSess && cSess && sSess!==cSess) return false;
+      }
+      return true;
+    });
+    const by={};filtered.forEach(x=>{const k=String(x.student_id);(by[k]=by[k]||{name:x.student_name,ref:x.student_id_ref,sid:x.student_id,got:0,max:0,n:0});by[k].got+=Number(x.score)||0;by[k].max+=Number(x.max_score)||0;by[k].n++;});
+    const list=Object.values(by).sort((a,b)=>(b.got/(b.max||1))-(a.got/(a.max||1)));
+    this._totals={list:list,cls:cls,sub:sub,cp:cp};
+    box.innerHTML=list.length?'<div class="table-wrap"><table><thead><tr><th>Student</th><th>Assignments scored</th><th>Points</th><th>%</th></tr></thead><tbody>'+list.map(t=>'<tr><td><b>'+AP.esc(t.name)+'</b><br><small>'+AP.esc(t.ref||'')+'</small></td><td>'+t.n+'</td><td>'+t.got+' / '+t.max+'</td><td><b>'+(t.max?Math.round(t.got/t.max*1000)/10:0)+'%</b></td></tr>').join('')+'</tbody></table></div>':'<p style="color:var(--gray-500)">No assignment scores recorded yet for '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+'. Use ✍️ Score class on an assignment above (single + multi containing '+AP.esc(sub)+').</p>';
   };
 
   // Patch CRUD for student Take buttons — robust, self-contained, all-inclusive, seamless
