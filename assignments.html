@@ -831,65 +831,110 @@ const AP={
     try{if(this._matrix)this.matrix();}catch(_){ } /* live-refresh the open score sheet */
   },
   async totals(){
+    // V12.15: robust totals — includes MULTI-SUBJECT containing subject + term/session null allowed + cumulative per subject
     const cls=(document.getElementById('ap-class')||{}).value,sub=(document.getElementById('ap-subject')||{}).value;
     const box=document.getElementById('ap-totals');
     if(!cls||!sub){box.innerHTML='<p style="color:var(--gray-500)">Pick a class AND subject first.</p>';return;}
     let cp={};try{cp=await (window.CRUD&&CRUD.currentPeriod?CRUD.currentPeriod():{});}catch(_){ }
-    let q=sb.from('assignment_scores').select('*').eq('class',cls).eq('subject',sub);
-    if(cp.term)q=q.eq('term',cp.term); if(cp.session)q=q.eq('session',cp.session);
-    const r=await q.limit(5000);
+    let q=sb.from('assignment_scores').select('*').eq('class',cls).limit(5000);
+    const r=await q;
     if(r.error){box.innerHTML='<p style="color:#b91c1c">'+AP.esc(/assignment_scores/.test(r.error.message)?'Run database/v8.4-assignment-dl-points.sql first.':r.error.message)+'</p>';return;}
-    const by={};(r.data||[]).forEach(x=>{const k=String(x.student_id);(by[k]=by[k]||{name:x.student_name,ref:x.student_id_ref,sid:x.student_id,got:0,max:0,n:0});by[k].got+=Number(x.score)||0;by[k].max+=Number(x.max_score)||0;by[k].n++;});
+    let filtered=(r.data||[]).filter(s=>{
+      const sSubj=String(s.subject||'').toLowerCase();
+      const req=String(sub||'').toLowerCase();
+      if(req && sSubj!==req && !sSubj.includes(req)) return false;
+      if(cp.term){
+        const sTerm=String(s.term||'').toLowerCase();
+        const cTerm=String(cp.term||'').toLowerCase();
+        if(sTerm && cTerm && sTerm!==cTerm) return false;
+      }
+      if(cp.session){
+        const sSess=String(s.session||'').toLowerCase();
+        const cSess=String(cp.session||'').toLowerCase();
+        if(sSess && cSess && sSess!==cSess) return false;
+      }
+      return true;
+    });
+    const by={};filtered.forEach(x=>{const k=String(x.student_id);(by[k]=by[k]||{name:x.student_name,ref:x.student_id_ref,sid:x.student_id,got:0,max:0,n:0});by[k].got+=Number(x.score)||0;by[k].max+=Number(x.max_score)||0;by[k].n++;});
     const list=Object.values(by).sort((a,b)=>(b.got/(b.max||1))-(a.got/(a.max||1)));
     this._totals={list:list,cls:cls,sub:sub,cp:cp};
-    box.innerHTML=list.length?'<div class="table-wrap"><table><thead><tr><th>Student</th><th>Assignments scored</th><th>Points</th><th>%</th></tr></thead><tbody>'+list.map(t=>'<tr><td><b>'+AP.esc(t.name)+'</b><br><small>'+AP.esc(t.ref||'')+'</small></td><td>'+t.n+'</td><td>'+t.got+' / '+t.max+'</td><td><b>'+(t.max?Math.round(t.got/t.max*1000)/10:0)+'%</b></td></tr>').join('')+'</tbody></table></div>':'<p style="color:var(--gray-500)">No assignment scores recorded yet for '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+'. Use ✍️ Score class on an assignment above.</p>';
+    box.innerHTML=list.length?'<div class="table-wrap"><table><thead><tr><th>Student</th><th>Assignments scored</th><th>Points</th><th>%</th></tr></thead><tbody>'+list.map(t=>'<tr><td><b>'+AP.esc(t.name)+'</b><br><small>'+AP.esc(t.ref||'')+'</small></td><td>'+t.n+'</td><td>'+t.got+' / '+t.max+'</td><td><b>'+(t.max?Math.round(t.got/t.max*1000)/10:0)+'%</b></td></tr>').join('')+'</tbody></table></div>':'<p style="color:var(--gray-500)">No assignment scores recorded yet for '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+'. Use ✍️ Score class on an assignment above (single + multi containing '+AP.esc(sub)+').</p>';
   },
-  /* ==== V12.10: TERM SCORE SHEET — every assignment (physical + each CBT) as separate column, cumulative ==== */
+  /* ==== V12.15: TERM SCORE SHEET — robust, multi-subject per subject, cumulative, term/session null allowed ==== */
   async matrix(){
+    // V12.15: robust term score sheet — includes MULTI-SUBJECT containing subject, per subject columns, term/session null allowed, cumulative
     const cls=(document.getElementById('ap-class')||{}).value,sub=(document.getElementById('ap-subject')||{}).value;
     const box=document.getElementById('ap-totals');
     if(!cls||!sub){box.innerHTML='<p style="color:var(--gray-500)">Pick a class AND subject first.</p>';return;}
     let cp={};try{cp=await (window.CRUD&&CRUD.currentPeriod?CRUD.currentPeriod():{});}catch(_){ }
-    let q=sb.from('assignment_scores').select('*').eq('class',cls).eq('subject',sub);
-    if(cp.term)q=q.eq('term',cp.term); if(cp.session)q=q.eq('session',cp.session);
-    const r=await q.limit(8000);
+    let q=sb.from('assignment_scores').select('*').eq('class',cls).limit(8000);
+    const r=await q;
     if(r.error){box.innerHTML='<p style="color:#b91c1c">'+AP.esc(r.error.message)+'</p>';return;}
-    const scores=r.data||[];
-    if(!scores.length){box.innerHTML='<p style="color:var(--gray-500)">No assignment scores yet for '+AP.esc(cls)+' · '+AP.esc(sub)+' this term. Use ✍️ Score class on assignments above — CBT assignments auto-fill kind/max/scores.</p>';return;}
-    // Resolve titles for physical assignments and CBT exams
+    let scores=(r.data||[]).filter(s=>{
+      const sSubj=String(s.subject||'').toLowerCase();
+      const req=String(sub||'').toLowerCase();
+      if(req && sSubj!==req && !sSubj.includes(req)) return false;
+      if(cp.term){
+        const sTerm=String(s.term||'').toLowerCase();
+        const cTerm=String(cp.term||'').toLowerCase();
+        if(sTerm && cTerm && sTerm!==cTerm) return false;
+      }
+      if(cp.session){
+        const sSess=String(s.session||'').toLowerCase();
+        const cSess=String(cp.session||'').toLowerCase();
+        if(sSess && cSess && sSess!==cSess) return false;
+      }
+      return true;
+    });
+    if(!scores.length){box.innerHTML='<p style="color:var(--gray-500)">No assignment scores yet for '+AP.esc(cls)+' · '+AP.esc(sub)+' this term. Use ✍️ Score class on assignments above — CBT assignments auto-fill kind/max/scores (single + multi containing '+AP.esc(sub)+').</p>';return;}
+    // Resolve titles for physical assignments and CBT exams — including multi-subject
     const aids=[...new Set(scores.map(x=>x.assignment_id).filter(Boolean))];
     const cbtIds=[...new Set(scores.map(x=>x.cbt_exam_id).filter(Boolean))];
     let titles={};
     if(aids.length){
-      const ar=await sb.from('assignments').select('id,title,cbt_exam_id,is_cbt').in('id',aids);
-      (ar.data||[]).forEach(a=>{titles[a.id]= (a.is_cbt? '🖥️ ':'📄 ') + (a.title||'Assignment');});
+      const ar=await sb.from('assignments').select('id,title,cbt_exam_id,is_cbt,subject').in('id',aids);
+      (ar.data||[]).forEach(a=>{titles[a.id]= (a.is_cbt? '🖥️ ':'📄 ') + (a.title||'Assignment')+' ('+(a.subject||'')+')';});
     }
     if(cbtIds.length){
-      const cr=await sb.from('cbt_exams').select('id,code,title').in('id',cbtIds);
+      const cr=await sb.from('cbt_exams').select('id,code,title,subject,anti_cheat_config').in('id',cbtIds);
       (cr.data||[]).forEach(c=>{ 
-        titles[c.id]= '🖥️ '+ (c.title||c.code||'CBT Assignment');
+        const isMulti = String(c.subject||'').toUpperCase().startsWith('MULTI-SUBJECT') || (c.anti_cheat_config && Array.isArray(c.anti_cheat_config.subjects) && c.anti_cheat_config.subjects.length>1);
+        const subjLabel = isMulti ? (c.anti_cheat_config && c.anti_cheat_config.subjects ? c.anti_cheat_config.subjects.join(', ') : c.subject) : (c.subject||'');
+        titles[c.id]= '🖥️ '+ (c.title||c.code||'CBT Assignment')+' ('+subjLabel+')';
         scores.filter(s=>s.cbt_exam_id===c.id && s.assignment_id).forEach(s=>{ if(!titles[s.assignment_id]) titles[s.assignment_id]=titles[c.id]; });
       });
     }
-    // Column keys: each physical assignment_id AND each cbt_exam_id as separate columns (multiple CBT assignments per term)
+    // Column keys: for multi-subject, each cbt_exam_id|subject separate (per subject cumulative)
     const colKeysSet=new Set();
-    scores.forEach(x=>{ if(x.cbt_exam_id) colKeysSet.add(x.cbt_exam_id); else if(x.assignment_id) colKeysSet.add(x.assignment_id); else colKeysSet.add('orphan'); });
+    scores.forEach(x=>{ 
+      if(x.cbt_exam_id && x.subject) colKeysSet.add(x.cbt_exam_id+'|'+x.subject);
+      else if(x.cbt_exam_id) colKeysSet.add(x.cbt_exam_id); 
+      else if(x.assignment_id) colKeysSet.add(x.assignment_id); 
+      else colKeysSet.add('orphan'); 
+    });
     const colKeys=[...colKeysSet];
-    const colLabel=k=>{ if(k==='orphan') return '📄 Assignment (legacy)'; return titles[k] || '📄 Assignment'; };
+    const colLabel=k=>{ 
+      if(k==='orphan') return '📄 Assignment (legacy)'; 
+      if(k.includes('|')){
+        const [cbtId, subj]=k.split('|');
+        return (titles[cbtId]||'🖥️ CBT Assignment')+' — '+subj;
+      }
+      return titles[k] || '📄 Assignment'; 
+    };
     const studs=(await sb.from('students').select('id,full_name,admission_no').eq('class',cls).order('full_name')).data||[];
     const byStud={};
     scores.forEach(x=>{
       const sid=String(x.student_id);
       (byStud[sid]=byStud[sid]||{});
-      const ck=x.cbt_exam_id || x.assignment_id || 'orphan';
+      const ck = x.cbt_exam_id ? (x.subject ? x.cbt_exam_id+'|'+x.subject : x.cbt_exam_id) : (x.assignment_id || 'orphan');
       (byStud[sid][ck]=byStud[sid][ck]||{got:0,max:0,count:0});
       byStud[sid][ck].got+=Number(x.score)||0;
       byStud[sid][ck].max+=Number(x.max_score)||0;
       byStud[sid][ck].count++;
     });
     let h='<div class="table-wrap" id="ap-matrix-print"><h4 style="margin:6px 0">📋 Term score sheet · '+AP.esc(cls)+' · '+AP.esc(sub)+(cp.term?' · '+AP.esc(cp.term):'')+(cp.session?' · '+AP.esc(cp.session):'')+'</h4>';
-    h+='<p style="font-size:.82rem;color:#475569">📄 = Physical/manual (teacher manually enters kind/max/scores) · 🖥️ = CBT Assignment (auto-marked, multiple per term, auto-fills kind/max/scores when Score class clicked). Each column is ONE assignment; Total accumulates ALL → push to Assignment column.</p>';
-    h+='<table><thead><tr><th>Student</th>'+colKeys.map(k=>'<th style="font-size:.72rem;min-width:90px">'+AP.esc(colLabel(k)).slice(0,30)+'</th>').join('')+'<th>Total</th><th>%</th></tr></thead><tbody>';
+    h+='<p style="font-size:.82rem;color:#475569">📄 = Physical/manual · 🖥️ = CBT Assignment (auto-marked, multiple per term, per subject for multi). Each column is ONE assignment (or ONE subject of a multi-assignment); Total accumulates ALL → push to Assignment column per subject. Multi-subject assignments show per subject (e.g., Maths — Assignment1, English — Assignment1) and accumulate cumulatively, scaled to Assignment column max.</p>';
+    h+='<table><thead><tr><th>Student</th>'+colKeys.map(k=>'<th style="font-size:.72rem;min-width:90px">'+AP.esc(colLabel(k)).slice(0,40)+'</th>').join('')+'<th>Total</th><th>%</th></tr></thead><tbody>';
     studs.forEach(s0=>{
       const row=byStud[String(s0.id)]||{};
       let got=0,max=0;
@@ -900,7 +945,7 @@ const AP={
         return '<td style="color:#cbd5e1">—</td>';
       }).join('')+'<td><b>'+got+' / '+max+'</b></td><td><b>'+(max?Math.round(got/max*1000)/10:0)+'%</b></td></tr>';
     });
-    h+='</tbody></table></div><p style="font-size:.78rem;color:#64748b;margin:6px 0 0">Each CBT assignment is separate column — e.g., Assignment 1 (CBT), Assignment 2 (CBT), Assignment 3 (physical) — all accumulate cumulatively → Assignment column.</p><div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="AP.printMatrix()">🖨️ Print score sheet</button><button class="btn btn-outline btn-sm" onclick="AP.exportMatrixCSV()">⬇ CSV</button><button class="btn btn-primary btn-sm" onclick="AP.pushModal()">🚀 Push totals → Report card Assignment column</button></div>';
+    h+='</tbody></table></div><p style="font-size:.78rem;color:#64748b;margin:6px 0 0">Each CBT assignment is separate column — for multi-subject, each subject of the multi-assignment is a separate column (e.g., Maths Assignment1, English Assignment1) — all accumulate per subject → Assignment column (scaled to column max).</p><div style="margin-top:8px;display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="AP.printMatrix()">🖨️ Print score sheet</button><button class="btn btn-outline btn-sm" onclick="AP.exportMatrixCSV()">⬇ CSV</button><button class="btn btn-primary btn-sm" onclick="AP.pushModal()">🚀 Push totals → Report card Assignment column</button></div>';
     this._matrix={studs:studs,byStud:byStud,colKeys:colKeys,colLabel:colLabel,cls:cls,sub:sub,cp:cp, scores:scores};
     box.innerHTML=h;
   },
