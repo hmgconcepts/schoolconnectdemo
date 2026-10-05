@@ -682,18 +682,41 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
       const host = $('rc-family-safe'); if (!host) return;
       host.innerHTML = '<div class="card" style="border-left:5px solid var(--primary);margin-bottom:16px"><span class="pulse">Loading your report card…</span></div>';
       const sc = window.SCHOOL || {}; const name = sc.name || 'your school';
-      // V12.14: Immediate auto-fill from cached profile for instant landing (robust, all-inclusive, self-contained, seamless)
-      // Ensures student name field is already filled even before DB fetch, so student lands and already sees own details
+      // V12.15: Immediate auto-fill from cached profile for instant landing (robust, all-inclusive, self-contained, seamless)
+      // Ensures student name field is already filled even before DB fetch, so student lands and already sees own details without typing
+      const ensureStudentAutoFill = (stuObj, force=false)=>{
+        try{
+          const inp = $('rc-student');
+          if(!inp) return;
+          const targetName = (stuObj && stuObj.full_name) || (window.SC_PROFILE && SC_PROFILE.full_name) || '';
+          const adm = (stuObj && stuObj.admission_no) || '';
+          if(!targetName) return;
+          if(force || !inp.value || inp.value!==targetName){
+            inp.value = targetName;
+          }
+          inp.removeAttribute('disabled');
+          inp.setAttribute('readonly','readonly');
+          inp.removeAttribute('list');
+          inp.title='Your own report card — auto-filled on landing, only your result, no access to other students';
+          inp.placeholder='Auto-filled: '+targetName+(adm?' ('+adm+')':'')+' — only your result (no typing needed)';
+          const dl=document.getElementById('rc-student-list');
+          if(dl){
+            dl.innerHTML='<option value="'+esc(targetName)+(adm?' — '+esc(adm):'')+'">'+esc(targetName)+' — your result</option>';
+          }
+        }catch(_){}
+      };
       try{
         const cachedProfile = window.SC_PROFILE || (function(){ try{return JSON.parse(localStorage.getItem('sc-cached-profile')||'null');}catch(_){return null;}})();
         const immediateName = cachedProfile && (cachedProfile.full_name || cachedProfile.email || '');
-        const inpEarly = $('rc-student');
-        if(immediateName && inpEarly && this._role==='student'){
-          inpEarly.value = immediateName;
-          inpEarly.setAttribute('readonly','readonly');
-          inpEarly.removeAttribute('list');
-          inpEarly.title='Your own report card — auto-filled on landing, only your result';
-          inpEarly.placeholder='Auto-filled: '+immediateName;
+        if(immediateName && this._role==='student'){
+          ensureStudentAutoFill({full_name: immediateName, admission_no: cachedProfile.admission_no||''}, true);
+          // Keep ensuring for 5 seconds until DB confirms
+          let tries=0;
+          const iv=setInterval(()=>{
+            tries++;
+            ensureStudentAutoFill({full_name: immediateName, admission_no: cachedProfile.admission_no||''}, false);
+            if(tries>10) clearInterval(iv);
+          }, 500);
         }
       }catch(_){}
       try {
@@ -701,20 +724,21 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           const { data: stu } = await window.sb.from('students').select('id,full_name,class,admission_no').eq('user_id', (window.SC_PROFILE && SC_PROFILE.id) || '').maybeSingle();
           if (stu) {
             this._me = stu; this._kids = [stu];
-            // V12.14: student fields — auto-fill without typing, readonly, only own result, already filled on landing
-            // Robust, all-inclusive, self-contained, seamless: students only check/generate their own report card for previous/current term when admin permits (report_locked check)
-            const inp = $('rc-student'); 
-            if (inp) { 
-              inp.value = stu.full_name; 
-              inp.removeAttribute('disabled'); 
-              inp.setAttribute('readonly', 'readonly'); 
-              inp.removeAttribute('list');
-              inp.title='Your own report card — auto-filled (only your result, no access to other students)'; 
-              inp.placeholder='Auto-filled: '+stu.full_name+' ('+(stu.admission_no||'')+') — only your result';
-              // Ensure datalist is cleared for student so they cannot pick others
+            // V12.15: student fields — auto-fill without typing, readonly, only own result, already filled on landing — robust
+            // Ensures field auto-fills student detail without typing, already has details when landing, only own result, no access to others
+            ensureStudentAutoFill(stu, true);
+            // Keep ensuring every 800ms for 8 seconds to survive any late fillStudentPicker overwrites
+            let tries2=0;
+            const iv2=setInterval(()=>{
+              tries2++;
+              ensureStudentAutoFill(stu, false);
+              if(tries2>10) clearInterval(iv2);
+            }, 800);
+            // Also clear datalist to only own (family-safe)
+            try{
               const dl=document.getElementById('rc-student-list');
-              if(dl) dl.innerHTML='';
-            }
+              if(dl) dl.innerHTML='<option value="'+esc(stu.full_name)+(stu.admission_no?' — '+esc(stu.admission_no):'')+'">'+esc(stu.full_name)+' — your result</option>';
+            }catch(_){}
             const cls = $('rc-class'); if (cls && stu.class) { cls.value = stu.class; cls.removeAttribute('disabled'); cls.setAttribute('readonly', 'readonly'); }
             const outCls = $('rc-out-class'); if(outCls && stu.class){ outCls.innerHTML='<option value="'+esc(stu.class)+'">'+esc(stu.class)+' — your class</option>'; outCls.value=stu.class; outCls.removeAttribute('disabled'); outCls.title='Your class — auto-filled'; }
             // For student, term/session dropdowns are CLICKABLE and responsive — only previous term or current term once admin permits
@@ -1229,6 +1253,33 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
     async fillStudentPicker(){
       try{
         if(!window.sb) return; const dl=document.getElementById('rc-student-list'); if(!dl) return;
+        // V12.15: family-safe — students see only themselves, parents only linked children, admin/teacher sees all
+        if(this._role==='student' && this._me){
+          dl.innerHTML='';
+          const s=this._me;
+          const o=document.createElement('option');
+          o.value=(s.admission_no?s.admission_no+' — ':'')+s.full_name;
+          o.label=s.full_name+(s.admission_no?' ('+s.admission_no+')':'')+(s.class?' · '+s.class:'')+' — your result';
+          dl.appendChild(o);
+          // Ensure input stays auto-filled readonly
+          const inp=$('rc-student');
+          if(inp){
+            inp.value=s.full_name;
+            inp.setAttribute('readonly','readonly');
+            inp.removeAttribute('list');
+          }
+          return;
+        }
+        if(this._role==='parent' && this._kids && this._kids.length){
+          dl.innerHTML='';
+          this._kids.forEach(s=>{
+            const o=document.createElement('option');
+            o.value=(s.admission_no?s.admission_no+' — ':'')+s.full_name;
+            o.label=s.full_name+(s.admission_no?' ('+s.admission_no+')':'')+(s.class?' · '+s.class:'');
+            dl.appendChild(o);
+          });
+          return;
+        }
         let q=window.sb.from('students').select('full_name,admission_no,class').order('full_name').limit(2000);
         /* V7.7: outputs Class dropdown wins; blank = whole school so the admin
            can generate a card for ANY student regardless of the grid class. */
