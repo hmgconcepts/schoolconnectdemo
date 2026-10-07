@@ -486,7 +486,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
     <div class="app-content">
       
       <div class="card" style="margin-bottom:16px;background:#eef2ff;border-color:#c7d2fe"><h3 style="margin-top:0">🗓️ Published School Timetable</h3><p style="color:var(--gray-700);line-height:1.7;margin:0">Everyone can read the school timetable. Staff/admin can add or edit timetable slots; generated slots from Auto-Timetable are shown here for classes, students and parents.</p></div>
-      <div class="card" style="margin-bottom:16px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end"><div class="form-group"><label>Class</label><select class="form-select" id="tt-class" onchange="TT.load()"><option value="">All classes</option></select></div><button class="btn btn-outline" onclick="TT.load()">Refresh</button><button class="btn btn-outline" onclick="TT.print(false)">🖨️ Print / PDF this view</button><button class="btn btn-outline" onclick="TT.print(true)">📄 PDF master (all classes)</button><button class="btn btn-outline" onclick="TT.printPack()">📄 PDF pack — one class per page</button><button class="btn btn-primary" data-staff-only onclick="CRUD.openForm('timetable')">+ Add slot</button><a class="btn btn-outline" data-staff-only href="timetable-generator.html">Auto-generate</a></div></div>
+      <div class="card" style="margin-bottom:16px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end"><div class="form-group"><label>Class</label><select class="form-select" id="tt-class" onchange="TT.load()"><option value="">All classes</option></select></div><button class="btn btn-outline" onclick="TT.load()">Refresh</button><button class="btn btn-outline" onclick="TT.print(false)">🖨️ Print / PDF this view</button><button class="btn btn-outline" onclick="TT.print(true)">📄 PDF master (all classes)</button><button class="btn btn-outline" onclick="TT.printPack()">📄 PDF pack — one class per page</button><button class="btn btn-outline" onclick="ICSExport.exportTimetable()" title="Export timetable as .ics calendar (TutorBird/DramaConnect style)">📅 Export .ics</button><button class="btn btn-primary" data-staff-only onclick="CRUD.openForm('timetable')">+ Add slot</button><a class="btn btn-outline" data-staff-only href="timetable-generator.html">Auto-generate</a></div></div>
       <div id="tt-view"><p class="pulse">Loading timetable…</p></div>
     </div>
     <footer style="padding:20px 28px;border-top:1px solid var(--gray-200);font-size:0.82rem;color:var(--gray-500);text-align:center">
@@ -507,6 +507,8 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <script src="assets/js/super.js"></script>
 <script src="assets/js/enterprise.js"></script>
 <script src="assets/js/crud.js"></script>
+<script src="assets/js/keepalive-layers.js"></script>
+<script src="assets/js/ics-export.js"></script>
 <script src="assets/js/report-engine.js"></script>
 <script src="assets/js/analytics.js"></script>
 <script src="assets/js/app.js"></script>
