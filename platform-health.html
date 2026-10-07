@@ -85,6 +85,7 @@
   <!-- 2. Schema Doctor -->
   <section id="sec-doctor" class="dc-section">
     <h2>🩺 Schema Doctor — is every SQL pack installed? <span id="doctor-pill"></span></h2>
+    <div id="ph-schema" style="margin-bottom:10px"><span class="pulse">Probing packs…</span></div>
     <p class="lead">Checks every table, function, view and storage bucket each SQL pack creates. Missing object means pack not run (or older copy). Fix: run <span class="mono">database/complete-schema.sql</span> once in Supabase SQL Editor — safe to re-run. Enhanced from DramaConnect — probes every object.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="PH.schemaDoctor()">🔄 Re-check</button><button class="btn btn-outline btn-sm" onclick="PH.copyFix()">📋 Copy fix instructions</button></div>
     <div id="doctor-fix" style="display:none;margin-bottom:10px;border-radius:12px;background:#fffbeb;border:1px solid #fcd34d;padding:10px;font-size:.85rem;color:#92400e"></div>
@@ -284,7 +285,10 @@ const PH={
     {file:'v12.17-advanced-cbt-and-layers.sql', label:'Advanced CBT + 14-layer + tutoring', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
     {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Heartbeat updated_at fix + platform health robust', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
     {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Report allow per term', kind:'rpc', fn:'sc_set_report_generation_allowed', args:{p_term:'First Term',p_session:'2024/2025',p_allowed:true}},
-    {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Storage top tables', kind:'rpc', fn:'storage_table_top', args:{}}
+    {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Storage top tables', kind:'rpc', fn:'storage_table_top', args:{}},
+    {file:'v12.19-platform-health-robust.sql', label:'Platform health robust + schema packs fix', kind:'rpc', fn:'sc_installed_packs', args:{}},
+    {file:'v12.19-platform-health-robust.sql', label:'Heartbeat health V12.19', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
+    {file:'v12.19-platform-health-robust.sql', label:'Report allow global V12.19', kind:'rpc', fn:'sc_set_report_generation_global', args:{p_allowed:true}}
   ],
 
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
@@ -418,11 +422,18 @@ const PH={
     const rowsEl=document.getElementById('doctor-rows');
     const doctorState=document.getElementById('doctor-state');
     const doctorDetail=document.getElementById('doctor-detail');
-    if(!box) return;
     try{
-      if(!window.sb){ box.textContent='DB not configured — add Supabase keys in config.js'; if(rowsEl) rowsEl.innerHTML='<tr><td colspan=5>DB not configured</td></tr>'; return; }
-      box.innerHTML='<span class="pulse">Probing packs…</span>';
+      if(!window.sb){ 
+        if(box) box.textContent='DB not configured — add Supabase keys in config.js'; 
+        if(doctorState) doctorState.textContent='DB not configured';
+        if(doctorDetail) doctorDetail.textContent='Add Supabase keys';
+        if(rowsEl) rowsEl.innerHTML='<tr><td colspan=5>DB not configured</td></tr>'; 
+        return; 
+      }
+      if(box) box.innerHTML='<span class="pulse">Probing packs…</span>';
       if(rowsEl) rowsEl.innerHTML='<tr><td colspan=5>Probing…</td></tr>';
+      if(doctorState) doctorState.textContent='Probing…';
+      if(doctorDetail) doctorDetail.textContent='Checking packs…';
     const results=[];
     let missing=0;
     for(const p of this.PACKS){
