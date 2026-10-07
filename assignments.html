@@ -689,6 +689,28 @@ const AP={
     this.myPoints();
     try{const {data}=await sb.from('classes').select('name').order('name');const el=document.getElementById('ap-class');(data||[]).forEach(c=>{const o=document.createElement('option');o.value=c.name;o.textContent=c.name;el.appendChild(o);});}catch(_){ }
     try{const {data}=await sb.from('subjects').select('name').order('name');const el=document.getElementById('ap-subject');(data||[]).forEach(s0=>{const o=document.createElement('option');o.value=s0.name;o.textContent=s0.name;el.appendChild(o);});}catch(_){ }
+    // V12.18: study log subject dropdown should load ALL subjects (robust) — fixes subject not loading all subjects
+    try{
+      const {data:subData}=await sb.from('subjects').select('name').order('name').limit(500);
+      const studySel=document.getElementById('study-subject');
+      if(studySel && subData && subData.length){
+        const keep=studySel.value;
+        studySel.innerHTML='';
+        subData.forEach(s0=>{
+          const o=document.createElement('option');
+          o.value=s0.name;
+          o.textContent=s0.name;
+          studySel.appendChild(o);
+        });
+        if(![...studySel.options].some(o=>o.value.toLowerCase()==='general')){
+          const o=document.createElement('option');
+          o.value='General';
+          o.textContent='General';
+          studySel.appendChild(o);
+        }
+        if(keep && [...studySel.options].some(o=>o.value===keep)) studySel.value=keep;
+      }
+    }catch(_){}
     /* V9.6 (#3): ✍️ Score button GUARANTEED on EVERY assignment row.
        The old injector only added the button when the row's last cell already
        contained an Edit/🔒 control — rows owned by other teachers (or rendered

@@ -207,6 +207,8 @@
 
   <div style="margin-top:18px" class="card"><h3>📋 How Layers Protect Against Pausing (from DramaConnect)</h3><p class="muted">Supabase free tier pauses after 7 days without DB activity. Configure 2-3 external automated layers, not every layer. Site visits stop during holidays, so automated layers (GitHub Actions, Vercel Cron, cron-job.org, Edge + UptimeRobot, Fleet Console workflow) keep project alive unattended. Manual button is for holidays. Auto-restore watchdog can un-pause via Management API if SUPABASE_ACCESS_TOKEN set. This page shows when each layer last carried out its function and its fix if never.</p></div>
 </main>
+<div id="toast-container" class="toast-container" style="position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px"></div>
+<div id="modal-backdrop" class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center"><div class="modal" onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;max-width:600px;width:90%;max-height:80vh;overflow:auto;padding:20px"><div class="modal-header" style="display:flex;justify-content:space-between;align-items:center"><h2 id="modal-title">Modal</h2><button class="modal-close" onclick="closeModal()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;width:32px;height:32px">×</button></div><div id="modal-body" class="modal-body" style="margin-top:12px"></div><div id="modal-footer" class="modal-footer" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/js/config.js"></script>
@@ -225,6 +227,41 @@
 <script src="assets/js/ics-export.js"></script>
 <script src="assets/js/learner-portfolio.js"></script>
 <script>
+
+function toast(msg, type='info', ms=4000){
+  try{
+    let c=document.getElementById('toast-container');
+    if(!c){
+      c=document.createElement('div');
+      c.id='toast-container';
+      c.style.cssText='position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px';
+      document.body.appendChild(c);
+    }
+    const t=document.createElement('div');
+    t.style.cssText='padding:12px 16px;border-radius:10px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.15);max-width:360px;word-wrap:break-word;background:'+(type==='success'?'#dcfce7;color:#166534;border:1px solid #86efac':type==='danger'?'#fee2e2;color:#991b1b;border:1px solid #fca5a5':type==='warning'?'#fef3c7;color:#92400e;border:1px solid #fcd34d':'#eef2ff;color:#3730a3;border:1px solid #c7d2fe')+';';
+    t.textContent=msg;
+    c.appendChild(t);
+    setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),300); }, ms);
+    console.log('[toast]', type, msg);
+  }catch(e){ console.log('[toast fallback]', msg); alert(msg); }
+}
+function closeModal(){
+  const b=document.getElementById('modal-backdrop');
+  if(b) b.style.display='none';
+}
+function openModal(title, body, footer){
+  const b=document.getElementById('modal-backdrop');
+  const t=document.getElementById('modal-title');
+  const mb=document.getElementById('modal-body');
+  const mf=document.getElementById('modal-footer');
+  if(t) t.textContent=title||'Modal';
+  if(mb) mb.innerHTML=body||'';
+  if(mf) mf.innerHTML=footer||'';
+  if(b) b.style.display='flex';
+}
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+
 const PH={
   PACKS:[
     {file:'v10.7-fee-locks-arrears.sql', label:'Fee locks & arrears', kind:'col', table:'students', col:'portal_locked'},
@@ -364,9 +401,8 @@ const PH={
         }).join('');
         hbTable.innerHTML=rows||'<tr><td colspan=7>No layers</td></tr>';
       }
-      // Update other snapshot cards from health
-      const doctorState=document.getElementById('doctor-state');
-      if(doctorState) doctorState.textContent=health?`${health.sourcesFresh||0} fresh layers`:'Checking…';
+      // Update heartbeat snapshot cards (doctor-state handled by schemaDoctor)
+      // V12.18: removed doctorState update from heartbeat to avoid overwriting Schema Doctor status
     }catch(e){
       if(hbTable) hbTable.innerHTML=`<tr><td colspan=7 style="color:#b91c1c">${PH.esc(e.message||e)}</td></tr>`;
       const errEl=document.getElementById('health-error');
@@ -383,9 +419,10 @@ const PH={
     const doctorState=document.getElementById('doctor-state');
     const doctorDetail=document.getElementById('doctor-detail');
     if(!box) return;
-    if(!window.sb){ box.textContent='DB not configured'; return; }
-    box.innerHTML='<span class="pulse">Probing packs…</span>';
-    if(rowsEl) rowsEl.innerHTML='<tr><td colspan=5>Probing…</td></tr>';
+    try{
+      if(!window.sb){ box.textContent='DB not configured — add Supabase keys in config.js'; if(rowsEl) rowsEl.innerHTML='<tr><td colspan=5>DB not configured</td></tr>'; return; }
+      box.innerHTML='<span class="pulse">Probing packs…</span>';
+      if(rowsEl) rowsEl.innerHTML='<tr><td colspan=5>Probing…</td></tr>';
     const results=[];
     let missing=0;
     for(const p of this.PACKS){
@@ -428,8 +465,17 @@ const PH={
     if(fixBox){
       if(missing){
         fixBox.style.display='block';
-        fixBox.innerHTML=`<b>Fix:</b> open Supabase → SQL Editor → paste each red file from repo's <code>database/</code> folder → Run. Every pack idempotent — running twice safe. Or run <code>complete-schema.sql</code> once (contains everything: now 8869+ lines). Missing: ${results.filter(r=>r.ok===false).map(r=>r.p.file).join(', ')}`;
-      }else fixBox.style.display='none';
+        fixBox.innerHTML=`<b>Fix:</b> open Supabase → SQL Editor → paste each red file from repo's <code>database/</code> folder → Run. Every pack idempotent — running twice safe. Or run <code>complete-schema.sql</code> once (contains everything: now 9236+ lines). Missing: ${results.filter(r=>r.ok===false).map(r=>r.p.file).join(', ')}`;
+        if(typeof toast==='function') toast(`🩺 Schema Doctor: ${missing} pack(s) NOT installed — ${results.filter(r=>r.ok===false).map(r=>r.p.file).join(', ')} — run complete-schema.sql`, 'warning', 8000);
+      }else{
+        fixBox.style.display='none';
+        if(typeof toast==='function') toast(`✅ Schema Doctor: All ${results.length} packs installed — fully healthy`, 'success', 5000);
+      }
+    }
+    }catch(e){
+      if(box) box.innerHTML=`<span class="ph-badge bad">Doctor error: ${this.esc(e.message||e)}</span>`;
+      if(rowsEl) rowsEl.innerHTML=`<tr><td colspan=5 style="color:#b91c1c">${this.esc(e.message||e)}</td></tr>`;
+      if(typeof toast==='function') toast('Schema Doctor error: '+(e.message||e),'danger',6000);
     }
   },
   copyFix(){
@@ -487,12 +533,33 @@ const PH={
     const bkSchedule=document.getElementById('bk-schedule');
     const bkFailures=document.getElementById('bk-failures');
     const bkVault=document.getElementById('bk-vault');
+    const bkRuns=document.getElementById('bk-runs');
     try{
-      await DriveSync.loadCfg();
-      const c=DriveSync.cfg;
+      if(b) b.innerHTML='<span class="pulse">Checking Drive backup…</span>';
+      if(bkLast) bkLast.textContent='Checking…';
+      // Robust load with timeout
+      let cfg=null;
+      try{
+        if(window.DriveSync && DriveSync.loadCfg){
+          await Promise.race([
+            DriveSync.loadCfg(),
+            new Promise((_,rej)=>setTimeout(()=>rej(new Error('DriveSync timeout')),3000))
+          ]);
+          cfg=DriveSync.cfg;
+        }
+      }catch(e){ console.warn('DriveSync load failed', e.message); }
+      if(!cfg){
+        // Fallback from localStorage
+        try{
+          const raw=localStorage.getItem('sc-drive-cfg')||localStorage.getItem('gdrive-config')||'{}';
+          const parsed=JSON.parse(raw);
+          cfg={clientId: parsed.clientId||'', enabled: !!parsed.enabled, days: parsed.days||7, lastBackup: parsed.lastBackup||null};
+        }catch(_){ cfg={clientId:'', enabled:false, days:7, lastBackup:null}; }
+      }
+      const c=cfg||{clientId:'', enabled:false, days:7, lastBackup:null};
       const last=c.lastBackup?Date.parse(c.lastBackup):0;
       const days=last?((Date.now()-last)/86400000):null;
-      if(b) b.innerHTML=(c.clientId?this.badge(c.enabled?'Auto-sync ON — every '+c.days+' day(s)':'Configured — manual only',c.enabled?'ok':'warn'):this.badge('Not configured','warn'))+`<p style="margin:8px 0 0">Last Drive backup: <b>${last?this.esc(new Date(last).toLocaleString())+(days>c.days?' ⚠ overdue':''):'never'}</b></p>`+(c.clientId?'':'<p class="muted">Setup: docs/GOOGLE-DRIVE-SYNC-GUIDE.md</p>');
+      if(b) b.innerHTML=(c.clientId?this.badge(c.enabled?'Auto-sync ON — every '+c.days+' day(s)':'Configured — manual only',c.enabled?'ok':'warn'):this.badge('Not configured — setup in Admin Data → Drive Backup','warn'))+`<p style="margin:8px 0 0">Last Drive backup: <b>${last?this.esc(new Date(last).toLocaleString())+(days>c.days?' ⚠ overdue':''):'never'}</b></p>`+(c.clientId?'':`<p class="muted">Setup: <a href="admin-data.html">Admin Data → Google Drive Backup</a> — CLIENT_ID set to 790374824693-2lbqddn29q9396bp1qg24d0ulh00i7lr.apps.googleusercontent.com — add origin https://...vercel.app in Google Cloud Console</p>`);
       if(backupState) backupState.textContent=c.clientId?(c.enabled?'✅ Auto ON':'⚠️ Manual'):'⚠️ Not configured';
       if(backupLast) backupLast.textContent=last?new Date(last).toLocaleString():'never';
       if(bkLast) bkLast.textContent=last?new Date(last).toLocaleString():'never';
@@ -500,10 +567,26 @@ const PH={
       if(bkFailures) bkFailures.textContent='0';
       if(bkVault){
         try{
-          if(window.DataPortability){ DataPortability.init(sb); const v=await DataPortability.listVault(); bkVault.textContent=`${v.length} batches`; }
+          if(window.DataPortability){ DataPortability.init(sb); const v=await Promise.race([DataPortability.listVault(), new Promise((_,rej)=>setTimeout(()=>rej(new Error('vault timeout')),2000))]); bkVault.textContent=`${v.length} batches`; }
+          else bkVault.textContent='—';
         }catch(_){ bkVault.textContent='—'; }
       }
-    }catch(e){ if(b) b.textContent=e.message; }
+      if(bkRuns){
+        try{
+          // Try to get backup runs from localStorage or DataPortability
+          let runs=[];
+          try{ const raw=localStorage.getItem('sc-backup-runs'); if(raw) runs=JSON.parse(raw); }catch(_){}
+          if(!runs.length){
+            bkRuns.innerHTML='<tr><td colspan=6 class="dc-muted">No backup runs yet — run backup from Admin Data → Drive Backup</td></tr>';
+          }else{
+            bkRuns.innerHTML=runs.slice(0,10).map(r=>`<tr><td>${this.esc(new Date(r.at||Date.now()).toLocaleString())}</td><td>${this.esc(r.dest||'drive')}</td><td>${this.esc(r.src||'manual')}</td><td><span class="ph-badge ${r.ok?'ok':'bad'}">${r.ok?'✅ OK':'❌ FAIL'}</span></td><td>${r.rows||'—'}</td><td class="mono" style="font-size:.70rem">${this.esc((r.sha||'').slice(0,16))}</td></tr>`).join('');
+          }
+        }catch(_){ if(bkRuns) bkRuns.innerHTML='<tr><td colspan=6 class="dc-muted">Backup runs: see Admin Data</td></tr>'; }
+      }
+    }catch(e){ 
+      if(b) b.innerHTML=`<span class="ph-badge bad">Drive check error: ${this.esc(e.message||e)}</span><p class="muted">Setup in Admin Data → Drive Backup</p>`;
+      if(typeof toast==='function') toast('Drive backup check error: '+(e.message||e),'warning',5000);
+    }
   },
 
   async license(){
@@ -586,19 +669,36 @@ const PH={
 
   async archive(){
     const b=document.getElementById('ph-archive');
+    const bkVault=document.getElementById('bk-vault');
+    const bkRuns=document.getElementById('bk-runs');
     if(!b) return;
-    if(!window.sb){ b.textContent='DB not configured'; return; }
     try{
-      const [cbt, students]=await Promise.all([
-        sb.from('cbt_exams').select('id',{count:'exact',head:true}).eq('is_archived', true).then(r=>r.count||0).catch(()=>0),
-        sb.from('module_records').select('id',{count:'exact',head:true}).eq('module','student_archive').then(r=>r.count||0).catch(()=>0)
-      ]);
-      let vaultCount=0;
-      try{ if(window.DataPortability){ DataPortability.init(sb); const v=await DataPortability.listVault(); vaultCount=v.length; } }catch(_){}
+      if(!window.sb){ b.innerHTML='<span class="ph-badge warn">DB not configured — archive health needs DB</span>'; if(bkVault) bkVault.textContent='—'; return; }
+      b.innerHTML='<span class="pulse">Checking archive health…</span>';
+      let cbt=0, students=0, vaultCount=0;
+      try{
+        const r=await sb.from('cbt_exams').select('id',{count:'exact',head:true}).eq('is_archived', true);
+        cbt=r.count||0;
+      }catch(e){ console.warn('cbt archived count failed', e.message); }
+      try{
+        const r=await sb.from('module_records').select('id',{count:'exact',head:true}).eq('module','student_archive');
+        students=r.count||0;
+      }catch(e){ console.warn('student archive count failed', e.message); }
+      try{ 
+        if(window.DataPortability){ 
+          DataPortability.init(sb); 
+          const v=await Promise.race([DataPortability.listVault(), new Promise((_,rej)=>setTimeout(()=>rej(new Error('vault timeout')),2000))]);
+          vaultCount=v.length; 
+        } 
+      }catch(e){ console.warn('vault count failed', e.message); }
       const total=(cbt||0)+(students||0)+vaultCount;
       const cls=total>0?(cbt>0?'warn':'ok'):'ok';
-      b.innerHTML=this.badge(`${cbt} CBT archived · ${students} student archives · ${vaultCount} vault — total ${total} archived`, cls)+`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${cbt>0?`<a class="btn btn-sm btn-primary" href="cbt.html">♻️ Restore ${cbt} CBT in One Click</a>`:''}<a class="btn btn-sm btn-outline" href="admin-data.html">🗃️ Universal Restore Hub</a><a class="btn btn-sm btn-outline" href="storage.html">📦 Vault</a></div>`+(cbt>0?`<p class="muted" style="margin-top:6px;color:#92400e"><b>⚠️ ${cbt} CBT exam(s) are archived and hidden from students.</b> Go to CBT → Archive Recovery Center → Restore ALL.</p>`:`<p class="muted" style="margin-top:6px">✅ No CBT exams archived.</p>`);
-    }catch(e){ b.innerHTML=`<p style="color:#b91c1c">${this.esc(e.message||e)}</p>`; }
+      b.innerHTML=this.badge(`${cbt} CBT archived · ${students} student archives · ${vaultCount} vault — total ${total} archived`, cls)+`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${cbt>0?`<a class="btn btn-sm btn-primary" href="cbt.html">♻️ Restore ${cbt} CBT in One Click</a>`:''}<a class="btn btn-sm btn-outline" href="admin-data.html">🗃️ Universal Restore Hub</a><a class="btn btn-sm btn-outline" href="storage.html">📦 Vault</a></div>`+(cbt>0?`<p class="muted" style="margin-top:6px;color:#92400e"><b>⚠️ ${cbt} CBT exam(s) are archived and hidden from students.</b> Go to CBT → Archive Recovery Center → Restore ALL.</p>`:`<p class="muted" style="margin-top:6px">✅ No CBT exams archived. Archive system healthy.</p>`);
+      if(bkVault) bkVault.textContent=`${vaultCount} vault · ${cbt} CBT · ${students} student`;
+    }catch(e){ 
+      if(b) b.innerHTML=`<span class="ph-badge bad">Archive health error: ${this.esc(e.message||e)}</span><p class="muted">See Admin Data → Universal Archive & Restore Hub</p>`;
+      if(typeof toast==='function') toast('Archive health error: '+(e.message||e),'warning',5000);
+    }
   },
 
   async audit(){
