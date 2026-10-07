@@ -617,6 +617,25 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           <button class="btn btn-outline" onclick="AP.totals()">Σ Totals only</button>
           <span style="font-weight:800;color:var(--primary);margin-left:10px">4️⃣</span>
           <button class="btn btn-primary" onclick="AP.pushModal()" data-staff-only>🚀 Push totals → Report card</button>
+          <span style="font-weight:800;color:var(--primary);margin-left:10px">5️⃣</span>
+          <button class="btn btn-outline" onclick="ICSExport.exportAssignments()" title="Export assignments as .ics calendar (TutorBird-style)">📅 Assignments .ics</button>
+          <button class="btn btn-outline" onclick="ICSExport.exportAll()" title="Export full calendar (timetable + assignments + CBT) as .ics">📅 Full Calendar .ics</button>
+        </div>
+        <!-- V12.17: Study Log / Timer + Portfolio + Practice -->
+        <div class="card" style="margin-top:16px;border:1px solid #a5b4fc;background:#eef2ff">
+          <h4 style="margin:0 0 8px">⏱ Study Log / Timer + 🏅 Streaks + 📁 Portfolio (from TutoringConnect) — V12.17</h4>
+          <p style="font-size:.85rem;color:#475569">Track study time per subject, earn streaks & points in practice mode, build learner portfolio. Links not uploads — protects free tier.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:8px">
+            <div class="form-group" style="margin:0"><label>Subject</label><select class="form-select" id="study-subject" style="max-width:160px"><option>Mathematics</option><option>English</option><option>General</option></select></div>
+            <div class="form-group" style="margin:0"><label>Activity</label><input class="form-input" id="study-activity" placeholder="e.g., Homework, Reading" style="max-width:180px"></div>
+            <button class="btn btn-primary btn-sm" onclick="StudyLog.start(document.getElementById('study-subject').value, document.getElementById('study-activity').value||'Study')">▶ Start Timer</button>
+            <button class="btn btn-outline btn-sm" onclick="StudyLog.stop()">⏹ Stop & Log</button>
+            <button class="btn btn-outline btn-sm" onclick="StudyLog.exportICS()">📅 Export Study Log .ics</button>
+            <span id="study-timer-display" style="font-weight:800;color:#4338ca">⏱ No timer running</span>
+          </div>
+          <div id="study-log-list"></div>
+          <div id="portfolio-list" style="margin-top:12px"></div>
+          <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-sm btn-outline" onclick="LearnerPortfolio.render()">📁 View Portfolio</button><button class="btn btn-sm btn-outline" onclick="LearnerPortfolio.valueAddedReport(document.getElementById('ap-class').value||'JSS1', document.getElementById('ap-subject').value||'Mathematics').then(r=>{ if(r.ok) openModal('📈 Value-Added Report', '<div class=table-wrap><table><thead><tr><th>Student</th><th>First</th><th>Last</th><th>Value-Added</th><th>Trend</th></tr></thead><tbody>'+r.report.map(x=>'<tr><td>'+AP.esc(x.name)+'</td><td>'+x.firstTerm+': '+x.firstPct.toFixed(1)+'%</td><td>'+x.lastTerm+': '+x.lastPct.toFixed(1)+'%</td><td><b>'+x.valueAdded.toFixed(1)+'%</b></td><td>'+x.trend+'</td></tr>').join('')+'</tbody></table></div>', '<button class=btn btn-outline onclick=closeModal()>Close</button>'); else toast(r.error,'warning'); })">📈 Value-Added</button><button class="btn btn-sm btn-outline" onclick="LearnerPortfolio.atRiskBoard(document.getElementById('ap-class').value||'JSS1').then(list=>{ openModal('⚠️ At-Risk Board', '<div class=table-wrap><table><thead><tr><th>Student</th><th>Avg</th><th>Attendance</th><th>Rules</th><th>Severity</th></tr></thead><tbody>'+list.map(x=>'<tr><td>'+AP.esc(x.student)+'<br><small>'+AP.esc(x.admission||'')+'</small></td><td>'+x.avg+'%</td><td>'+x.attPct+'%</td><td>'+x.rules.join(', ')+'</td><td>'+x.severity+'</td></tr>').join('')+'</tbody></table></div>', '<button class=btn btn-outline onclick=closeModal()>Close</button>'); })">⚠️ At-Risk</button></div>
         </div>
         <div id="ap-totals" style="margin-top:10px"></div>
       </div>
@@ -641,6 +660,11 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <script src="assets/js/enterprise.js"></script>
 <script src="assets/js/crud.js"></script>
 <script src="assets/js/assignment-cbt.js"></script>
+<script src="assets/js/keepalive-layers.js"></script>
+<script src="assets/js/cbt-practice.js"></script>
+<script src="assets/js/study-log.js"></script>
+<script src="assets/js/ics-export.js"></script>
+<script src="assets/js/learner-portfolio.js"></script>
 <script src="assets/js/report-engine.js"></script>
 <script src="assets/js/analytics.js"></script>
 <script src="assets/js/app.js"></script>

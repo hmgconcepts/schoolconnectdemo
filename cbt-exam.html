@@ -118,6 +118,11 @@ textarea.form-input{min-height:80px;resize:vertical}
 <script src="assets/js/cbt-richtext.js"></script>
 <script src="assets/js/cbt-speech.js"></script>
 <script src="assets/js/proctor.js"></script>
+<script src="assets/js/keepalive-layers.js"></script>
+<script src="assets/js/cbt-practice.js"></script>
+<script src="assets/js/study-log.js"></script>
+<script src="assets/js/ics-export.js"></script>
+<script src="assets/js/learner-portfolio.js"></script>
 <script>
 /* ===================================================================
    CBT Exam Runner v15 — Final Stable
@@ -466,6 +471,42 @@ textarea.form-input{min-height:80px;resize:vertical}
       const ta = this.root().querySelector('textarea');
       if (ta) ta.addEventListener('input', () => this.answer(ta.value));
     }
+    // V12.17: JAMB-style keyboard shortcuts A-D, N, P, arrow keys, R, S (from hmgacademycbtsystem)
+    // Robust, all-inclusive, self-contained, seamless — speed practice for UTME
+    try{
+      if(!this._keysBound){
+        this._keysBound=true;
+        const keyHandler=(e)=>{
+          if(this._done) return;
+          const active=document.activeElement;
+          if(active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA' || active.isContentEditable)) return;
+          const key=String(e.key||'').toUpperCase();
+          if(['A','B','C','D'].includes(key)){
+            const labels=this.root().querySelectorAll('.option-label');
+            const idx=['A','B','C','D'].indexOf(key);
+            if(labels[idx]){
+              labels[idx].click();
+              e.preventDefault();
+            }
+          }else if(key==='N' || e.key==='ArrowRight'){
+            const btn=this.root().querySelector('[data-act="next-in"]');
+            if(btn && !btn.disabled){ this.nextInSubject(); e.preventDefault(); }
+          }else if(key==='P' || e.key==='ArrowLeft'){
+            const btn=this.root().querySelector('[data-act="prev-in"]');
+            if(btn && !btn.disabled){ this.prevInSubject(); e.preventDefault(); }
+          }else if(key==='R'){
+            this.flags[this.idx]=!this.flags[this.idx];
+            this.render();
+            e.preventDefault();
+          }else if(key==='S'){
+            if(confirm('Submit exam now? (S shortcut)')) this.confirmSubmit();
+            e.preventDefault();
+          }
+        };
+        document.addEventListener('keydown', keyHandler);
+        this._keyHandler=keyHandler;
+      }
+    }catch(_){}
   };
 
   Exam.answer = function(v){
