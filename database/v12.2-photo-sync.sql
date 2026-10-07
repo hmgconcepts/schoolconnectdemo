@@ -90,4 +90,23 @@ update public.staff st set photo_url = p.photo_url
   from public.profiles p
  where st.user_id = p.id and coalesce(st.photo_url,'') = '' and coalesce(p.photo_url,'') <> '';
 
-select 'V12.2 photo-sync pack installed (triggers + backfill)' as status;
+-- Marker for schema doctor (self-contained — fixes false alarm when only this file run)
+insert into public.sc_install_state(key,details) values ('v12.2-photo-sync.sql','{"self":true}') on conflict (key) do nothing;
+
+-- Verifiable probe RPC for Schema Doctor (normal function, not trigger — callable via PostgREST)
+create or replace function public.sc_photo_sync_status()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_has_fn1 boolean; v_has_fn2 boolean; v_has_fn3 boolean; v_has_trig1 boolean; v_has_trig2 boolean; v_has_trig3 boolean; v_marker boolean;
+begin
+  v_has_fn1 := to_regprocedure('public.sc_sync_photo_to_profile()') is not null;
+  v_has_fn2 := to_regprocedure('public.sc_sync_photo_to_student()') is not null;
+  v_has_fn3 := to_regprocedure('public.sc_sync_staff_photo_to_profile()') is not null;
+  select exists(select 1 from pg_trigger where tgname='trg_students_photo_sync') into v_has_trig1;
+  select exists(select 1 from pg_trigger where tgname='trg_profiles_photo_sync') into v_has_trig2;
+  select exists(select 1 from pg_trigger where tgname='trg_staff_photo_sync') into v_has_trig3;
+  select exists(select 1 from public.sc_install_state where key='v12.2-photo-sync.sql') into v_marker;
+  return jsonb_build_object('ok', v_has_fn1 and v_has_fn2 and v_has_trig1 and v_has_trig2, 'functions', jsonb_build_object('sc_sync_photo_to_profile', v_has_fn1, 'sc_sync_photo_to_student', v_has_fn2, 'sc_sync_staff_photo_to_profile', v_has_fn3), 'triggers', jsonb_build_object('trg_students_photo_sync', v_has_trig1, 'trg_profiles_photo_sync', v_has_trig2, 'trg_staff_photo_sync', v_has_trig3), 'marker_present', v_marker, 'checked_at', now());
+end$$;
+grant execute on function public.sc_photo_sync_status() to anon, authenticated;
+
+select 'V12.2 photo-sync pack installed (triggers + backfill + marker + probe)' as status;
