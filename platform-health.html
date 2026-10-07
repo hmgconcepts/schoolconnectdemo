@@ -201,8 +201,7 @@
       <div class="card" style="padding:12px"><h4>🏅 Streaks & Badges + Leaderboard</h4><p class="muted">Practice streaks, longest, points, leaderboard hideable. From Adewale Classroom. In cbt-practice.js</p><span class="ph-badge ok">✓ Implemented</span></div>
       <div class="card" style="padding:12px"><h4>📁 Learner Portfolio</h4><p class="muted">Portfolio of certificates, projects, assignments, CBT results, other artifacts. Table learner_portfolios. Value-added, OLS prediction, at-risk board. In learner-portfolio.js</p><span class="ph-badge ok">✓ Implemented</span></div>
       <div class="card" style="padding:12px"><h4>📈 Value-Added & At-Risk Analytics</h4><p class="muted">Value-added (first vs last term), OLS prediction, six at-risk rules (low avg, low attendance, few scores). From tutoring insights. In learner-portfolio.js valueAddedReport() + atRiskBoard()</p><span class="ph-badge ok">✓ Implemented</span></div>
-      <div class="card" style="padding:12px"><h4>👥 Independent Engagements & 4-Cycle Bookings</h4><p class="muted">Engagements independent per learner, 4-cycle bookings (4×7 days, 8 classes), hour banks, goals, fees, analytics. Adapted for school: assignments per class/subject cumulative, student only own.</p><span class="ph-badge ok">✓ Adapted</span></div>
-      <div class="card" style="padding:12px"><h4>🔗 Links Not Uploads + Drive Previews</h4><p class="muted">Media as Drive/YouTube/https links, not bytes in Postgres — protects 500 MB free tier. Already in digital_library, assignments drive_link, etc.</p><span class="ph-badge ok">✓ Implemented</span></div>
+            <div class="card" style="padding:12px"><h4>🔗 Links Not Uploads + Drive Previews</h4><p class="muted">Media as Drive/YouTube/https links, not bytes in Postgres — protects 500 MB free tier. Already in digital_library, assignments drive_link, etc.</p><span class="ph-badge ok">✓ Implemented</span></div>
     </div>
   </section>
 
@@ -245,7 +244,10 @@ const PH={
     {file:'v12.14-robust-fixes.sql', label:'Robust fixes Edit/Delete + auto-fill', kind:'col', table:'assignment_scores', col:'cbt_exam_id'},
     {file:'v12.15-term-sheet-and-permissions.sql', label:'Term sheet + permissions', kind:'rpc', fn:'sc_set_report_generation_allowed', args:{p_term:'First Term',p_session:'2024/2025',p_allowed:true}},
     {file:'v12.16-report-allow-and-multicombine.sql', label:'Report allow + multi-combine', kind:'rpc', fn:'sc_is_report_generation_allowed', args:{p_term:'First Term'}},
-    {file:'v12.17-advanced-cbt-and-layers.sql', label:'Advanced CBT + 14-layer + tutoring', kind:'rpc', fn:'sc_heartbeat_health', args:{}}
+    {file:'v12.17-advanced-cbt-and-layers.sql', label:'Advanced CBT + 14-layer + tutoring', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
+    {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Heartbeat updated_at fix + platform health robust', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
+    {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Report allow per term', kind:'rpc', fn:'sc_set_report_generation_allowed', args:{p_term:'First Term',p_session:'2024/2025',p_allowed:true}},
+    {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Storage top tables', kind:'rpc', fn:'storage_table_top', args:{}}
   ],
 
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
@@ -504,18 +506,53 @@ const PH={
     }catch(e){ if(b) b.textContent=e.message; }
   },
 
-  license(){
+  async license(){
     const b=document.getElementById('ph-license');
     const licModel=document.getElementById('lic-model');
     const licStatus=document.getElementById('lic-status');
     const licExp=document.getElementById('lic-exp');
     const licProbe=document.getElementById('lic-probe');
-    const L=(window.SCHOOL&&window.SCHOOL.license)||{};
-    if(b) b.innerHTML=(L.model==='lifetime'?this.badge('Lifetime — no recurring fees ✓','ok'):this.badge((L.model||'unknown')+' · '+(L.plan||''),L.status==='active'?'ok':'bad'))+`<p style="margin:8px 0 0">Model: <b>${this.esc(L.model||'—')}</b>${L.expires_on?' · Expires: <b>'+this.esc(L.expires_on)+'</b>':''}</p>`;
+    const licenseState=document.getElementById('license-state');
+    const licenseDetail=document.getElementById('license-detail');
+    let L=(window.SCHOOL&&window.SCHOOL.license)||{};
+    // Try to fetch from site_license table (robust)
+    try{
+      if(window.sb){
+        const {data:licRow}=await sb.from('site_license').select('*').eq('id',1).maybeSingle();
+        if(licRow){
+          L.model=licRow.license_model||L.model||'lifetime';
+          L.status=licRow.license_status||L.status||'active';
+          L.expires_on=licRow.expires_on||L.expires_on||'';
+          L.plan=licRow.plan_name||L.plan||'';
+        }
+      }
+    }catch(_){}
+    // Try server RPC sc_license_status (fleet reads this)
+    let probeText='sc_license_status RPC readable via anon';
+    let probeOk=true;
+    try{
+      if(window.sb){
+        const {data:rpcData, error:rpcErr}=await sb.rpc('sc_license_status');
+        if(!rpcErr && rpcData){
+          probeText=`Server verdict: ${rpcData.state||rpcData.status||'active'} — ${rpcData.licensed_to||''} — model ${rpcData.license_model||L.model||'—'}`;
+          if(rpcData.license_model) L.model=rpcData.license_model;
+          if(rpcData.state) L.status=rpcData.state;
+          if(rpcData.expires_on) L.expires_on=rpcData.expires_on;
+        }else if(rpcErr){
+          probeText=`RPC error: ${rpcErr.message} — run database/complete-schema.sql`;
+          probeOk=false;
+        }
+      }
+    }catch(e){ probeText=`Probe failed: ${e.message||e}`; probeOk=false; }
+    const badgeCls=L.model==='lifetime'?'ok':(L.status==='active'?'ok':'bad');
+    const badgeTxt=L.model==='lifetime'?`Lifetime — no recurring fees ✓ — ${L.status||'active'}`:`${L.model||'unknown'} · ${L.plan||''} · ${L.status||'active'}`;
+    if(b) b.innerHTML=this.badge(badgeTxt,badgeCls)+`<p style="margin:8px 0 0">Model: <b>${this.esc(L.model||'—')}</b>${L.expires_on?' · Expires: <b>'+this.esc(L.expires_on)+'</b>':''} · Status: <b>${this.esc(L.status||'—')}</b></p><p class="muted" style="margin-top:6px">${this.esc(probeText)}</p>`;
     if(licModel) licModel.textContent=L.model||'—';
     if(licStatus) licStatus.textContent=L.status||'active';
     if(licExp) licExp.textContent=L.expires_on||'lifetime';
-    if(licProbe) licProbe.textContent='sc_license_status RPC readable via anon';
+    if(licProbe) { licProbe.textContent=probeText; licProbe.style.color=probeOk?'#065f46':'#b91c1c'; }
+    if(licenseState) { licenseState.textContent=L.status||'active'; licenseState.className='text-xl font-extrabold mt-2 '+(L.status==='active'||L.model==='lifetime'?'text-emerald-700':'text-red-600'); }
+    if(licenseDetail) licenseDetail.textContent=`${L.model||'—'} · ${L.status||'—'}${L.expires_on?' · expires '+L.expires_on:''} — ${probeText.slice(0,80)}`;
   },
 
   async loadSecurity(){
@@ -688,16 +725,17 @@ const PH={
     toast('⬇ Exported health report JSON','success');
   },
 
-  refresh(){
-    this.heartbeat();
-    this.storage();
-    this.drive();
-    this.license();
-    this.loadSecurity();
-    this.audit();
-    this.schemaDoctor();
-    this.archive();
-    this.fleetChecks();
+  async refresh(){
+    // V12.18: robust refresh — each panel independent, never blocks others, shows errors if any
+    try{ await this.heartbeat(); }catch(e){ console.warn('heartbeat failed', e); }
+    try{ await this.storage(); }catch(e){ console.warn('storage failed', e); }
+    try{ await this.drive(); }catch(e){ console.warn('drive failed', e); }
+    try{ await this.license(); }catch(e){ console.warn('license failed', e); }
+    try{ await this.loadSecurity(); }catch(e){ console.warn('security failed', e); }
+    try{ await this.audit(); }catch(e){ console.warn('audit failed', e); }
+    try{ await this.schemaDoctor(); }catch(e){ console.warn('doctor failed', e); }
+    try{ await this.archive(); }catch(e){ console.warn('archive failed', e); }
+    try{ await this.fleetChecks(); }catch(e){ console.warn('fleet checks failed', e); }
   }
 };
 
