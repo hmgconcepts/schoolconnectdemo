@@ -69,7 +69,36 @@ const StudyLog = {
     this.render();
   },
 
+  async loadSubjects(){
+    // V12.18: robust subject loading for study log — ensures subject field loads all subjects (fixes bug)
+    try{
+      if(!this.sb) return;
+      const sel=document.getElementById('study-subject');
+      if(!sel) return;
+      const {data}=await this.sb.from('subjects').select('name').order('name').limit(500);
+      if(data && data.length){
+        const keep=sel.value;
+        sel.innerHTML='';
+        data.forEach(s=>{
+          const o=document.createElement('option');
+          o.value=s.name;
+          o.textContent=s.name;
+          sel.appendChild(o);
+        });
+        if(![...sel.options].some(o=>o.value.toLowerCase()==='general')){
+          const o=document.createElement('option');
+          o.value='General';
+          o.textContent='General';
+          sel.appendChild(o);
+        }
+        if(keep && [...sel.options].some(o=>o.value===keep)) sel.value=keep;
+      }
+    }catch(e){ console.warn('StudyLog loadSubjects failed', e.message); }
+  },
+
   async render(){
+    // Ensure subjects loaded
+    this.loadSubjects().catch(()=>{});
     const box=document.getElementById('study-log-list');
     if(!box) return;
     if(!this.sb){ box.innerHTML='<p style="color:#64748b">DB not configured</p>'; return; }
