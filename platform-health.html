@@ -271,7 +271,7 @@ const PH={
     {file:'v11.7-admission-year.sql', label:'True admission year', kind:'col', table:'students', col:'admission_year'},
     {file:'v11.9-voting-integrity.sql', label:'Voting integrity', kind:'rpc', fn:'sc_poll_results', args:{p_poll:'00000000-0000-0000-0000-000000000000'}},
     {file:'v12.0-audit-columns.sql', label:'Audit columns', kind:'col', table:'staff', col:'date_of_birth'},
-    {file:'v12.2-photo-sync.sql', label:'Two-way photo sync', kind:'rpc', fn:'sc_sync_probe_absent', probeTrigger:'trg_students_photo_sync'},
+    {file:'v12.2-photo-sync.sql', label:'Two-way photo sync', kind:'rpc', fn:'sc_sync_photo_to_profile', args:{}},
     {file:'v12.3-write-columns.sql', label:'Write columns', kind:'col', table:'attendance_checkins', col:'status'},
     {file:'v12.5-schema-doctor.sql', label:'Schema Doctor', kind:'rpc', fn:'sc_installed_packs', args:{}},
     {file:'v12.6-relink.sql', label:'One-click re-link', kind:'rpc', fn:'sc_relink_all', args:{}},

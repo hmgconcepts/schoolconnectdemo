@@ -884,7 +884,21 @@ window.CBTUI = {
        <label><input type="checkbox" id="ed-open" ${e.is_open?'checked':''}> Open for candidates</label><label><input type="checkbox" id="ed-arch" ${e.is_archived?'checked':''}> Archived</label>
        <label><input type="checkbox" id="ed-rand" ${e.randomise?'checked':''}> Randomise within subject</label><label><input type="checkbox" id="ed-rel" ${e.release_results!==false?'checked':''}> Release results instantly</label>
        <label><input type="checkbox" id="ed-cert" ${e.certificate_enabled!==false?'checked':''}> Certificate enabled</label><label><input type="checkbox" id="ed-ent" ${e.is_entrance?'checked':''}> Entrance examination</label>
-      </div></div>`,
+      </div></div>
+      <div class="card" style="background:#eef2ff;border-color:#a5b4fc;margin-top:12px"><h3 style="margin-top:0">🛡️ Anti-cheat and exam security — Full Editing (V12.20)</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <label><input type="checkbox" id="ed-ac-tab" ${((e.anti_cheat_config||{}).tab_switch!==false)?'checked':''}> Detect tab/app switching</label>
+          <label><input type="checkbox" id="ed-ac-blur" ${((e.anti_cheat_config||{}).window_blur!==false)?'checked':''}> Detect window focus loss</label>
+          <label><input type="checkbox" id="ed-ac-copy" ${((e.anti_cheat_config||{}).copy_paste!==false)?'checked':''}> Block copy / paste / cut</label>
+          <label><input type="checkbox" id="ed-ac-right" ${((e.anti_cheat_config||{}).right_click!==false)?'checked':''}> Block right-click</label>
+          <label><input type="checkbox" id="ed-ac-full" ${((e.anti_cheat_config||{}).fullscreen!==false)?'checked':''}> Encourage fullscreen mode</label>
+          <label><input type="checkbox" id="ed-ac-watermark" ${((e.anti_cheat_config||{}).watermark!==false)?'checked':''}> Show candidate watermark</label>
+          <label title="Intermittent webcam snapshots (~1/min) saved privately to File Storage for teacher review"><input type="checkbox" id="ed-ac-camera" ${((e.anti_cheat_config||{}).camera===true)?'checked':''}> 📸 Camera snapshots (proctoring)</label>
+          <label title="Watches microphone LOUDNESS only (nothing is recorded); sustained talking logs a violation + snapshot"><input type="checkbox" id="ed-ac-audio" ${((e.anti_cheat_config||{}).audio_monitor===true)?'checked':''}> 🎙️ Audio monitoring (noise alerts)</label>
+        </div>
+        <div class="form-group" style="margin-top:10px;max-width:220px"><label>Violation limit before auto-submit</label><input class="form-input" type="number" id="ed-ac-max" value="${Number((e.anti_cheat_config||{}).max_violations||5)}" min="0" max="10"><small>0 disables auto-submit. Enhanced monitoring prevents impersonation, calling answers, etc.</small></div>
+        <p style="font-size:.82rem;color:#475569;margin-top:8px"><b>Full editing:</b> All anti-cheat and security settings can now be edited for pre-existing CBTs — previously missing, now restored. Camera snapshots saved to Storage (not 500 MB DB) to prevent quick usage, audio monitoring detects talking/calls.</p>
+      </div>`,
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="CBTUI.saveEdit(\''+id+'\')">Save all changes</button>');
     this.refreshEditReportColumns();
   },
@@ -896,7 +910,25 @@ window.CBTUI = {
   async saveEdit(id){
     const v=x=>(document.getElementById(x)||{}).value||'',c=x=>!!(document.getElementById(x)||{}).checked,e=this._editExam||{};const subject=v('ed-subject')||e.subject,className=v('ed-class'),term=v('ed-term'),session=v('ed-session'),title=v('ed-title').trim();
     if(!title||!subject||!className||!term||!session){toast('Title, subject, class, term and session are required. Pick each from the supplied controls.','warning',9000);return;}const start=v('ed-start'),close=v('ed-close');if(start&&close&&new Date(close)<=new Date(start)){toast('Closing time must be after starting time.','warning');return;}
-    const patch={teacher_id:e.teacher_id||((window.SC_PROFILE&&SC_PROFILE.id)||null),title,subject,class:className,term,session,assessment_type:v('ed-type'),exam_mode:v('ed-mode'),report_column:v('ed-col'),max_score:Number(v('ed-max'))||0,duration:Number(v('ed-dur'))||45,duration_min:Number(v('ed-dur'))||45,negative_mark:Number(v('ed-neg'))||0,select_count:Number(v('ed-sel'))||0,attempt_limit:Number(v('ed-att'))||0,pass_mark:Number(v('ed-pass'))||0,topic:v('ed-topic'),instructions:v('ed-instr'),start_at:start||null,close_at:close||null,is_open:c('ed-open'),is_archived:c('ed-arch'),randomise:c('ed-rand'),release_results:c('ed-rel'),certificate_enabled:c('ed-cert'),is_entrance:c('ed-ent'),updated_at:new Date().toISOString()};
+    // V12.20: Full editing including anti-cheat and exam security (previously missing)
+    const existingAC=(e.anti_cheat_config||{});
+    const acPatch={
+      tab_switch: document.getElementById('ed-ac-tab') ? document.getElementById('ed-ac-tab').checked : (existingAC.tab_switch!==false),
+      window_blur: document.getElementById('ed-ac-blur') ? document.getElementById('ed-ac-blur').checked : (existingAC.window_blur!==false),
+      copy_paste: document.getElementById('ed-ac-copy') ? document.getElementById('ed-ac-copy').checked : (existingAC.copy_paste!==false),
+      right_click: document.getElementById('ed-ac-right') ? document.getElementById('ed-ac-right').checked : (existingAC.right_click!==false),
+      fullscreen: document.getElementById('ed-ac-full') ? document.getElementById('ed-ac-full').checked : (existingAC.fullscreen!==false),
+      watermark: document.getElementById('ed-ac-watermark') ? document.getElementById('ed-ac-watermark').checked : (existingAC.watermark!==false),
+      camera: document.getElementById('ed-ac-camera') ? document.getElementById('ed-ac-camera').checked : !!existingAC.camera,
+      audio_monitor: document.getElementById('ed-ac-audio') ? document.getElementById('ed-ac-audio').checked : !!existingAC.audio_monitor,
+      devtools: true,
+      max_violations: document.getElementById('ed-ac-max') ? parseInt(document.getElementById('ed-ac-max').value||'5') : (Number(existingAC.max_violations)||5),
+      // Preserve existing breakdown/subjects/multi flags
+      subject_breakdown: existingAC.subject_breakdown||null,
+      subjects: existingAC.subjects||null,
+      multi_subject: existingAC.multi_subject||false
+    };
+    const patch={teacher_id:e.teacher_id||((window.SC_PROFILE&&SC_PROFILE.id)||null),title,subject,class:className,term,session,assessment_type:v('ed-type'),exam_mode:v('ed-mode'),report_column:v('ed-col'),max_score:Number(v('ed-max'))||0,duration:Number(v('ed-dur'))||45,duration_min:Number(v('ed-dur'))||45,negative_mark:Number(v('ed-neg'))||0,select_count:Number(v('ed-sel'))||0,attempt_limit:Number(v('ed-att'))||0,pass_mark:Number(v('ed-pass'))||0,topic:v('ed-topic'),instructions:v('ed-instr'),start_at:start||null,close_at:close||null,is_open:c('ed-open'),is_archived:c('ed-arch'),randomise:c('ed-rand'),release_results:c('ed-rel'),certificate_enabled:c('ed-cert'),is_entrance:c('ed-ent'),anti_cheat_config:acPatch,updated_at:new Date().toISOString()};
     const {data,error}=await sb.from('cbt_exams').update(patch).eq('id',id).select().maybeSingle();if(error){toast('Could not save exam: '+error.message,'danger',10000);return;}if(!data){toast('Exam update was not confirmed. Check teacher ownership/RLS.','danger',10000);return;}toast('✅ Full exam settings updated. Candidate and report-card values are uniform.','success',7000);closeModal();CBTUI.refresh();
   },
   async editQuestions(id){
