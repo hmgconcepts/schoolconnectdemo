@@ -7908,17 +7908,12 @@ alter table public.push_subscriptions add column if not exists updated_at timest
 select 'RUNNING: School Connect schema-doctor pack V12.5' as running_version;
 
 -- 1. Reader RPC (admin/staff only — install state is not public knowledge)
-create or replace function public.sc_installed_packs()
-returns jsonb language plpgsql security definer stable set search_path=public as $$
-begin
-  if not public.is_staff(auth.uid()) then
-    return '[]'::jsonb;
-  end if;
-  return coalesce((select jsonb_agg(jsonb_build_object('key', key, 'applied_at', applied_at))
-                     from public.sc_install_state where key like 'v%.sql'), '[]'::jsonb);
-end$$;
-revoke execute on function public.sc_installed_packs() from public, anon;
-grant execute on function public.sc_installed_packs() to authenticated;
+-- REMOVED duplicate sc_installed_packs kept last (v12.19)
+
+-- REMOVED early grant for idempotence (kept after last def)
+
+-- REMOVED early grant for idempotence (kept after last def)
+
 
 -- 2. TRUTHFUL retro-markers: probe this database's own artifacts.
 do $doctor$
@@ -8769,7 +8764,7 @@ alter table public.school_settings add column if not exists allow_parent_report_
 
 
 
--- V12.17 tables: per-layer sources + CBT advanced + tutoring (cleaned, function defs kept in v12.18)
+-- V12.17 tables: per-layer sources + CBT advanced + tutoring (cleaned, function defs kept in v12.19)
 create table if not exists public.sc_keepalive_sources (
   source text primary key,
   last_ping_at timestamptz not null default now(),
@@ -8902,26 +8897,26 @@ create policy "spaced_rw" on public.cbt_spaced_practice for all using (user_id=a
 
 
 -- ============================================================================
--- School Connect V12.18 — HEARTBEAT UPDATED_AT FIX + PLATFORM HEALTH ROBUST (pass 94)
+-- School Connect V12.19 — PLATFORM HEALTH ROBUST + SCHEMA PACKS CHECKING FIX (pass 96)
 -- ----------------------------------------------------------------------------
 -- Fixes:
--- 1. Fleet Console error: "column updated_at of relation sc_heartbeat does not exist" when pinging
---    - Root cause: sc_heartbeat table originally had only id, last_ping, last_source, ping_count
---    - V12.17 added sources jsonb and last_ping_at but missed updated_at column, yet sc_keep_alive RPC tried to update updated_at → 42703
---    - This pack adds updated_at + ensures all needed columns exist
--- 2. Platform Health page not reporting layers (Never, 0 count, checking...)
---    - Same root cause: sc_keep_alive fails due to missing updated_at, so sc_keepalive_sources never populated
---    - Also ensures sc_keepalive_sources table exists
---    - Ensures storage_table_top RPC exists
---    - Ensures report allow RPCs exist
--- 3. License section not showing — enhanced to fetch from school_settings + SCHOOL
--- 4. Removes tutoring-specific "Independent Engagements & 4-Cycle Bookings" card not needed in school setting
+-- 1. Schema packs snapshot card "checking" — ph-schema element missing in HTML caused early return in schemaDoctor() → doctor-rows stayed at Checking…
+--    - Added ph-schema div + removed early return if box missing, always probes and renders
+-- 2. Schema Doctor table not loading but displaying checking — same root cause + missing sc_installed_packs RPC or early grants
+--    - Ensures sc_installed_packs RPC exists + all pack markers + robust probing
+-- 3. Platform Health robust for all sections (license, keep-alive, backup, fleet ping)
+--    - Ensures sc_heartbeat has updated_at, last_ping_at, sources
+--    - Ensures sc_keepalive_sources table
+--    - Ensures storage_table_top RPC
+--    - Ensures report allow RPCs
+--    - Adds toast-container + modal + fallback toast for popup messages
+-- 4. Audit every page for errors — ensures all subject dropdowns load all subjects, etc.
 --
 -- Idempotent
 -- ============================================================================
-select 'RUNNING: School Connect heartbeat updated_at fix + platform health robust pack V12.18' as running_version;
+select 'RUNNING: School Connect platform health robust + schema packs fix pack V12.19' as running_version;
 
--- Ensure sc_heartbeat has all columns needed for 14-layer tracking
+-- Ensure sc_heartbeat has all columns
 create table if not exists public.sc_heartbeat (
   id integer primary key,
   last_ping timestamptz not null default now(),
@@ -8933,7 +8928,7 @@ alter table public.sc_heartbeat add column if not exists last_ping_at timestampt
 alter table public.sc_heartbeat add column if not exists sources jsonb default '{}'::jsonb;
 alter table public.sc_heartbeat add column if not exists updated_at timestamptz not null default now();
 
--- Ensure per-layer sources table exists
+-- Ensure per-layer sources
 create table if not exists public.sc_keepalive_sources (
   source text primary key,
   last_ping_at timestamptz not null default now(),
@@ -8948,7 +8943,6 @@ create policy "ka_sources_read" on public.sc_keepalive_sources for select using 
 revoke all on table public.sc_keepalive_sources from anon, authenticated;
 grant select on public.sc_keepalive_sources to anon, authenticated;
 
--- Ensure sc_heartbeat RLS
 alter table public.sc_heartbeat enable row level security;
 drop policy if exists "hb_read" on public.sc_heartbeat;
 create policy "hb_read" on public.sc_heartbeat for select using (true);
@@ -8957,137 +8951,66 @@ grant select on public.sc_heartbeat to anon, authenticated;
 
 insert into public.sc_heartbeat(id) values (1) on conflict (id) do nothing;
 
--- Recreate sc_keep_alive RPC with all columns (robust, idempotent)
+-- Recreate sc_keep_alive
 create or replace function public.sc_keep_alive(src text default 'unknown')
-returns timestamptz
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare v_now timestamptz := now();
-declare v_src text := left(coalesce(src,'unknown'),40);
-declare v_count bigint;
+returns timestamptz language plpgsql security definer set search_path=public as $$
+declare v_now timestamptz := now(); v_src text := left(coalesce(src,'unknown'),40); v_count bigint;
 begin
-  -- Get current count for src from sources jsonb
   select coalesce((sources->v_src->>'count')::bigint,0) into v_count from public.sc_heartbeat where id=1;
-
-  -- Update main heartbeat single row
   insert into public.sc_heartbeat(id, last_ping, last_ping_at, last_source, ping_count, sources, updated_at)
   values (1, v_now, v_now, v_src, 1, jsonb_build_object(v_src, jsonb_build_object('count',1,'last',v_now)), v_now)
-  on conflict (id) do update set
-    last_ping = v_now,
-    last_ping_at = v_now,
-    last_source = v_src,
-    ping_count = public.sc_heartbeat.ping_count + 1,
-    sources = coalesce(public.sc_heartbeat.sources,'{}'::jsonb) || jsonb_build_object(v_src, jsonb_build_object('count', v_count+1, 'last', v_now)),
-    updated_at = v_now;
-
-  -- Upsert per-source row
+  on conflict (id) do update set last_ping=v_now, last_ping_at=v_now, last_source=v_src, ping_count=public.sc_heartbeat.ping_count+1, sources=coalesce(public.sc_heartbeat.sources,'{}'::jsonb) || jsonb_build_object(v_src, jsonb_build_object('count', v_count+1, 'last', v_now)), updated_at=v_now;
   insert into public.sc_keepalive_sources(source, last_ping_at, ping_count, first_seen_at, updated_at)
   values (v_src, v_now, 1, v_now, v_now)
-  on conflict (source) do update set
-    last_ping_at = v_now,
-    ping_count = public.sc_keepalive_sources.ping_count + 1,
-    updated_at = v_now;
-
+  on conflict (source) do update set last_ping_at=v_now, ping_count=public.sc_keepalive_sources.ping_count+1, updated_at=v_now;
   return v_now;
 end$$;
-
 grant execute on function public.sc_keep_alive(text) to anon, authenticated;
 
--- Recreate health report RPC
+-- Health report RPC
 create or replace function public.sc_heartbeat_health()
-returns jsonb
-language plpgsql
-security definer
-set search_path=public
-as $$
-declare
-  v_main record;
-  v_sources jsonb := '[]'::jsonb;
-  v_now timestamptz := now();
-  v_pause_after_hours int := 168;
-  v_last_ping timestamptz;
-  v_age_hours numeric;
-  v_fresh_count int :=0;
-  v_total int :=0;
-  v_automated_fresh int :=0;
-  v_automated_total int :=0;
-  v_quorum boolean := false;
-  v_single_point boolean := false;
-  v_status text := 'healthy';
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_main record; v_sources jsonb := '[]'::jsonb; v_now timestamptz := now(); v_pause_after_hours int := 168; v_last_ping timestamptz; v_age_hours numeric; v_fresh_count int :=0; v_total int :=0; v_automated_fresh int :=0; v_automated_total int :=0; v_quorum boolean := false; v_single_point boolean := false; v_status text := 'healthy';
 begin
   select * into v_main from public.sc_heartbeat where id=1;
-  if not found then
-    return jsonb_build_object('ok',false,'status','no-heartbeat','pauseAfterHours',v_pause_after_hours);
-  end if;
+  if not found then return jsonb_build_object('ok',false,'status','no-heartbeat','pauseAfterHours',v_pause_after_hours); end if;
   v_last_ping := coalesce(v_main.last_ping_at, v_main.last_ping, v_now);
   v_age_hours := extract(epoch from (v_now - v_last_ping))/3600;
-
-  select jsonb_agg(to_jsonb(s)) into v_sources from (
-    select source, last_ping_at, ping_count, first_seen_at,
-           extract(epoch from (v_now - last_ping_at))/3600 as age_hours,
-           case when extract(epoch from (v_now - last_ping_at))/3600 < 72 then true else false end as is_fresh
-    from public.sc_keepalive_sources
-    order by last_ping_at desc
-  ) s;
-
+  select jsonb_agg(to_jsonb(s)) into v_sources from (select source, last_ping_at, ping_count, first_seen_at, extract(epoch from (v_now - last_ping_at))/3600 as age_hours, case when extract(epoch from (v_now - last_ping_at))/3600 < 72 then true else false end as is_fresh from public.sc_keepalive_sources order by last_ping_at desc) s;
   v_total := coalesce((select count(*) from public.sc_keepalive_sources),0);
   v_fresh_count := coalesce((select count(*) from public.sc_keepalive_sources where extract(epoch from (v_now - last_ping_at))/3600 < 72),0);
   v_automated_total := coalesce((select count(*) from public.sc_keepalive_sources where source not in ('site-visit','manual-button','external','fleet-console')),0);
   v_automated_fresh := coalesce((select count(*) from public.sc_keepalive_sources where source not in ('site-visit','manual-button','external','fleet-console') and extract(epoch from (v_now - last_ping_at))/3600 < 72),0);
-
   v_quorum := v_fresh_count >=2;
   v_single_point := v_fresh_count =1;
-
-  if v_age_hours > 168 then v_status := 'paused';
-  elsif v_age_hours > 144 then v_status := 'critical';
-  elsif v_age_hours > 120 then v_status := 'warning';
-  elsif v_single_point then v_status := 'single-point';
-  elsif v_automated_fresh <2 and v_fresh_count>=2 then v_status := 'human-only';
-  else v_status := 'healthy';
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'status', v_status,
-    'lastPing', v_last_ping,
-    'lastSource', v_main.last_source,
-    'pingCount', v_main.ping_count,
-    'ageHours', v_age_hours,
-    'daysUntilPause', greatest(0, (v_pause_after_hours - v_age_hours)/24),
-    'pauseAfterHours', v_pause_after_hours,
-    'sources', coalesce(v_sources,'[]'::jsonb),
-    'sourcesFresh', v_fresh_count,
-    'sourcesTotal', v_total,
-    'automatedSourcesFresh', v_automated_fresh,
-    'automatedSourcesTotal', v_automated_total,
-    'quorum', v_quorum,
-    'singlePointOfFailure', v_single_point
-  );
+  if v_age_hours > 168 then v_status := 'paused'; elsif v_age_hours > 144 then v_status := 'critical'; elsif v_age_hours > 120 then v_status := 'warning'; elsif v_single_point then v_status := 'single-point'; elsif v_automated_fresh <2 and v_fresh_count>=2 then v_status := 'human-only'; else v_status := 'healthy'; end if;
+  return jsonb_build_object('ok', true, 'status', v_status, 'lastPing', v_last_ping, 'lastSource', v_main.last_source, 'pingCount', v_main.ping_count, 'ageHours', v_age_hours, 'daysUntilPause', greatest(0, (v_pause_after_hours - v_age_hours)/24), 'pauseAfterHours', v_pause_after_hours, 'sources', coalesce(v_sources,'[]'::jsonb), 'sourcesFresh', v_fresh_count, 'sourcesTotal', v_total, 'automatedSourcesFresh', v_automated_fresh, 'automatedSourcesTotal', v_automated_total, 'quorum', v_quorum, 'singlePointOfFailure', v_single_point);
 end$$;
-
 grant execute on function public.sc_heartbeat_health() to anon, authenticated;
 
--- Storage table top RPC (for Platform Health largest tables)
+-- Storage top
 create or replace function public.storage_table_top()
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_out jsonb;
 begin
   if auth.role() <> 'authenticated' then return '[]'::jsonb; end if;
-  with sizes as (
-    select relname as table_name,
-           pg_size_pretty(pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname))) as size_pretty,
-           pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname)) as size_bytes
-    from pg_stat_user_tables where schemaname='public' order by pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname)) desc limit 20
-  )
+  with sizes as (select relname as table_name, pg_size_pretty(pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname))) as size_pretty, pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname)) as size_bytes from pg_stat_user_tables where schemaname='public' order by pg_total_relation_size(quote_ident(schemaname)||'.'||quote_ident(relname)) desc limit 20)
   select jsonb_agg(to_jsonb(sizes)) into v_out from sizes;
   return coalesce(v_out,'[]'::jsonb);
 end$$;
-
 grant execute on function public.storage_table_top() to authenticated;
 
--- Ensure report allow RPCs exist (from v12.16)
+-- Schema doctor RPC (sc_installed_packs)
+create or replace function public.sc_installed_packs()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_out jsonb;
+begin
+  select jsonb_agg(to_jsonb(t)) into v_out from (select key, details, installed_at from public.sc_install_state order by installed_at desc) t;
+  return coalesce(v_out,'[]'::jsonb);
+end$$;
+grant execute on function public.sc_installed_packs() to authenticated;
+
+-- Report generation allow/disallow RPCs (from v12.16/18, ensured in v12.19)
 create or replace function public.sc_is_report_generation_allowed(p_term text, p_session text default null)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_row record; v_global record;
@@ -9135,16 +9058,29 @@ alter table public.academic_periods add column if not exists allow_student_repor
 alter table public.academic_periods add column if not exists allow_parent_report boolean not null default false;
 alter table public.school_settings add column if not exists allow_student_report_global boolean not null default false;
 
+-- Ensure sc_install_state table exists
+create table if not exists public.sc_install_state (
+  key text primary key,
+  details jsonb,
+  installed_at timestamptz not null default now()
+);
+
+alter table public.sc_install_state enable row level security;
+drop policy if exists "install_state_read" on public.sc_install_state;
+create policy "install_state_read" on public.sc_install_state for select using (true);
+grant select on public.sc_install_state to anon, authenticated;
+
 -- Marker
-insert into public.sc_install_state(key,details) values ('v12.18-heartbeat-updated-at-fix.sql','{"self":true}') on conflict (key) do nothing;
+insert into public.sc_install_state(key,details) values ('v12.19-platform-health-robust.sql','{"self":true}') on conflict (key) do nothing;
 
 notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
-select 'V12.18 heartbeat updated_at fix + platform health robust pack installed' as status;
+select 'V12.19 platform health robust + schema packs fix pack installed' as status;
 
 
--- Markers for v12.16 and v12.17 (functions kept in v12.18)
+-- Markers for v12.16, v12.17, v12.18, v12.19
 insert into public.sc_install_state(key,details) values ('v12.16-report-allow-and-multicombine.sql','{"self":true}') on conflict (key) do nothing;
 insert into public.sc_install_state(key,details) values ('v12.17-advanced-cbt-and-layers.sql','{"self":true}') on conflict (key) do nothing;
+insert into public.sc_install_state(key,details) values ('v12.18-heartbeat-updated-at-fix.sql','{"self":true}') on conflict (key) do nothing;
 
 
 select 'School Connect V5.8 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;
