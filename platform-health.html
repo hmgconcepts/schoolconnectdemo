@@ -264,14 +264,14 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 
 
 const PH={
-  PACKS:[
+    PACKS:[
     {file:'v10.7-fee-locks-arrears.sql', label:'Fee locks & arrears', kind:'col', table:'students', col:'portal_locked'},
     {file:'v10.9b-fee-doctor.sql', label:'Fee ledger doctor', kind:'rpc', fn:'sc_fee_ledger_doctor', args:{p_heal:false}},
     {file:'v11.0-timetable-pro.sql', label:'Timetable engine 11', kind:'rpc', fn:'sc_timetable_capacity', args:{p_classes:[],p_periods_per_day:6,p_day_periods:null}},
     {file:'v11.7-admission-year.sql', label:'True admission year', kind:'col', table:'students', col:'admission_year'},
     {file:'v11.9-voting-integrity.sql', label:'Voting integrity', kind:'rpc', fn:'sc_poll_results', args:{p_poll:'00000000-0000-0000-0000-000000000000'}},
     {file:'v12.0-audit-columns.sql', label:'Audit columns', kind:'col', table:'staff', col:'date_of_birth'},
-    {file:'v12.2-photo-sync.sql', label:'Two-way photo sync', kind:'rpc', fn:'sc_sync_photo_to_profile', args:{}},
+    {file:'v12.2-photo-sync.sql', label:'Two-way photo sync', kind:'rpc', fn:'sc_photo_sync_status', args:{}},
     {file:'v12.3-write-columns.sql', label:'Write columns', kind:'col', table:'attendance_checkins', col:'status'},
     {file:'v12.5-schema-doctor.sql', label:'Schema Doctor', kind:'rpc', fn:'sc_installed_packs', args:{}},
     {file:'v12.6-relink.sql', label:'One-click re-link', kind:'rpc', fn:'sc_relink_all', args:{}},
@@ -288,7 +288,9 @@ const PH={
     {file:'v12.18-heartbeat-updated-at-fix.sql', label:'Storage top tables', kind:'rpc', fn:'storage_table_top', args:{}},
     {file:'v12.19-platform-health-robust.sql', label:'Platform health robust + schema packs fix', kind:'rpc', fn:'sc_installed_packs', args:{}},
     {file:'v12.19-platform-health-robust.sql', label:'Heartbeat health V12.19', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
-    {file:'v12.19-platform-health-robust.sql', label:'Report allow global V12.19', kind:'rpc', fn:'sc_set_report_generation_global', args:{p_allowed:true}}
+    {file:'v12.19-platform-health-robust.sql', label:'Report allow global V12.19', kind:'rpc', fn:'sc_set_report_generation_global', args:{p_allowed:true}},
+    {file:'v12.20-cbt-full-edit-and-proctor.sql', label:'CBT full edit + proctoring', kind:'rpc', fn:'sc_photo_sync_status', args:{}},
+    {file:'v12.21-schema-doctor-v12.2-fix.sql', label:'Schema doctor v12.2 false-alarm fix', kind:'rpc', fn:'sc_photo_sync_status', args:{}}
   ],
 
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
