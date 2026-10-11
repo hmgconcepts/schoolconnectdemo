@@ -294,7 +294,8 @@ const PH={
     {file:'v12.20-cbt-full-edit-and-proctor.sql', label:'CBT full edit + proctoring', kind:'rpc', fn:'sc_photo_sync_status', args:{}},
     {file:'v12.21-schema-doctor-v12.2-fix.sql', label:'Schema doctor v12.2 false-alarm fix', kind:'rpc', fn:'sc_photo_sync_status', args:{}},
     {file:'v12.22-theme-messages-notifications-drive-progress.sql', label:'Theme + WhatsApp messages + notifications clear + Drive progress', kind:'rpc', fn:'sc_message_directory', args:{}},
-    {file:'v12.23-fix-notif-mark-read-and-theme.sql', label:'Fix 42P13 + theme robust', kind:'rpc', fn:'sc_message_directory', args:{}}
+    {file:'v12.23-fix-notif-mark-read-and-theme.sql', label:'Fix 42P13 + theme robust', kind:'rpc', fn:'sc_message_directory', args:{}},
+    {file:'v12.24-fix-notif-clear-42883.sql', label:'Fix 42883 notif_clear + theme final', kind:'rpc', fn:'sc_message_directory', args:{}}
   ],
 
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
