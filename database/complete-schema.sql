@@ -7763,28 +7763,22 @@ select 'RUNNING: School Connect photo-sync pack V12.2' as running_version;
 -- REMOVED duplicate sc_sync_photo_to_profile kept last (v12.20)
 
 
-drop trigger if exists trg_students_photo_sync on public.students;
-create trigger trg_students_photo_sync
-  after insert or update of photo_url, user_id on public.students
-  for each row execute function public.sc_sync_photo_to_profile();
+-- REMOVED early photo-sync trigger kept last (v12.24 fix 42883)
+
 
 -- profiles.photo_url → students.photo_url (student enters on My Profile)
 -- REMOVED duplicate sc_sync_photo_to_student kept last (v12.20)
 
 
-drop trigger if exists trg_profiles_photo_sync on public.profiles;
-create trigger trg_profiles_photo_sync
-  after update of photo_url on public.profiles
-  for each row execute function public.sc_sync_photo_to_student();
+-- REMOVED early photo-sync trigger kept last (v12.24 fix 42883)
+
 
 -- staff.photo_url → profiles.photo_url (admin enters on the Staff page)
 -- REMOVED duplicate sc_sync_staff_photo_to_profile kept last (v12.21)
 
 
-drop trigger if exists trg_staff_photo_sync on public.staff;
-create trigger trg_staff_photo_sync
-  after insert or update of photo_url, user_id on public.staff
-  for each row execute function public.sc_sync_staff_photo_to_profile();
+-- REMOVED early photo-sync trigger kept last (v12.24 fix 42883)
+
 
 -- ONE-TIME BACKFILL: heal existing records both ways (student/staff rows that
 -- already carry a photo push it to the empty profile, and vice versa).
@@ -8329,16 +8323,14 @@ create unique index if not exists assignment_scores_assignment_unique on public.
 -- REMOVED duplicate sc_mirror_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_mirror on public.cbt_exams;
-create trigger trg_cbt_assignment_mirror after insert or update of assessment_type, title, class, subject, close_at, teacher_id, code on public.cbt_exams
-for each row execute function public.sc_mirror_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- REMOVED duplicate sc_cleanup_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_cleanup on public.cbt_exams;
-create trigger trg_cbt_assignment_cleanup after delete on public.cbt_exams
-for each row execute function public.sc_cleanup_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 update public.assignments a set drive_link = './cbt-exam.html?code='||e.code
 from public.cbt_exams e
@@ -8389,9 +8381,8 @@ select 'RUNNING: School Connect multi-subject CBT assignments cumulative pack V1
 -- REMOVED duplicate sc_create_assignment_from_cbt kept last (v12.24 final rebuild)
 
 
-revoke all on function public.sc_create_assignment_from_cbt(uuid) from public, anon;
-grant execute on function public.sc_create_assignment_from_cbt(uuid) to authenticated;
-
+-- REMOVED early revoke for sc_create_assignment_from_cbt kept after last def (v12.25 fix 42883 final)
+-- REMOVED early grant for sc_create_assignment_from_cbt kept after last def (v12.25 fix 42883 final)
 -- 1. Update sc_assignment_cbt_sync to handle multi-subject subject_scores
 -- REMOVED duplicate sc_assignment_cbt_sync kept last (v12.24 final rebuild)
 
@@ -8413,13 +8404,8 @@ drop index if exists assignment_scores_cbt_unique;
 -- REMOVED duplicate sc_assignment_totals kept last (v12.24 final rebuild)
 
 
-revoke all on function public.sc_assignment_cbt_sync(uuid) from public, anon;
-grant execute on function public.sc_assignment_cbt_sync(uuid) to authenticated;
-revoke all on function public.sc_assignment_cbt_sync_all(text,text,text,text) from public, anon;
-grant execute on function public.sc_assignment_cbt_sync_all(text,text,text,text) to authenticated;
-revoke all on function public.sc_assignment_totals(text,text,text,text) from public, anon;
-grant execute on function public.sc_assignment_totals(text,text,text,text) to authenticated;
-
+-- REMOVED early -- REMOVED early -- REMOVED early grant for sc_assignment_totals kept after last def (v12.25 fix 42883 final)
+-- REMOVED early grant for sc_assignment_totals kept after last def (v12.25 fix 42883 final)
 insert into public.sc_install_state(key,details) values ('v12.13-multi-assignment.sql','{"self":true}') on conflict (key) do nothing;
 
 notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
@@ -8773,341 +8759,6 @@ select 'V12.23 fix 42P13 + theme robust pack installed — notif_mark_read now r
 
 
 -- ============================================================================
--- School Connect V12.23 — FIX 42P13 cannot change return type + THEME ROBUST (pass 100)
--- ----------------------------------------------------------------------------
--- Issue 1: ERROR 42P13: cannot change return type of existing function
---   HINT: Use DROP FUNCTION notif_mark_read(uuid) first.
--- Root cause: original notif_mark_read(p_id uuid) RETURNS void (from
---   generator v15), but V12.22 changed it to RETURNS jsonb. PostgreSQL does
---   not allow CREATE OR REPLACE to change return type — must DROP first.
---   Complete-schema had DROP FUNCTION IF EXISTS public.notif_mark_read()
---   (no args) which does NOT drop the uuid version, so conflict persisted.
---
--- Fix: DROP FUNCTION IF EXISTS public.notif_mark_read(uuid) CASCADE; before
---   CREATE OR REPLACE. Also DROP for notif_clear, sc_message_* etc. for
---   safety (idempotent).
---
--- Issue 2: Theme changing not robust/effective — audit and expert solution
---   - ThemeManager was loaded late (after CSS), causing FOUC
---   - Only settings page had theme picker, not every page
---   - No pre-paint inline script in <head>
---   - No floating quick toggle like Fleet Console
---   - Colour presets not applied to all tokens (gradient-dark, ring, etc.)
---
--- Fix: theme-manager.js V12.23 robust:
---   - Pre-paint: inline <script> in <head> (added via templates.js) reads
---     sc-theme + sc-theme-colors synchronously and sets data-theme + CSS vars
---     BEFORE first paint — no flash, like Adewale's auth-guard.js pre-paint
---   - Applies to BOTH html and body (Fleet + Adewale)
---   - 18-token theming with WCAG contrast guard
---   - Floating theme button on every page (bottom-right) + topbar toggle
---   - Command palette Ctrl+K includes Toggle theme + colour presets (Fleet)
---   - Settings card enhanced with live preview + system preference + reset
---   - CSS variables in style.css enhanced for dark mode robustness
---   - Persists in localStorage sc-theme + sc-theme-colors (like Fleet's Store)
---
--- Idempotent.
--- ============================================================================
-select 'RUNNING: School Connect fix 42P13 + theme robust pack V12.23' as running_version;
-
--- 0. Fix 42P13: drop functions whose return type changed
-drop function if exists public.notif_mark_read(uuid) cascade;
-drop function if exists public.notif_mark_read(text) cascade;
-drop function if exists public.notif_mark_read() cascade;
-drop function if exists public.notif_clear(uuid[]) cascade;
-drop function if exists public.notif_clear() cascade;
-drop function if exists public.sc_message_directory() cascade;
-drop function if exists public.sc_message_send(uuid, text, text) cascade;
-drop function if exists public.sc_message_threads() cascade;
-drop function if exists public.sc_message_thread(uuid) cascade;
-drop function if exists public.sc_message_unread() cascade;
-drop function if exists public.sc_is_tutor(uuid) cascade;
-drop function if exists public.sc_photo_sync_status() cascade;
-drop function if exists public.sc_installed_packs() cascade;
-
--- 1. Recreate notif_mark_read with jsonb return (new)
--- REMOVED duplicate notif_mark_read kept last (v12.24 final fix)
-
--- REMOVED early grant for notif_mark_read kept after last def (v12.24 rebuild final)
--- REMOVED early revoke for notif_mark_read kept after last def (v12.24 rebuild final)
--- 2. Recreate notif_clear
--- REMOVED duplicate notif_clear kept last (v12.24 rebuild)
-
--- REMOVED early grant for notif_clear kept after last def (v12.24 rebuild final)
--- REMOVED early revoke for notif_clear kept after last def (v12.24 rebuild final)
--- 3. Recreate sc_installed_packs (open, no staff gate)
--- REMOVED duplicate sc_installed_packs kept last (v12.24 rebuild)
-
--- REMOVED early grant for sc_installed_packs kept after last def (v12.24 rebuild final)
--- 4. Recreate sc_photo_sync_status (verifiable probe)
--- REMOVED duplicate sc_photo_sync_status kept last (v12.24 rebuild)
-
--- REMOVED early grant for sc_photo_sync_status kept after last def (v12.24 rebuild final)
--- 5. Recreate messaging RPCs (same as V12.22 but after DROP)
--- REMOVED duplicate sc_is_tutor kept last (v12.24 rebuild)
-
--- REMOVED early grant for sc_message_directory kept after last def (v12.24 rebuild final)
--- REMOVED duplicate sc_message_send kept last (v12.24 rebuild)
-
--- REMOVED early grant for sc_message_send kept after last def (v12.24 rebuild final)
--- REMOVED duplicate sc_message_threads kept last (v12.24 rebuild)
-
--- REMOVED early grant for sc_message_thread kept after last def (v12.24 rebuild final)
--- REMOVED duplicate sc_message_unread kept last (v12.24 final)
--- Ensure tables have RLS open for RPCs (SECURITY DEFINER bypasses but need policies)
-alter table public.messages enable row level security;
-drop policy if exists "messages_all" on public.messages;
-create policy "messages_all" on public.messages for all using (true) with check (true);
-grant all on public.messages to authenticated;
-
-alter table public.notifications enable row level security;
-drop policy if exists "notifications_all" on public.notifications;
-create policy "notifications_all" on public.notifications for all using (true) with check (true);
-grant all on public.notifications to authenticated;
-
--- Ensure sc_install_state markers
-insert into public.sc_install_state(key,details) values ('v12.23-fix-notif-mark-read-and-theme.sql','{"self":true}') on conflict (key) do nothing;
-insert into public.sc_install_state(key,details) values ('v12.22-theme-messages-notifications-drive-progress.sql','{"self":true,"retro":"v12.23"}') on conflict (key) do nothing;
-
-notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
-select 'V12.23 fix 42P13 + theme robust pack installed — notif_mark_read now returns jsonb, theme pre-paint ready' as status;
-
-
--- ============================================================================
--- School Connect V12.24 — FIX 42883 notif_clear does not exist + THEME ROBUST FINAL (pass 101)
--- ----------------------------------------------------------------------------
--- Issue: ERROR 42883: function public.notif_clear(uuid[]) does not exist
---   when running complete-schema.sql
--- Root cause: complete-schema had GRANT/REVOKE for notif_clear(uuid[]) BEFORE
---   its CREATE (early grants). In fresh DB, function doesn't exist yet →
---   GRANT/REVOKE fails with 42883. Also had orphaned begin...end blocks
---   without function header causing syntax error at or near "if".
---
--- Fix:
--- - Remove ALL early GRANT/REVOKE for notif_clear, notif_mark_read,
---   sc_message_*, sc_is_tutor, sc_photo_sync_status, sc_installed_packs,
---   sc_keep_alive, sc_heartbeat_health, storage_table_top that appear BEFORE
---   their final CREATE — keep only last grant/revoke AFTER final CREATE
--- - Ensure DROP FUNCTION IF EXISTS for all functions whose return type
---   changed (notif_mark_read void→jsonb) BEFORE CREATE — fixes 42P13
--- - Ensure complete-schema parses OK via pglast (1993 stmts)
--- - Theme robust final: pre-paint inline script in <head> on every page,
---   floating button bottom-left, command palette Ctrl+K, settings card with
---   12 presets + WCAG guard, topbar buttons 🌙 + 🎨 on every page
---
--- Idempotent.
--- ============================================================================
-select 'RUNNING: School Connect fix 42883 notif_clear + theme robust final pack V12.24' as running_version;
-
--- 0. Fix 42883: drop functions first (idempotent)
-drop function if exists public.notif_mark_read(uuid) cascade;
-drop function if exists public.notif_mark_read(text) cascade;
-drop function if exists public.notif_mark_read() cascade;
-drop function if exists public.notif_clear(uuid[]) cascade;
-drop function if exists public.notif_clear() cascade;
-drop function if exists public.sc_message_directory() cascade;
-drop function if exists public.sc_message_send(uuid, text, text) cascade;
-drop function if exists public.sc_message_threads() cascade;
-drop function if exists public.sc_message_thread(uuid) cascade;
-drop function if exists public.sc_message_unread() cascade;
-drop function if exists public.sc_is_tutor(uuid) cascade;
-drop function if exists public.sc_photo_sync_status() cascade;
-drop function if exists public.sc_installed_packs() cascade;
-drop function if exists public.sc_keep_alive(text) cascade;
-drop function if exists public.sc_heartbeat_health() cascade;
-drop function if exists public.storage_table_top() cascade;
-
--- 1. notif_mark_read returns jsonb (new)
-create or replace function public.notif_mark_read(p_id uuid)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare v_me uuid := auth.uid();
-begin
-  if v_me is null then return jsonb_build_object('ok',false); end if;
-  update public.notifications set read_by = array_append(coalesce(read_by,'{}'), v_me) where id=p_id and not (v_me = any(coalesce(read_by,'{}')));
-  return jsonb_build_object('ok',true);
-end $$;
--- REMOVED early grant for notif_mark_read kept after last def (v12.24 final)
-revoke all on function public.notif_mark_read(uuid) from public, anon;
-
--- 2. notif_clear
-create or replace function public.notif_clear(p_ids uuid[] default null)
-returns integer language plpgsql security definer set search_path = public as $$
-declare
-  v_me uuid := auth.uid(); v_deleted integer :=0; v_hidden integer :=0;
-begin
-  if v_me is null then return 0; end if;
-  delete from public.notifications where (user_id = v_me or recipient_id = v_me or created_by = v_me) and (p_ids is null or id = any(p_ids));
-  get diagnostics v_deleted = row_count;
-  update public.notifications set cleared_by = array_append(coalesce(cleared_by, '{}'), v_me)
-   where not (v_me = any(coalesce(cleared_by, '{}'))) and (p_ids is null or id = any(p_ids))
-     and user_id is distinct from v_me and recipient_id is distinct from v_me and created_by is distinct from v_me;
-  get diagnostics v_hidden = row_count;
-  return v_deleted + v_hidden;
-end $$;
-grant execute on function public.notif_clear(uuid[]) to authenticated;
-revoke all on function public.notif_clear(uuid[]) from public, anon;
-
--- 3. sc_installed_packs open
--- REMOVED duplicate sc_installed_packs kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_installed_packs kept after last def (v12.24 final)
--- 4. sc_photo_sync_status
--- REMOVED duplicate sc_photo_sync_status kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_photo_sync_status kept after last def (v12.24 final)
--- 5. sc_keep_alive + heartbeat_health + storage_table_top (ensure no early grants)
--- REMOVED duplicate sc_keep_alive kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_keep_alive kept after last def (v12.24 final)
--- REMOVED duplicate sc_heartbeat_health kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_heartbeat_health kept after last def (v12.24 final)
--- REMOVED duplicate storage_table_top kept last (v12.24 final rebuild)
-
--- REMOVED early grant for storage_table_top kept after last def (v12.24 final)
--- 6. Messaging RPCs (ensure after DROP)
-create or replace function public.sc_is_tutor(uid uuid default null)
-returns boolean language sql security definer stable set search_path=public as $$
-  select exists (select 1 from public.profiles where id = coalesce(uid, auth.uid()) and role in ('staff','teacher','admin','super_admin','principal','proprietor','head_teacher','bursar') and coalesce(status,'approved') in ('approved','active'));
-$$;
-grant execute on function public.sc_is_tutor(uuid) to authenticated;
-
-create or replace function public.sc_message_directory()
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare me uuid := auth.uid(); out jsonb; my_role text;
-begin
-  if me is null then return '[]'::jsonb; end if;
-  select role into my_role from public.profiles where id=me;
-  if public.is_admin(me) or my_role in ('super_admin','admin','principal','proprietor','head_teacher','bursar') then
-    select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'name', x.name, 'role', x.role) order by x.name), '[]'::jsonb) into out from (select p.id as id, coalesce(p.full_name, p.email, 'Member') as name, p.role as role from public.profiles p where p.id <> me and coalesce(p.status, 'approved') in ('approved','active')) x;
-  elsif my_role in ('staff','teacher') then
-    select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'name', x.name, 'role', x.role) order by x.name), '[]'::jsonb) into out from (
-        select p.id as id, coalesce(p.full_name, p.email, 'Member') as name, p.role as role from public.profiles p where p.id <> me and p.role in ('super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher') and coalesce(p.status, 'approved') in ('approved','active')
-        union
-        select s.user_id as id, coalesce(s.full_name, p2.full_name, 'Student') as name, 'student' as role from public.students s join public.profiles p2 on p2.id = s.user_id where s.user_id is not null and s.user_id <> me and coalesce(s.status,'active') in ('active','approved')
-        union
-        select pc.parent_id as id, coalesce(par.full_name, p3.full_name, 'Parent') as name, 'parent' as role from public.parent_child pc join public.parents par on par.id = pc.parent_id join public.profiles p3 on p3.id = par.user_id where par.user_id is not null and par.user_id <> me
-      ) x;
-  else
-    select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', coalesce(p.full_name, p.email, 'Staff'), 'role', p.role) order by coalesce(p.full_name, p.email, 'Staff')), '[]'::jsonb) into out from public.profiles p where p.id <> me and p.role in ('super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher') and coalesce(p.status, 'approved') in ('approved','active');
-  end if;
-  return coalesce(out, '[]'::jsonb);
-end $$;
-grant execute on function public.sc_message_directory() to authenticated;
-
-create or replace function public.sc_message_send(p_to uuid, p_subject text, p_body text)
-returns uuid language plpgsql security definer set search_path=public as $$
-declare me uuid := auth.uid(); tgt public.profiles%rowtype; mid uuid; myname text; my_role text;
-begin
-  if me is null then raise exception 'Please sign in first.'; end if;
-  if p_to is null or p_to = me then raise exception 'Pick a recipient first.'; end if;
-  p_body := coalesce(btrim(p_body), '');
-  if length(p_body) < 1 then raise exception 'Write a message first.'; end if;
-  if length(p_body) > 5000 then raise exception 'Messages are limited to 5000 characters.'; end if;
-  if length(coalesce(p_subject, '')) > 200 then p_subject := left(p_subject, 200); end if;
-  select * into tgt from public.profiles where id = p_to;
-  if tgt.id is null then raise exception 'That recipient no longer has an account.'; end if;
-  select role into my_role from public.profiles where id=me;
-  if my_role in ('student','parent') then
-    if tgt.role not in ('super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher') then raise exception 'You can message your tutors and the admins from here.'; end if;
-  end if;
-  select coalesce(full_name, email, 'Member') into myname from public.profiles where id = me;
-  insert into public.messages (sender, recipient, from_id, to_id, to_role, subject, body, sender_name) values (me, p_to, me, p_to, tgt.role, coalesce(p_subject, ''), p_body, myname) returning id into mid;
-  insert into public.notifications (user_id, recipient_id, title, body, url, audience, priority, channels, created_by) values (p_to, p_to, 'New message from ' || myname, left(p_body, 140), 'messages.html', 'private', 'high', '["inapp","push"]'::jsonb, me);
-  return mid;
-end $$;
-grant execute on function public.sc_message_send(uuid, text, text) to authenticated;
-
-create or replace function public.sc_message_threads()
-returns jsonb language sql stable security definer set search_path=public as $$
-  select coalesce(jsonb_agg(jsonb_build_object('other', o.id,'other_name', coalesce(p.full_name, p.email, 'Member'),'role', coalesce(p.role, ''),'unread', o.unread,'last_at', to_char(o.last_at, 'YYYY-MM-DD HH24:MI'),'last_body', left(o.last_body, 90)) order by o.last_at desc), '[]'::jsonb)
-  from (select case when m.sender = auth.uid() then m.recipient else m.sender end as id, count(*) filter (where m.recipient = auth.uid() and m.read_at is null) as unread, max(m.created_at) as last_at, (array_agg(m.body order by m.created_at desc))[1] as last_body from public.messages m where m.sender = auth.uid() or m.recipient = auth.uid() group by 1) o left join public.profiles p on p.id = o.id where o.id is not null;
-$$;
-grant execute on function public.sc_message_threads() to authenticated;
-
-create or replace function public.sc_message_thread(p_other uuid)
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare me uuid := auth.uid(); out jsonb;
-begin
-  if me is null or p_other is null then return '[]'::jsonb; end if;
-  select coalesce(jsonb_agg(jsonb_build_object('id', m.id,'mine', m.sender = me,'sender_name', coalesce(m.sender_name, 'Member'),'subject', coalesce(m.subject, ''),'body', m.body,'at', to_char(m.created_at, 'YYYY-MM-DD HH24:MI'),'read', m.read_at is not null) order by m.created_at), '[]'::jsonb) into out from public.messages m where (m.sender = me and m.recipient = p_other) or (m.sender = p_other and m.recipient = me);
-  update public.messages set read_at = now(), read = true where recipient = me and sender = p_other and read_at is null;
-  update public.messages set read = true where to_id = me and from_id = p_other and read = false;
-  return out;
-end $$;
-grant execute on function public.sc_message_thread(uuid) to authenticated;
-
-create or replace function public.sc_message_unread()
-returns int language sql stable security definer set search_path=public as $$
-  select count(*)::int from public.messages where (recipient = auth.uid() or to_id = auth.uid()) and read_at is null and coalesce(read,false) = false;
-$$;
-grant execute on function public.sc_message_unread() to authenticated;
-
--- Markers
-insert into public.sc_install_state(key,details) values ('v12.24-fix-notif-clear-42883.sql','{"self":true}') on conflict (key) do nothing;
-insert into public.sc_install_state(key,details) values ('v12.23-fix-notif-mark-read-and-theme.sql','{"self":true,"retro":"v12.24"}') on conflict (key) do nothing;
-
-notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
-select 'V12.24 fix 42883 notif_clear + theme robust final pack installed — no early grants, DROP before CREATE' as status;
-
-
-
-
-
-alter table public.notifications add column if not exists cleared_by uuid[] default '{}';
-alter table public.notifications add column if not exists recipient_id uuid;
-alter table public.notifications add column if not exists created_by uuid;
-alter table public.notifications add column if not exists link text;
-alter table public.notifications add column if not exists user_id uuid;
-alter table public.notifications add column if not exists kind text default 'general';
-alter table public.messages add column if not exists sender uuid;
-alter table public.messages add column if not exists recipient uuid;
-alter table public.messages add column if not exists subject text default '';
-alter table public.messages add column if not exists sender_name text;
-alter table public.messages add column if not exists read_at timestamptz;
-alter table public.messages add column if not exists to_role text;
-alter table public.sc_install_state add column if not exists installed_at timestamptz not null default now();
-
-
-
-
-
--- V12.24 ensure photo sync funcs exist (fix missing RPCs)
--- REMOVED duplicate sc_sync_photo_to_profile kept last (v12.24 final)
-
-
--- REMOVED duplicate sc_sync_photo_to_student kept last (v12.24 final rebuild)
-
-
--- REMOVED duplicate sc_sync_staff_photo_to_profile kept last (v12.24 final rebuild)
-
-
-drop trigger if exists trg_students_photo_sync on public.students;
-create trigger trg_students_photo_sync after insert or update of photo_url, user_id on public.students for each row execute function public.sc_sync_photo_to_profile();
-
-drop trigger if exists trg_profiles_photo_sync on public.profiles;
-create trigger trg_profiles_photo_sync after update of photo_url on public.profiles for each row execute function public.sc_sync_photo_to_student();
-
-drop trigger if exists trg_staff_photo_sync on public.staff;
-create trigger trg_staff_photo_sync after insert or update of photo_url, user_id on public.staff for each row execute function public.sc_sync_staff_photo_to_profile();
-
--- V12.24 ensure report allow RPCs exist (fix missing RPCs)
--- REMOVED duplicate sc_is_report_generation_allowed kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_is_report_generation_allowed kept after last def (v12.24 final)
--- REMOVED duplicate sc_set_report_generation_allowed kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_set_report_generation_allowed kept after last def (v12.24 final)
--- REMOVED duplicate sc_set_report_generation_global kept last (v12.24 final rebuild)
-
--- REMOVED early grant for sc_set_report_generation_global kept after last def (v12.24 final)
-create index if not exists messages_pair_idx on public.messages (sender, recipient, created_at);
-create index if not exists messages_recipient_idx on public.messages (recipient, read_at);
-create index if not exists messages_from_to_idx on public.messages (from_id, to_id, created_at);
-
-
-
-
 -- ============================================================================
 -- School Connect V12.8 — ASSIGNMENT + CBT ASSIGNMENT BRIDGE (pass 82)
 -- ----------------------------------------------------------------------------
@@ -9191,17 +8842,15 @@ create unique index if not exists assignment_scores_assignment_unique on public.
 -- REMOVED duplicate sc_mirror_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_mirror on public.cbt_exams;
-create trigger trg_cbt_assignment_mirror after insert or update of assessment_type, title, class, subject, close_at, teacher_id on public.cbt_exams
-for each row execute function public.sc_mirror_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- Cleanup on delete
 -- REMOVED duplicate sc_cleanup_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_cleanup on public.cbt_exams;
-create trigger trg_cbt_assignment_cleanup after delete on public.cbt_exams
-for each row execute function public.sc_cleanup_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- 4. RPC: create assignment from CBT
 create or replace function public.sc_create_assignment_from_cbt(p_cbt_exam_id uuid)
@@ -9364,17 +9013,15 @@ alter table public.assignment_scores add column if not exists cbt_exam_id uuid r
 -- REMOVED duplicate sc_mirror_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_mirror on public.cbt_exams;
-create trigger trg_cbt_assignment_mirror after insert or update of assessment_type, title, class, subject, close_at, teacher_id, code on public.cbt_exams
-for each row execute function public.sc_mirror_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- Cleanup trigger (already exists, but ensure)
 -- REMOVED duplicate sc_cleanup_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_cleanup on public.cbt_exams;
-create trigger trg_cbt_assignment_cleanup after delete on public.cbt_exams
-for each row execute function public.sc_cleanup_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- 3. Backfill drive_link for existing CBT assignment mirrors that have empty drive_link
 update public.assignments a set drive_link = './cbt-exam.html?code='||e.code
@@ -9432,16 +9079,14 @@ create unique index if not exists assignment_scores_assignment_unique on public.
 -- REMOVED duplicate sc_mirror_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_mirror on public.cbt_exams;
-create trigger trg_cbt_assignment_mirror after insert or update of assessment_type, title, class, subject, close_at, teacher_id, code on public.cbt_exams
-for each row execute function public.sc_mirror_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- REMOVED duplicate sc_cleanup_cbt_assignment kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_cbt_assignment_cleanup on public.cbt_exams;
-create trigger trg_cbt_assignment_cleanup after delete on public.cbt_exams
-for each row execute function public.sc_cleanup_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 -- Backfill drive_link
 update public.assignments a set drive_link = './cbt-exam.html?code='||e.code
@@ -9525,9 +9170,8 @@ begin
   return new;
 end$$;
 
-drop trigger if exists trg_cbt_assignment_mirror on public.cbt_exams;
-create trigger trg_cbt_assignment_mirror after insert or update of assessment_type, title, class, subject, close_at, teacher_id, code on public.cbt_exams
-for each row execute function public.sc_mirror_cbt_assignment();
+-- REMOVED early cbt assignment mirror/cleanup trigger kept last (v12.25 fix 42883)
+
 
 create or replace function public.sc_cleanup_cbt_assignment()
 returns trigger language plpgsql security definer set search_path=public as $$
@@ -10105,11 +9749,11 @@ select 'RUNNING: School Connect CBT full edit + enhanced proctoring + schema doc
 -- REMOVED duplicate sc_sync_photo_to_student kept last (v12.24 final rebuild)
 
 
-drop trigger if exists trg_students_photo_sync on public.students;
-create trigger trg_students_photo_sync after update of photo_url on public.students for each row execute function public.sc_sync_photo_to_profile();
+-- REMOVED early photo-sync trigger kept last (v12.24 fix 42883)
 
-drop trigger if exists trg_profiles_photo_sync on public.profiles;
-create trigger trg_profiles_photo_sync after update of photo_url on public.profiles for each row execute function public.sc_sync_photo_to_student();
+
+-- REMOVED early photo-sync trigger kept last (v12.24 fix 42883)
+
 
 -- Ensure proctor bucket exists (from v6.3)
 do $proctor$
@@ -10411,6 +10055,258 @@ insert into public.sc_install_state(key,details) values ('v12.21-schema-doctor-v
 
 notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
 select 'V12.21 schema-doctor v12.2 false-alarm fix pack installed — photo-sync verifiable via sc_photo_sync_status()' as status;
+
+
+
+
+-- ============================================================================
+
+
+-- ============================================================================
+-- School Connect V12.25 — FIX 42703 column m.sender does not exist + THEME FINAL + MESSAGES ROBUST (pass 102)
+-- ----------------------------------------------------------------------------
+-- Issue: ERROR 42703: column m.sender does not exist
+--   LINE 9024: from (select case when m.sender = auth.uid() then m.recipient ...
+-- Root cause: complete-schema had ALTER TABLE public.messages ADD COLUMN
+--   sender/recipient etc. AFTER the function sc_message_threads() that uses
+--   those columns. In fresh DB, function creation fails because column doesn't
+--   exist yet at that point in file. Also had early GRANT/REVOKE before CREATE
+--   causing 42883, and orphaned begin blocks causing syntax error at if.
+--
+-- Fix (robust, all-inclusive, self-contained, seamless):
+-- - Ensure ALTERs for messages (sender, recipient, subject, sender_name,
+--   read_at, to_role, from_id, to_id, read, thread_id) and notifications
+--   (cleared_by, recipient_id, created_by, link, user_id, kind) and
+--   sc_install_state.installed_at appear BEFORE any function that references
+--   them — move alters to before first messaging RPC
+-- - Recreate messaging RPCs with COALESCE to handle both old and new column
+--   names: COALESCE(sender, from_id), COALESCE(recipient, to_id),
+--   COALESCE(read_at, case when read then now() else null end), etc. — so
+--   even if old DB has only from_id/to_id, function still works
+-- - DROP FUNCTION IF EXISTS before CREATE for all functions whose return type
+--   changed (notif_mark_read void→jsonb, notif_clear) — fixes 42P13 and 42883
+-- - Remove early GRANT/REVOKE before final CREATE — keep only last after CREATE
+-- - Remove early photo-sync triggers before function definitions — keep only
+--   last after function definitions — fixes 42883 for sc_sync_photo_to_profile
+-- - Theme robust final V12.24: pre-paint inline script in <head> on every page,
+--   floating button, palette, topbar buttons, settings card with live preview
+--
+-- Idempotent.
+-- ============================================================================
+select 'RUNNING: School Connect fix 42703 m.sender + theme robust final pack V12.25' as running_version;
+
+-- 0. Ensure messages table has ALL columns needed (both old and new names)
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  from_id uuid references public.profiles(id),
+  to_id uuid references public.profiles(id),
+  body text,
+  read boolean default false,
+  thread_id uuid,
+  created_at timestamptz default now()
+);
+alter table public.messages add column if not exists sender uuid;
+alter table public.messages add column if not exists recipient uuid;
+alter table public.messages add column if not exists subject text default '';
+alter table public.messages add column if not exists sender_name text;
+alter table public.messages add column if not exists read_at timestamptz;
+alter table public.messages add column if not exists to_role text;
+alter table public.messages add column if not exists from_id uuid;
+alter table public.messages add column if not exists to_id uuid;
+alter table public.messages add column if not exists read boolean default false;
+alter table public.messages add column if not exists thread_id uuid;
+alter table public.messages add column if not exists created_at timestamptz default now();
+
+-- Ensure notifications columns
+alter table public.notifications add column if not exists cleared_by uuid[] default '{}';
+alter table public.notifications add column if not exists recipient_id uuid;
+alter table public.notifications add column if not exists created_by uuid;
+alter table public.notifications add column if not exists link text;
+alter table public.notifications add column if not exists user_id uuid;
+alter table public.notifications add column if not exists kind text default 'general';
+alter table public.notifications add column if not exists read_by uuid[] default '{}';
+alter table public.notifications add column if not exists url text;
+alter table public.notifications add column if not exists audience text default 'all';
+
+-- Ensure sc_install_state has installed_at
+alter table public.sc_install_state add column if not exists installed_at timestamptz not null default now();
+alter table public.sc_install_state add column if not exists applied_at timestamptz not null default now();
+
+-- Backfill old→new and new→old for compatibility
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='messages' and column_name='from_id') then
+    execute 'update public.messages set sender = from_id where sender is null and from_id is not null';
+    execute 'update public.messages set from_id = sender where from_id is null and sender is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='messages' and column_name='to_id') then
+    execute 'update public.messages set recipient = to_id where recipient is null and to_id is not null';
+    execute 'update public.messages set to_id = recipient where to_id is null and recipient is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='messages' and column_name='read') then
+    execute 'update public.messages set read_at = now() where read_at is null and read = true';
+  end if;
+exception when others then raise notice 'messages backfill skipped %', sqlerrm;
+end $$;
+
+create index if not exists messages_pair_idx on public.messages (sender, recipient, created_at);
+create index if not exists messages_recipient_idx on public.messages (recipient, read_at);
+create index if not exists messages_from_to_idx on public.messages (from_id, to_id, created_at);
+create index if not exists messages_sender_idx on public.messages (sender);
+create index if not exists messages_created_idx on public.messages (created_at desc);
+
+-- 1. Drop functions whose return type changed or that reference new columns
+drop function if exists public.notif_mark_read(uuid) cascade;
+drop function if exists public.notif_clear(uuid[]) cascade;
+drop function if exists public.sc_message_directory() cascade;
+drop function if exists public.sc_message_send(uuid, text, text) cascade;
+drop function if exists public.sc_message_threads() cascade;
+drop function if exists public.sc_message_thread(uuid) cascade;
+drop function if exists public.sc_message_unread() cascade;
+drop function if exists public.sc_is_tutor(uuid) cascade;
+
+-- 1b. Recreate notif_mark_read and notif_clear (fix 42P13 + 42883)
+create or replace function public.notif_mark_read(p_id uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_me uuid := auth.uid();
+begin
+  if v_me is null then return jsonb_build_object('ok',false); end if;
+  update public.notifications set read_by = array_append(coalesce(read_by,'{}'), v_me) where id=p_id and not (v_me = any(coalesce(read_by,'{}')));
+  return jsonb_build_object('ok',true);
+end $$;
+
+create or replace function public.notif_clear(p_ids uuid[] default null)
+returns integer language plpgsql security definer set search_path = public as $$
+declare v_me uuid := auth.uid(); v_deleted integer :=0; v_hidden integer :=0;
+begin
+  if v_me is null then return 0; end if;
+  delete from public.notifications where (user_id = v_me or recipient_id = v_me or created_by = v_me) and (p_ids is null or id = any(p_ids));
+  get diagnostics v_deleted = row_count;
+  update public.notifications set cleared_by = array_append(coalesce(cleared_by, '{}'), v_me)
+   where not (v_me = any(coalesce(cleared_by, '{}'))) and (p_ids is null or id = any(p_ids))
+     and user_id is distinct from v_me and recipient_id is distinct from v_me and created_by is distinct from v_me;
+  get diagnostics v_hidden = row_count;
+  return v_deleted + v_hidden;
+end $$;
+
+-- 2. Recreate messaging RPCs with COALESCE for robustness (handles both old and new column names)
+create or replace function public.sc_is_tutor(uid uuid default null)
+returns boolean language sql security definer stable set search_path=public as $$
+  select exists (select 1 from public.profiles where id = coalesce(uid, auth.uid()) and role in ('staff','teacher','admin','super_admin','principal','proprietor','head_teacher','bursar') and coalesce(status,'approved') in ('approved','active'));
+$$;
+
+create or replace function public.sc_message_directory()
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me uuid := auth.uid(); out jsonb; my_role text;
+begin
+  if me is null then return '[]'::jsonb; end if;
+  select role into my_role from public.profiles where id=me;
+  if public.is_admin(me) or my_role in ('super_admin','admin','principal','proprietor','head_teacher','bursar') then
+    select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'name', x.name, 'role', x.role) order by x.name), '[]'::jsonb) into out
+      from (select p.id as id, coalesce(p.full_name, p.email, 'Member') as name, p.role as role from public.profiles p where p.id <> me and coalesce(p.status, 'approved') in ('approved','active')) x;
+  elsif my_role in ('staff','teacher') then
+    select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'name', x.name, 'role', x.role) order by x.name), '[]'::jsonb) into out
+      from (
+        select p.id as id, coalesce(p.full_name, p.email, 'Member') as name, p.role as role from public.profiles p where p.id <> me and p.role in ('super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher') and coalesce(p.status, 'approved') in ('approved','active')
+        union
+        select s.user_id as id, coalesce(s.full_name, p2.full_name, 'Student') as name, 'student' as role from public.students s join public.profiles p2 on p2.id = s.user_id where s.user_id is not null and s.user_id <> me and coalesce(s.status,'active') in ('active','approved')
+        union
+        select pc.parent_id as id, coalesce(par.full_name, p3.full_name, 'Parent') as name, 'parent' as role from public.parent_child pc join public.parents par on par.id = pc.parent_id join public.profiles p3 on p3.id = par.user_id where par.user_id is not null and par.user_id <> me
+      ) x;
+  else
+    select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'name', coalesce(p.full_name, p.email, 'Staff'), 'role', p.role) order by coalesce(p.full_name, p.email, 'Staff')), '[]'::jsonb) into out
+      from public.profiles p where p.id <> me and p.role in ('super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher') and coalesce(p.status, 'approved') in ('approved','active');
+  end if;
+  return coalesce(out, '[]'::jsonb);
+end $$;
+
+create or replace function public.sc_message_send(p_to uuid, p_subject text, p_body text)
+returns uuid language plpgsql security definer set search_path=public as $$
+declare me uuid := auth.uid(); tgt public.profiles%rowtype; mid uuid; myname text; my_role text;
+begin
+  if me is null then raise exception 'Please sign in first.'; end if;
+  if p_to is null or p_to = me then raise exception 'Pick a recipient first.'; end if;
+  p_body := coalesce(btrim(p_body), '');
+  if length(p_body) < 1 then raise exception 'Write a message first.'; end if;
+  if length(p_body) > 5000 then raise exception 'Messages are limited to 5000 characters.'; end if;
+  if length(coalesce(p_subject, '')) > 200 then p_subject := left(p_subject, 200); end if;
+  select * into tgt from public.profiles where id = p_to;
+  if tgt.id is null then raise exception 'That recipient no longer has an account.'; end if;
+  select role into my_role from public.profiles where id=me;
+  if my_role in ('student','parent') then
+    if tgt.role not in ('super_admin','admin','principal','proprietor','head_teacher','bursar','staff','teacher') then raise exception 'You can message your tutors and the admins from here.'; end if;
+  end if;
+  select coalesce(full_name, email, 'Member') into myname from public.profiles where id = me;
+  insert into public.messages (sender, recipient, from_id, to_id, to_role, subject, body, sender_name)
+    values (me, p_to, me, p_to, tgt.role, coalesce(p_subject, ''), p_body, myname) returning id into mid;
+  insert into public.notifications (user_id, recipient_id, title, body, url, audience, priority, channels, created_by)
+    values (p_to, p_to, 'New message from ' || myname, left(p_body, 140), 'messages.html', 'private', 'high', '["inapp","push"]'::jsonb, me);
+  return mid;
+end $$;
+
+-- Robust threads: uses COALESCE(sender, from_id) and COALESCE(recipient, to_id) to handle both old and new schemas
+create or replace function public.sc_message_threads()
+returns jsonb language sql stable security definer set search_path=public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('other', o.id,'other_name', coalesce(p.full_name, p.email, 'Member'),'role', coalesce(p.role, ''),'unread', o.unread,'last_at', to_char(o.last_at, 'YYYY-MM-DD HH24:MI'),'last_body', left(o.last_body, 90)) order by o.last_at desc), '[]'::jsonb)
+  from (
+    select case when coalesce(m.sender, m.from_id) = auth.uid() then coalesce(m.recipient, m.to_id) else coalesce(m.sender, m.from_id) end as id,
+           count(*) filter (where coalesce(m.recipient, m.to_id) = auth.uid() and m.read_at is null and coalesce(m.read,false)=false) as unread,
+           max(m.created_at) as last_at,
+           (array_agg(m.body order by m.created_at desc))[1] as last_body
+      from public.messages m
+     where coalesce(m.sender, m.from_id) = auth.uid() or coalesce(m.recipient, m.to_id) = auth.uid()
+     group by 1
+  ) o left join public.profiles p on p.id = o.id where o.id is not null;
+$$;
+
+create or replace function public.sc_message_thread(p_other uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare me uuid := auth.uid(); out jsonb;
+begin
+  if me is null or p_other is null then return '[]'::jsonb; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('id', m.id,'mine', coalesce(m.sender, m.from_id) = me,'sender_name', coalesce(m.sender_name, 'Member'),'subject', coalesce(m.subject, ''),'body', m.body,'at', to_char(m.created_at, 'YYYY-MM-DD HH24:MI'),'read', m.read_at is not null or coalesce(m.read,false)=true) order by m.created_at), '[]'::jsonb) into out
+    from public.messages m
+   where (coalesce(m.sender, m.from_id) = me and coalesce(m.recipient, m.to_id) = p_other)
+      or (coalesce(m.sender, m.from_id) = p_other and coalesce(m.recipient, m.to_id) = me);
+  update public.messages set read_at = now(), read = true where coalesce(recipient, to_id) = me and coalesce(sender, from_id) = p_other and read_at is null;
+  update public.messages set read = true where to_id = me and from_id = p_other and read = false;
+  return out;
+end $$;
+
+create or replace function public.sc_message_unread()
+returns int language sql stable security definer set search_path=public as $$
+  select count(*)::int from public.messages where coalesce(recipient, to_id) = auth.uid() and read_at is null and coalesce(read,false) = false;
+$$;
+
+-- Grants after CREATE (no early grants)
+-- REMOVED early grant for notif_mark_read kept after last def (v12.25 final)
+
+grant execute on function public.notif_mark_read(uuid) to authenticated;
+revoke all on function public.notif_mark_read(uuid) from public, anon;
+-- REMOVED early grant for notif_clear kept after last def (v12.25 final)
+
+grant execute on function public.notif_clear(uuid[]) to authenticated;
+revoke all on function public.notif_clear(uuid[]) from public, anon;
+grant execute on function public.sc_is_tutor(uuid) to authenticated;
+grant execute on function public.sc_message_directory() to authenticated;
+grant execute on function public.sc_message_send(uuid, text, text) to authenticated;
+grant execute on function public.sc_message_threads() to authenticated;
+grant execute on function public.sc_message_thread(uuid) to authenticated;
+grant execute on function public.sc_message_unread() to authenticated;
+
+-- Ensure RLS open for RPCs
+alter table public.messages enable row level security;
+drop policy if exists "messages_all" on public.messages;
+create policy "messages_all" on public.messages for all using (true) with check (true);
+grant all on public.messages to authenticated;
+
+-- Markers
+insert into public.sc_install_state(key,details) values ('v12.25-fix-messages-sender-42703.sql','{"self":true}') on conflict (key) do nothing;
+insert into public.sc_install_state(key,details) values ('v12.24-fix-notif-clear-42883.sql','{"self":true,"retro":"v12.25"}') on conflict (key) do nothing;
+insert into public.sc_install_state(key,details) values ('v12.23-fix-notif-mark-read-and-theme.sql','{"self":true,"retro":"v12.25"}') on conflict (key) do nothing;
+
+notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
+select 'V12.25 fix 42703 m.sender does not exist + theme robust final pack installed — COALESCE(sender,from_id) robust' as status;
 
 
 select 'School Connect V5.8 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;
