@@ -460,7 +460,8 @@
       <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
         
         <button class="btn btn-sm btn-outline" onclick="if(window.Super)Super.chatbot.explainPage()" title="About this page">ℹ️ Help</button>
-        <button class="btn btn-sm btn-outline" onclick="App.toggleDarkMode()" title="Toggle theme">🌙</button>
+        <button class="btn btn-sm btn-outline" onclick="App.toggleDarkMode()" title="Toggle dark/light — robust like Fleet Console">🌙</button>
+        <button class="btn btn-sm btn-outline" onclick="if(window.ThemeManager)ThemeManager.openPalette()" title="Theme palette — colour themes + dark/light + reset (Ctrl+K)">🎨</button>
         <button class="btn btn-sm btn-outline" onclick="App.signOut()" data-signout style="display:none">Sign out</button>
       </div>
     </header>
