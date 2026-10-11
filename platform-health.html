@@ -290,7 +290,8 @@ const PH={
     {file:'v12.19-platform-health-robust.sql', label:'Heartbeat health V12.19', kind:'rpc', fn:'sc_heartbeat_health', args:{}},
     {file:'v12.19-platform-health-robust.sql', label:'Report allow global V12.19', kind:'rpc', fn:'sc_set_report_generation_global', args:{p_allowed:true}},
     {file:'v12.20-cbt-full-edit-and-proctor.sql', label:'CBT full edit + proctoring', kind:'rpc', fn:'sc_photo_sync_status', args:{}},
-    {file:'v12.21-schema-doctor-v12.2-fix.sql', label:'Schema doctor v12.2 false-alarm fix', kind:'rpc', fn:'sc_photo_sync_status', args:{}}
+    {file:'v12.21-schema-doctor-v12.2-fix.sql', label:'Schema doctor v12.2 false-alarm fix', kind:'rpc', fn:'sc_photo_sync_status', args:{}},
+    {file:'v12.22-theme-messages-notifications-drive-progress.sql', label:'Theme + WhatsApp messages + notifications clear + Drive progress', kind:'rpc', fn:'sc_message_directory', args:{}}
   ],
 
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
