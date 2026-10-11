@@ -516,3 +516,57 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow] { visibility: visibl
 .sc-table-q:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.12)}
 @keyframes scfade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .table-wrap{overflow-x:auto}
+
+/* ====================================================================
+   V12.22 — Robust Theme Manager (Fleet Console + Adewale parity)
+   ==================================================================== */
+:root{
+  --bg:#f8fafc;--bg2:#f1f5f9;--card:#ffffff;--line:#e2e8f0;--txt:#0f172a;--mut:#64748b;
+  --ok:#10b981;--warn:#f59e0b;--bad:#ef4444;
+}
+html[data-theme="dark"], body[data-theme="dark"]{
+  --bg:#0f172a;--bg2:#0b1222;--card:#1e293b;--line:#334155;--txt:#e2e8f0;--mut:#94a3b8;
+  --ok:#34d399;--warn:#fbbf24;--bad:#f87171;
+  --gray-100:#0f172a;--gray-200:#1e293b;--gray-300:#334155;
+  --white:#0f172a;
+}
+html[data-theme="dark"] body, body[data-theme="dark"]{
+  background:var(--bg);
+  color:var(--txt);
+}
+.theme-preset{transition:transform .15s, box-shadow .15s}
+.theme-preset:hover{transform:scale(1.08)}
+
+/* Drive progress pill (V12.22) */
+#sc-drive-progress{position:fixed;bottom:14px;right:14px;z-index:2147481000;background:#0f172a;color:#fff;font:600 12.5px/1.5 system-ui;padding:10px 14px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35);max-width:320px}
+#sc-drive-progress-bar{height:100%;background:#31c48d;border-radius:3px;transition:width .25s}
+
+/* Notifications — clear + auto-popup (V12.22) */
+.notif-item{position:relative;padding:12px 16px;border-bottom:1px solid var(--gray-200);cursor:pointer;transition:background .15s}
+.notif-item:hover{background:var(--gray-100)}
+.notif-item.notif-unread{background:rgba(79,70,229,.04);border-left:3px solid var(--primary)}
+.notif-item-title{font-weight:700;color:var(--dark);font-size:.9rem;margin-bottom:2px}
+.notif-item-msg{font-size:.85rem;color:var(--gray-600);line-height:1.4}
+.notif-item-time{font-size:.72rem;color:var(--gray-500);margin-top:4px}
+.notif-entry{padding:14px 16px;border:1px solid var(--gray-200);border-radius:12px;margin-bottom:10px;background:#fff;cursor:pointer;transition:border-color .15s}
+.notif-entry:hover{border-color:var(--primary)}
+.notif-entry.unread{border-left:4px solid var(--primary);background:rgba(79,70,229,.03)}
+.notif-entry-icon{font-size:1.2rem;margin-bottom:6px}
+.notif-entry-title{font-weight:800;color:var(--dark);margin-bottom:4px}
+.notif-entry-msg{color:var(--gray-600);font-size:.9rem;line-height:1.5}
+.notif-entry-time{font-size:.75rem;color:var(--gray-500);margin-top:6px}
+.channel-pill{display:inline-block;background:rgba(79,70,229,.1);color:var(--primary);border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;margin:2px}
+#sc-live-notification-tray{position:fixed;right:18px;bottom:18px;z-index:2147482500;display:flex;flex-direction:column;gap:10px;max-width:min(420px,calc(100vw - 36px));pointer-events:none}
+
+/* Messages — ensure WhatsApp replica styles also available as static fallback */
+.mc-app{border-radius:14px;overflow:hidden;box-shadow:0 10px 34px rgba(15,23,42,.16);background:#dcdcd2}
+.mc-band{background:#00a884;color:#fff;padding:14px 18px;font-weight:800;display:flex;align-items:center;gap:10px}
+.mc-shell{display:flex;height:72vh;min-height:480px;background:#fff}
+
+/* PWA install banner + toast + modal (ensure exists) */
+.toast-container{position:fixed;right:16px;top:16px;z-index:10001;display:flex;flex-direction:column;gap:8px}
+.toast{background:#0f172a;color:#fff;border-radius:12px;padding:10px 14px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast-success{background:#166534}.toast-danger{background:#991b1b}.toast-warning{background:#92400e}
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;align-items:center;justify-content:center;padding:20px}
+.modal-backdrop.show{display:flex}
+.modal{background:#fff;border-radius:16px;max-width:720px;width:100%;max-height:90vh;overflow:auto}
