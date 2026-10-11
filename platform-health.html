@@ -223,6 +223,7 @@
 <script src="assets/js/site-help.js"></script>
 <script src="assets/js/ai-assistant.js"></script>
 <script src="assets/js/theme-manager.js"></script>
+<script src="assets/js/legibility.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/keepalive-layers.js"></script>
 <script src="assets/js/cbt-practice.js"></script>
@@ -296,7 +297,8 @@ const PH={
     {file:'v12.22-theme-messages-notifications-drive-progress.sql', label:'Theme + WhatsApp messages + notifications clear + Drive progress', kind:'rpc', fn:'sc_message_directory', args:{}},
     {file:'v12.23-fix-notif-mark-read-and-theme.sql', label:'Fix 42P13 + theme robust', kind:'rpc', fn:'sc_message_directory', args:{}},
     {file:'v12.24-fix-notif-clear-42883.sql', label:'Fix 42883 notif_clear + theme final', kind:'rpc', fn:'sc_message_directory', args:{}},
-    {file:'v12.25-fix-messages-sender-42703.sql', label:'Fix 42703 m.sender + messages robust', kind:'rpc', fn:'sc_message_directory', args:{}}
+    {file:'v12.25-fix-messages-sender-42703.sql', label:'Fix 42703 m.sender + messages robust', kind:'rpc', fn:'sc_message_directory', args:{}},
+    {file:'v12.26-theme-legibility-final.sql', label:'Theme legibility + popup legibility', kind:'rpc', fn:'sc_message_directory', args:{}}
   ],
 
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
