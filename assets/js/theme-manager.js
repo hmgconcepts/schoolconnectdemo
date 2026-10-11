@@ -233,6 +233,8 @@
       try{ localStorage.setItem(LS_COLORS, JSON.stringify({primary:t.primary, accent:t.accent})); }catch(e){}
       this.renderSettingsCard();
       this.updateFloatingButton();
+      // Trigger legibility rescan after theme change for popup legibility
+      try{ if(w.SCLegibility) { setTimeout(()=>w.SCLegibility.rescan(), 100); setTimeout(()=>w.SCLegibility.rescan(), 600); } }catch(e){}
       return t;
     },
 
@@ -264,6 +266,7 @@
       if(typeof toast==='function') toast(next==='dark'?'🌙 Dark mode — easier on the eyes at night':'☀️ Light mode — crisp and bright','info',2500);
       this.renderSettingsCard();
       this.updateFloatingButton();
+      try{ if(w.SCLegibility) { setTimeout(()=>w.SCLegibility.rescan(), 100); setTimeout(()=>w.SCLegibility.rescan(), 600); } }catch(e){}
       return next;
     },
 

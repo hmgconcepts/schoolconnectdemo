@@ -187,14 +187,23 @@ tbody tr:hover { background: var(--gray-100); }
 .modal-body { padding: 28px; }
 .modal-footer { padding: 20px 28px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 12px; }
 
-/* ===== Toast ===== */
+/* ===== Toast — Robust Legible (V12.26) — single definition, no conflict, WCAG AA ====
+   BEFORE: Two conflicting .toast definitions — one white bg dark text, one dark bg #0f172a white text — second overrode first's bg but .toast-msg still had var(--gray-700) dark gray on dark bg → NOT legible. That's popup bug.
+   AFTER: Single robust definition with high contrast, works in light AND dark modes, with type-specific light backgrounds + dark text for legibility (like platform-health fallback toast), plus dark mode override that keeps contrast.
+   ==================================================================== */
 .toast-container { position: fixed; top: 90px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
-.toast { background: white; padding: 14px 20px; border-radius: var(--radius); box-shadow: var(--shadow-lg); border-left: 4px solid var(--primary); min-width: 280px; max-width: 400px; animation: slideIn 0.3s ease; }
-.toast-success { border-left-color: var(--success); }
-.toast-warning { border-left-color: var(--warning); }
-.toast-danger { border-left-color: var(--danger); }
-.toast-title { font-weight: 700; font-size: 0.92rem; color: var(--dark); margin-bottom: 2px; }
-.toast-msg { font-size: 0.85rem; color: var(--gray-700); }
+.toast { background: #ffffff; color: #0f172a; padding: 14px 20px; border-radius: var(--radius); box-shadow: 0 12px 32px rgba(15,23,42,.18); border:1px solid #e2e8f0; border-left: 5px solid var(--primary); min-width: 280px; max-width: 420px; animation: slideIn 0.3s ease; font-weight:600; line-height:1.5; }
+.toast-success { background:#dcfce7; color:#166534; border-color:#86efac; border-left-color: var(--success); }
+.toast-warning { background:#fef3c7; color:#92400e; border-color:#fcd34d; border-left-color: var(--warning); }
+.toast-danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; border-left-color: var(--danger); }
+.toast-info { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; border-left-color: var(--primary); }
+.toast-title { font-weight: 800; font-size: 0.92rem; color: inherit; margin-bottom: 2px; }
+.toast-msg { font-size: 0.88rem; color: inherit; line-height:1.45; }
+[data-theme="dark"] .toast { background:#1e293b; color:#f8fafc; border-color:#334155; box-shadow:0 12px 32px rgba(0,0,0,.4); }
+[data-theme="dark"] .toast-success { background:#052e16; color:#bbf7d0; border-color:#166534; }
+[data-theme="dark"] .toast-warning { background:#451a03; color:#fde68a; border-color:#92400e; }
+[data-theme="dark"] .toast-danger { background:#450a0a; color:#fecaca; border-color:#991b1b; }
+[data-theme="dark"] .toast-info { background:#1e1b4b; color:#c7d2fe; border-color:#3730a3; }
 @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes slideOut { to { transform: translateX(120%); opacity: 0; } }
 
@@ -563,10 +572,63 @@ html[data-theme="dark"] body, body[data-theme="dark"]{
 .mc-band{background:#00a884;color:#fff;padding:14px 18px;font-weight:800;display:flex;align-items:center;gap:10px}
 .mc-shell{display:flex;height:72vh;min-height:480px;background:#fff}
 
-/* PWA install banner + toast + modal (ensure exists) */
-.toast-container{position:fixed;right:16px;top:16px;z-index:10001;display:flex;flex-direction:column;gap:8px}
-.toast{background:#0f172a;color:#fff;border-radius:12px;padding:10px 14px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
-.toast-success{background:#166534}.toast-danger{background:#991b1b}.toast-warning{background:#92400e}
+/* PWA install banner + modal (toast already defined above robustly) */
+.pwa-install-banner{position:fixed;left:16px;right:16px;bottom:16px;z-index:9990;background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 16px 40px rgba(15,23,42,.18);padding:12px 14px;gap:12px;align-items:center}
+.pwa-install-banner.show{display:flex}
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;align-items:center;justify-content:center;padding:20px}
 .modal-backdrop.show{display:flex}
 .modal{background:#fff;border-radius:16px;max-width:720px;width:100%;max-height:90vh;overflow:auto}
+[data-theme="dark"] .modal{background:#1e293b;color:#f8fafc;border:1px solid #334155}
+[data-theme="dark"] .pwa-install-banner{background:#1e293b;color:#f8fafc;border-color:#334155}
+
+/* V12.26 — Theme robust final + legibility guard — ensure ALL hardcoded colors use vars or have dark overrides */
+[data-theme="dark"] body{ background:var(--bg,#0f172a); color:var(--txt,#e2e8f0); }
+[data-theme="dark"] .app-layout{ background:var(--bg,#0f172a) !important; }
+[data-theme="dark"] .app-sidebar{ background:var(--bg2,#0b1222) !important; border-color:var(--line,#334155) !important; }
+[data-theme="dark"] .app-topbar{ background:rgba(15,23,42,.92) !important; border-color:var(--line,#334155) !important; }
+[data-theme="dark"] .card:not([style*="linear-gradient"]){ background:var(--card,#1e293b) !important; border-color:var(--line,#334155) !important; color:var(--txt,#e2e8f0) !important; }
+[data-theme="dark"] .card:not([style*="linear-gradient"]) h3,
+[data-theme="dark"] .card:not([style*="linear-gradient"]) h2,
+[data-theme="dark"] .card:not([style*="linear-gradient"]) strong{ color:var(--txt,#e2e8f0) !important; }
+[data-theme="dark"] .stat-card{ background:var(--card,#1e293b) !important; border-color:var(--line,#334155) !important; }
+[data-theme="dark"] .stat-card .stat-label{ color:var(--mut,#94a3b8) !important; }
+[data-theme="dark"] .table-wrap{ background:var(--card,#1e293b) !important; border-color:var(--line,#334155) !important; }
+[data-theme="dark"] .table-wrap table{ background:var(--card,#1e293b) !important; }
+[data-theme="dark"] .table-wrap th{ background:#111c30 !important; color:#94a3b8 !important; }
+[data-theme="dark"] .table-wrap td{ color:#cbd5e1 !important; border-color:#1e293b !important; }
+[data-theme="dark"] .form-input,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] .form-textarea{ background:#0f172a !important; color:#e2e8f0 !important; border-color:#334155 !important; }
+[data-theme="dark"] .btn-outline{ background:var(--card,#1e293b) !important; color:var(--txt,#e2e8f0) !important; border-color:var(--line,#334155) !important; }
+[data-theme="dark"] .notif-dropdown,
+[data-theme="dark"] #notif-dropdown{ background:#1e293b !important; border-color:#334155 !important; color:#e2e8f0 !important; }
+[data-theme="dark"] .notif-item{ background:#1e293b !important; border-color:#334155 !important; color:#e2e8f0 !important; }
+[data-theme="dark"] .notif-item-title{ color:#f8fafc !important; }
+[data-theme="dark"] .notif-item-msg{ color:#cbd5e1 !important; }
+[data-theme="dark"] .notif-entry{ background:#1e293b !important; border-color:#334155 !important; color:#e2e8f0 !important; }
+[data-theme="dark"] .mc-side{ background:#1e293b !important; border-color:#334155 !important; }
+[data-theme="dark"] .mc-side-head{ background:#0f172a !important; border-color:#334155 !important; }
+[data-theme="dark"] .mc-search{ background:#0f172a !important; }
+[data-theme="dark"] .mc-search input{ background:#1e293b !important; color:#e2e8f0 !important; }
+[data-theme="dark"] .mc-list{ background:#1e293b !important; }
+[data-theme="dark"] .mc-row{ border-color:#1e293b !important; }
+[data-theme="dark"] .mc-row:hover{ background:#0f172a !important; }
+[data-theme="dark"] .mc-main{ background:#0b1220 !important; }
+[data-theme="dark"] .mc-head{ background:#0f172a !important; border-color:#334155 !important; }
+[data-theme="dark"] .mc-msgs{ background:#0b1220 !important; }
+[data-theme="dark"] .mc-bubble{ background:#1e293b !important; color:#e2e8f0 !important; }
+[data-theme="dark"] .mc-msg.mine .mc-bubble{ background:#166534 !important; color:#dcfce7 !important; }
+[data-theme="dark"] .mc-day{ background:#1e293b !important; color:#94a3b8 !important; }
+
+/* High contrast mode */
+body.sc-high-contrast{ background:#fff !important; color:#000 !important; }
+body.sc-high-contrast .app-nav a,
+body.sc-high-contrast .app-page-title,
+body.sc-high-contrast .table-wrap td{ color:#000 !important; }
+body.sc-high-contrast .app-nav a.active{ background:#000 !important; color:#fff !important; }
+body.sc-high-contrast .card,
+body.sc-high-contrast .table-wrap{ border:2px solid #000 !important; }
+
+/* Reduced motion */
+.sc-reduced-motion *{ animation:none !important; transition:none !important; }
+
