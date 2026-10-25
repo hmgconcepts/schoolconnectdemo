@@ -78,6 +78,24 @@
           "value": "public, max-age=0, must-revalidate"
         }
       ]
+    },
+    {
+      "source": "/cbt-exam.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/midterm-reports.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+      ]
     }
   ],
   "crons": [

@@ -1,7 +1,7 @@
 // School Connect Service Worker — V5 cumulative release (offline + push + timeout)
 // Literal cache version intentionally changes with every runtime deployment.
-const CACHE = 'sc-client-v12.46-20261008-53';
-const CORE = ['./','./index.html','./login.html','./dashboard.html','./offline.html','./assets/css/style.css','./assets/js/config.js','./assets/js/app.js','./assets/js/crud.js','./assets/js/security-guard.js','./assets/js/cbt-engine.js','./assets/js/cbt-types.js','./assets/js/report-engine.js','./assets/js/notifications.js','./assets/js/voting.js','./assets/js/pwa-install.js','./assets/js/super.js','./assets/js/site-help.js','./assets/js/archive-hub.js','./assets/js/cbt-archive.js','./assets/js/assignment-cbt.js','./assets/js/recovery.js','./assets/js/data-portability.js','./assets/js/drive-sync.js','./assets/js/enterprise.js','./assets/js/analytics.js','./assets/img/logo.svg','./manifest.json','./assets/js/theme-manager.js','./assets/js/messages-center.js','./assets/js/keepalive-layers.js','./assets/js/cbt-practice.js','./assets/js/study-log.js','./assets/js/ics-export.js','./assets/js/learner-portfolio.js'];
+const CACHE = 'sc-client-v12.51-20261025-58';
+const CORE = ['./','./index.html','./login.html','./dashboard.html','./offline.html','./midterm-reports.html','./assets/css/style.css','./assets/js/config.js','./assets/js/app.js','./assets/js/crud.js','./assets/js/security-guard.js','./assets/js/cbt-engine.js','./assets/js/cbt-types.js','./assets/js/report-engine.js','./assets/js/notifications.js','./assets/js/voting.js','./assets/js/pwa-install.js','./assets/js/super.js','./assets/js/site-help.js','./assets/js/archive-hub.js','./assets/js/cbt-archive.js','./assets/js/assignment-cbt.js','./assets/js/recovery.js','./assets/js/data-portability.js','./assets/js/drive-sync.js','./assets/js/enterprise.js','./assets/js/analytics.js','./assets/img/logo.svg','./manifest.json','./assets/js/theme-manager.js','./assets/js/messages-center.js','./assets/js/keepalive-layers.js','./assets/js/cbt-practice.js','./assets/js/study-log.js','./assets/js/ics-export.js','./assets/js/learner-portfolio.js'];
 
 self.addEventListener('install', e => {
   // Cache independently: addAll() is atomic, so one missing optional asset
@@ -24,6 +24,11 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin && !e.request.url.includes('fonts.googleapis')) return;
   if (e.request.mode === 'navigate') {
+    // Never cache/serve a previous candidate's exam result on a shared device.
+    if (/\/cbt-exam\.html$/i.test(url.pathname)) {
+      e.respondWith((async()=>{ try { return await fetch(new Request(e.request,{cache:'no-store'})); } catch(_) { return (await caches.match('./offline.html')) || new Response('You are offline. Reconnect to start or continue this CBT.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}}); } })());
+      return;
+    }
     e.respondWith((async () => {
       const cached = await caches.match(e.request);
       try {
@@ -39,6 +44,9 @@ self.addEventListener('fetch', e => {
     })());
     return;
   }
+  // V12.48: Network-first executable/page assets prevents stale CBT code after deploy.
+  const isRuntimeAsset = e.request.destination === 'script' || e.request.destination === 'style' || /\.(?:js|mjs|css|html)$/i.test(url.pathname);
+  if (isRuntimeAsset) { e.respondWith((async()=>{ const cached=await caches.match(e.request); try{ const net=await Promise.race([fetch(new Request(e.request,{cache:'reload'})),new Promise((_,rej)=>setTimeout(()=>rej(new Error('runtime-timeout')),6000))]); if(net&&net.ok){caches.open(CACHE).then(c=>c.put(e.request,net.clone()));return net;} return cached||net;}catch(_){return cached||Response.error();} })()); return; }
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
