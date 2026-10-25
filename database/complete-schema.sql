@@ -13160,6 +13160,317 @@ notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
 select 'V12.47 midterm reports installed — generate per student, only Midterm scores, separate from terminal, in sync' as status;
 
 
+-- ============================================================================
+-- School Connect V12.48 — CBT integrity verification + synchronized midterm
+-- ----------------------------------------------------------------------------
+-- Fresh root-cause audit (live GOSA still v12.46 SW; submitted 20/20 error
+-- reads: 20 vs 20 but hashes differ because JSON.stringify object key order,
+-- _orig_index/id/default normalization differs between browser and jsonb output):
+-- 1. Fix edit confirmation: server returns a canonical hash from JSONB, then
+--    independent SECURITY DEFINER verifier recomputes hash from DB contents
+--    bypassing RLS. Frontend compares hash/version, not client JSON string.
+-- 2. Replace SW stale-while-revalidate for HTML/JS with network-first. Old
+--    installed clients previously executed stale cbt.html/cbt-engine.js for
+--    a navigation even after deploy, so old broken verification persisted.
+-- 3. Midterm report sync: after report_scores insert/update/delete, refresh
+--    matching midterm_report_cards from Midterm assessment columns only;
+--    preserve published flag; terminal report_cards remain independent.
+-- 4. Midterm family RLS: family sees only published rows (earlier policy let
+--    parents query unpublished report before tutor released it).
+-- 5. WAL recovery: failed row remains after answer_key_missing/closed/empty
+--    bank; tutor can fix bank then re-run recovery. Error remains visible.
+--
+-- Additional expert safeguards: JSONB stable hashing, question bank version,
+-- no false success toast until server verifies, and old-cache invalidation.
+-- ============================================================================
+select 'RUNNING: School Connect CBT integrity + network-first + midterm sync V12.48' as running_version;
+
+-- Canonical DB-side verifier. Hash is computed from coerced JSONB, so object key
+-- ordering and TEXT-vs-JSONB transport never cause a false negative.
+create or replace function public.cbt_verify_exam_bank(p_exam_id uuid, p_expected_hash text default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare e record; bank jsonb; actual_hash text; n int;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok',false,'error','Not authenticated'); end if;
+  select * into e from public.cbt_exams where id=p_exam_id;
+  if not found then return jsonb_build_object('ok',false,'error','Exam not found'); end if;
+  bank:=public.cbt_coerce_to_jsonb_array(coalesce(e.csv_data,'[]'::jsonb));
+  n:=jsonb_array_length(bank);
+  actual_hash:=md5(bank::text);
+  return jsonb_build_object('ok',true,'exam_id',e.id,'code',e.code,'count',n,'bank_version',coalesce(e.bank_version,1),'stored_hash',coalesce(e.bank_hash,''),'actual_hash',actual_hash,'verified',p_expected_hash is null or actual_hash=p_expected_hash,'updated_at',e.updated_at);
+end$$;
+revoke execute on function public.cbt_verify_exam_bank(uuid,text) from public, anon;
+grant execute on function public.cbt_verify_exam_bank(uuid,text) to authenticated;
+
+-- Harden atomic publish: only draft editor, admin or approved staff may publish; refresh bank_hash.
+create or replace function public.cbt_publish_draft(p_draft_id uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare d record; e record; bank jsonb; old_bank jsonb; new_ver int; me uuid:=auth.uid(); h text;
+begin
+  if me is null then return jsonb_build_object('ok',false,'error','Not authenticated'); end if;
+  select * into d from public.cbt_exams_drafts where id=p_draft_id for update;
+  if not found then return jsonb_build_object('ok',false,'error','Draft not found'); end if;
+  if not (public.is_admin(me) or public.is_staff(me) or d.editor_id=me) then return jsonb_build_object('ok',false,'error','Not authorized to publish this draft'); end if;
+  bank:=public.cbt_coerce_to_jsonb_array(d.draft);
+  if jsonb_array_length(bank)=0 then return jsonb_build_object('ok',false,'error','Draft empty'); end if;
+  select * into e from public.cbt_exams where id=d.exam_id for update;
+  if not found then return jsonb_build_object('ok',false,'error','Exam not found'); end if;
+  old_bank:=public.cbt_coerce_to_jsonb_array(coalesce(e.csv_data,'[]'::jsonb));
+  new_ver:=coalesce(e.bank_version,1)+1; h:=md5(bank::text);
+  update public.cbt_exams set csv_data=bank,questions=bank,bank_version=new_ver,bank_hash=h,updated_at=now() where id=d.exam_id returning * into e;
+  delete from public.cbt_exams_drafts where id=p_draft_id;
+  begin insert into public.cbt_edit_log(exam_id,editor_id,old_count,new_count,old_hash,new_hash) values(d.exam_id,me,jsonb_array_length(old_bank),jsonb_array_length(bank),md5(old_bank::text),h); exception when others then null; end;
+  perform pg_notify('cbt-bank-updated',e.code);
+  return jsonb_build_object('ok',true,'exam_id',e.id,'code',e.code,'version',new_ver,'hash',h,'old_count',jsonb_array_length(old_bank),'new_count',jsonb_array_length(bank));
+end$$;
+revoke execute on function public.cbt_publish_draft(uuid) from public,anon;
+grant execute on function public.cbt_publish_draft(uuid) to authenticated;
+
+-- Fix midterm reports RLS: family sees only published; staff retains all.
+drop policy if exists midterm_rc_select on public.midterm_report_cards;
+create policy midterm_rc_select on public.midterm_report_cards for select using (
+  public.is_admin(auth.uid()) or public.is_staff(auth.uid())
+  or (published=true and exists(select 1 from public.students s where s.id=midterm_report_cards.student_id and (s.user_id=auth.uid() or public.is_parent_of(auth.uid(),s.id))))
+);
+
+-- Harden publish: only the author, admin, or staff may publish a saved draft.
+create or replace function public.cbt_publish_draft(p_draft_id uuid)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare d record; e record; bank jsonb; old jsonb; new_ver int; editor uuid:=auth.uid();
+begin
+  if editor is null then return jsonb_build_object('ok',false,'error','Not authenticated'); end if;
+  select * into d from public.cbt_exams_drafts where id=p_draft_id for update;
+  if not found then return jsonb_build_object('ok',false,'error','Draft not found'); end if;
+  if not (public.is_admin(editor) or public.is_staff(editor) or d.editor_id=editor) then return jsonb_build_object('ok',false,'error','Not authorized to publish this draft'); end if;
+  bank:=public.cbt_coerce_to_jsonb_array(d.draft);
+  if jsonb_array_length(bank)=0 then return jsonb_build_object('ok',false,'error','Draft empty'); end if;
+  select * into e from public.cbt_exams where id=d.exam_id for update;
+  if not found then return jsonb_build_object('ok',false,'error','Exam not found'); end if;
+  old:=public.cbt_coerce_to_jsonb_array(coalesce(e.csv_data,'[]'::jsonb));
+  new_ver:=coalesce(e.bank_version,1)+1;
+  update public.cbt_exams set csv_data=bank, questions=bank, bank_version=new_ver, bank_hash=md5(bank::text), updated_at=now() where id=d.exam_id returning * into e;
+  delete from public.cbt_exams_drafts where id=p_draft_id;
+  begin insert into public.cbt_edit_log(exam_id,editor_id,old_count,new_count,old_hash,new_hash) values(d.exam_id,editor,jsonb_array_length(old),jsonb_array_length(bank),md5(old::text),md5(bank::text)); exception when others then null; end;
+  perform pg_notify('cbt-bank-updated',e.code);
+  return jsonb_build_object('ok',true,'exam_id',e.id,'code',e.code,'version',new_ver,'hash',md5(bank::text),'old_count',jsonb_array_length(old),'new_count',jsonb_array_length(bank));
+end$$;
+revoke execute on function public.cbt_publish_draft(uuid) from public, anon;
+grant execute on function public.cbt_publish_draft(uuid) to authenticated;
+
+-- Family only receives a midterm sheet after it is published, even through SECURITY DEFINER RPC.
+create or replace function public.get_midterm_report(p_student_id_ref text,p_class text,p_term text,p_session text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare rec public.midterm_report_cards%rowtype; me uuid:=auth.uid();
+begin
+  select * into rec from public.midterm_report_cards where student_id_ref=p_student_id_ref and class=p_class and term=p_term and session=p_session;
+  if not found then return jsonb_build_object('ok',false,'error','Midterm report not found. Ask tutor to generate it.'); end if;
+  if not (public.is_admin(me) or public.is_staff(me)) then
+    if not rec.published then return jsonb_build_object('ok',false,'error','not_published','message','This midterm report has not been released yet.'); end if;
+    if not exists(select 1 from public.students s where s.admission_no=rec.student_id_ref and (s.user_id=me or public.is_parent_of(me,s.id))) then return jsonb_build_object('ok',false,'error','Not authorized'); end if;
+  end if;
+  return jsonb_build_object('ok',true,'report',row_to_json(rec));
+end$$;
+grant execute on function public.get_midterm_report(text,text,text,text) to authenticated;
+
+-- Midterm report auto-sync trigger. Runs only for columns explicitly marked
+-- Midterm / cbt_assessment_type=test; terminal report_cards never touched.
+create or replace function public.sc_refresh_midterm_report_for_score()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare v_sid_ref text; v_class text; v_term text; v_session text; v_sid uuid; v_name text; v_scores jsonb; v_total numeric; v_avg numeric;
+begin
+  if tg_op='DELETE' then v_sid_ref:=old.student_id_ref; v_class:=old.class; v_term:=old.term; v_session:=old.session; v_sid:=old.student_id; v_name:=old.student_name;
+  else v_sid_ref:=new.student_id_ref; v_class:=new.class; v_term:=new.term; v_session:=new.session; v_sid:=new.student_id; v_name:=new.student_name; end if;
+  if coalesce(v_sid_ref,'')='' then if tg_op='DELETE' then return old; else return new; end if; end if;
+  select coalesce(jsonb_object_agg(rs.subject,rs.score order by rs.subject),'{}'::jsonb),coalesce(sum(rs.score),0),coalesce(avg(rs.score),0)
+    into v_scores,v_total,v_avg
+  from public.report_scores rs join public.assessment_columns ac on ac.id=rs.column_id
+  where rs.student_id_ref=v_sid_ref and lower(trim(rs.class))=lower(trim(v_class)) and lower(trim(rs.term))=lower(trim(v_term)) and lower(trim(rs.session))=lower(trim(v_session))
+    and (lower(trim(ac.name)) like 'midterm%' or lower(trim(ac.cbt_assessment_type)) in ('test','midterm','mid_term','mid_term_test'));
+  if coalesce(v_scores,'{}'::jsonb)='{}'::jsonb then
+    delete from public.midterm_report_cards where student_id_ref=v_sid_ref and class=v_class and term=v_term and session=v_session;
+  else
+    insert into public.midterm_report_cards(student_id,student_id_ref,student_name,class,term,session,scores,total,average,published,updated_at)
+    values(v_sid,v_sid_ref,coalesce(v_name,''),coalesce(v_class,''),coalesce(v_term,''),coalesce(v_session,''),v_scores,v_total,v_avg,false,now())
+    on conflict(student_id_ref,class,term,session) do update set student_id=excluded.student_id,student_name=excluded.student_name,scores=excluded.scores,total=excluded.total,average=excluded.average,updated_at=now();
+  end if;
+  if tg_op='DELETE' then return old; else return new; end if;
+end$$;
+drop trigger if exists trg_midterm_report_sync on public.report_scores;
+create trigger trg_midterm_report_sync after insert or update or delete on public.report_scores for each row execute function public.sc_refresh_midterm_report_for_score();
+
+insert into public.sc_install_state(key,details) values ('v12.48-cbt-integrity-network-and-midterm-sync.sql','{"self":true}') on conflict (key) do nothing;
+notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
+select 'V12.48 CBT integrity + network-first + midterm auto-sync installed' as status;
+
+
+-- ============================================================================
+-- School Connect V12.49 — Canonical edit/append/verify + midterm privacy hardening
+-- ----------------------------------------------------------------------------
+-- Root cause of still-persisting CBT edit: frontend cbt.html calls
+-- cbt_force_replace_bank_v3 and cbt_verify_exam_bank, but complete-schema as
+-- shipped to live GOSA was not rebuilt with the later v12.48 edits. Thus RPC
+-- schema cache returned 42883/404 (stale UI may then execute older fallback
+-- and toast false success). Also the v12.48 force function definition was in
+-- the standalone SQL draft but not in cumulative schema. Vercel SW was v12.46,
+-- and stale-while-revalidate served old cbt.html/js on first load. We fix all
+-- three layers: DEFINITIVE RPCs embedded in cumulative schema, network-first
+-- runtime assets in v12.48 SW, and front-end only reports saved after verifier.
+--
+-- Attach CSV bug: v12.41 cbt_force_append_bank returns count but frontend
+-- didn't server-verify, and fallback code referenced a block-scoped rpc2 var
+-- after leaving its try block. Replace with a single v2 append RPC that returns
+-- canonical hash + version, then call cbt_verify_exam_bank.
+--
+-- Midterm consistency: v12.48 auto-sync trigger updates only midterm_report_cards
+-- after report_scores changes, never terminal report_cards. Parent RPC checks
+-- published=true. Keep this behavior.
+-- ============================================================================
+select 'RUNNING: School Connect canonical edit/append/verify V12.49' as running_version;
+
+-- Canonical force replace: row-lock, optimistic version, coerce JSONB, hash computed by postgres.
+create or replace function public.cbt_force_replace_bank_v3(p_exam_id uuid,p_bank jsonb,p_expected_version int default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare e record; bank jsonb; old_bank jsonb; old_hash text; new_hash text; ver int;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok',false,'error','Not authenticated'); end if;
+  bank:=public.cbt_coerce_to_jsonb_array(p_bank);
+  if jsonb_array_length(bank)=0 then return jsonb_build_object('ok',false,'error','Bank empty','message','Cannot publish an empty question bank.'); end if;
+  select * into e from public.cbt_exams where id=p_exam_id for update;
+  if not found then return jsonb_build_object('ok',false,'error','Exam not found'); end if;
+  ver:=coalesce(e.bank_version,1);
+  if p_expected_version is not null and p_expected_version<>ver then
+    return jsonb_build_object('ok',false,'error','concurrent_edit','message','The question bank changed since the editor loaded it (version '||ver||'). Reload, re-apply your changes, then publish.','current_version',ver);
+  end if;
+  old_bank:=public.cbt_coerce_to_jsonb_array(coalesce(e.csv_data,'[]'::jsonb));
+  old_hash:=md5(old_bank::text); new_hash:=md5(bank::text);
+  if old_hash=new_hash then return jsonb_build_object('ok',true,'message','No changes (same canonical bank)','exam_id',p_exam_id,'version',ver,'hash',new_hash,'count',jsonb_array_length(bank)); end if;
+  update public.cbt_exams set csv_data=bank,questions=bank,bank_version=ver+1,bank_hash=new_hash,updated_at=now() where id=p_exam_id returning * into e;
+  begin insert into public.cbt_edit_log(exam_id,editor_id,old_count,new_count,old_hash,new_hash) values(p_exam_id,coalesce(auth.uid(),'00000000-0000-0000-0000-000000000000'::uuid),jsonb_array_length(old_bank),jsonb_array_length(bank),old_hash,new_hash); exception when others then null; end;
+  perform pg_notify('cbt-bank-updated',e.code);
+  return jsonb_build_object('ok',true,'exam_id',e.id,'code',e.code,'version',e.bank_version,'hash',new_hash,'count',jsonb_array_length(bank));
+end$$;
+revoke execute on function public.cbt_force_replace_bank_v3(uuid,jsonb,int) from public;
+grant execute on function public.cbt_force_replace_bank_v3(uuid,jsonb,int) to authenticated;
+
+-- Canonical append: atomic server-side JSONB concatenate and returns hash for verification.
+create or replace function public.cbt_force_append_bank_v2(p_exam_id uuid,p_new_questions jsonb)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare e record; old_bank jsonb; add_bank jsonb; new_bank jsonb; ver int; h text;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok',false,'error','Not authenticated'); end if;
+  add_bank:=public.cbt_coerce_to_jsonb_array(p_new_questions);
+  if jsonb_array_length(add_bank)=0 then return jsonb_build_object('ok',false,'error','No new questions'); end if;
+  select * into e from public.cbt_exams where id=p_exam_id for update;
+  if not found then return jsonb_build_object('ok',false,'error','Exam not found'); end if;
+  old_bank:=public.cbt_coerce_to_jsonb_array(coalesce(e.csv_data,'[]'::jsonb));
+  new_bank:=old_bank||add_bank; ver:=coalesce(e.bank_version,1)+1; h:=md5(new_bank::text);
+  update public.cbt_exams set csv_data=new_bank,questions=new_bank,bank_version=ver,bank_hash=h,updated_at=now() where id=p_exam_id returning * into e;
+  begin insert into public.cbt_edit_log(exam_id,editor_id,old_count,new_count,old_hash,new_hash) values(p_exam_id,coalesce(auth.uid(),'00000000-0000-0000-0000-000000000000'::uuid),jsonb_array_length(old_bank),jsonb_array_length(new_bank),md5(old_bank::text),h); exception when others then null; end;
+  perform pg_notify('cbt-bank-updated',e.code);
+  return jsonb_build_object('ok',true,'exam_id',e.id,'code',e.code,'version',ver,'hash',h,'added',jsonb_array_length(add_bank),'total',jsonb_array_length(new_bank));
+end$$;
+revoke execute on function public.cbt_force_append_bank_v2(uuid,jsonb) from public,anon;
+grant execute on function public.cbt_force_append_bank_v2(uuid,jsonb) to authenticated;
+
+-- Verifier is independent and SECURITY DEFINER: read the committed row, coerce
+-- legacy TEXT, recompute canonical hash, compare with the RPC's committed hash.
+create or replace function public.cbt_verify_exam_bank(p_exam_id uuid,p_expected_hash text default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare e record; bank jsonb; h text; n int;
+begin
+ if auth.uid() is null then return jsonb_build_object('ok',false,'error','Not authenticated'); end if;
+ select * into e from public.cbt_exams where id=p_exam_id;
+ if not found then return jsonb_build_object('ok',false,'error','Exam not found'); end if;
+ bank:=public.cbt_coerce_to_jsonb_array(coalesce(e.csv_data,'[]'::jsonb));n:=jsonb_array_length(bank);h:=md5(bank::text);
+ return jsonb_build_object('ok',true,'exam_id',e.id,'code',e.code,'count',n,'bank_version',coalesce(e.bank_version,1),'actual_hash',h,'stored_hash',coalesce(e.bank_hash,''),'verified',p_expected_hash is null or h=p_expected_hash,'updated_at',e.updated_at);
+end$$;
+revoke execute on function public.cbt_verify_exam_bank(uuid,text) from public,anon;
+grant execute on function public.cbt_verify_exam_bank(uuid,text) to authenticated;
+
+insert into public.sc_install_state(key,details) values ('v12.49-canonical-edit-append-verify.sql','{"self":true}') on conflict (key) do nothing;
+notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
+select 'V12.49 canonical edit/append/verify installed — force v3 + force append v2 + independent server verifier' as status;
+
+
+-- ============================================================================
+-- School Connect V12.50 — Server-side proctor session gate (camera-required exams)
+-- ----------------------------------------------------------------------------
+-- Browser-only permission gate can be bypassed by directly calling submit RPC.
+-- For exams whose anti_cheat_config.camera=true, this adds a server-side gate:
+-- getUserMedia succeeds -> client registers a short-lived proctor session tied to
+-- exam_id + client_ref -> BEFORE INSERT on cbt_results verifies session active,
+-- then consumes it. Direct cbt_submit_v5/cbt_submit_v6 calls without a registered
+-- proctor session cannot create a result. Normal non-camera exams remain unchanged.
+-- Limitation stated honestly: a modified client can call the registration RPC
+-- directly; web browsers cannot provide hardware attestation. This blocks UI
+-- permission denial and casual API bypass; high-stakes exams still require
+-- supervised devices/kiosk or in-person invigilation.
+-- ============================================================================
+select 'RUNNING: School Connect server proctor session gate V12.50' as running_version;
+
+create table if not exists public.cbt_proctor_sessions(
+ id uuid primary key default gen_random_uuid(),
+ exam_id uuid not null references public.cbt_exams(id) on delete cascade,
+ client_ref text not null,
+ student_id_ref text not null default '',
+ status text not null default 'active' check(status in ('active','consumed','revoked')),
+ started_at timestamptz not null default now(),
+ expires_at timestamptz not null default (now()+interval '3 hours'),
+ consumed_at timestamptz,
+ unique(exam_id,client_ref)
+);
+alter table public.cbt_proctor_sessions enable row level security;
+drop policy if exists cbt_proctor_staff_read on public.cbt_proctor_sessions;
+create policy cbt_proctor_staff_read on public.cbt_proctor_sessions for select using(public.is_admin(auth.uid()) or public.is_staff(auth.uid()));
+grant select on public.cbt_proctor_sessions to authenticated;
+
+create or replace function public.cbt_proctor_register(p_exam_id uuid,p_client_ref text,p_student_id_ref text default '')
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare e record; ref text:=trim(coalesce(p_client_ref,'')); sid text:=trim(coalesce(p_student_id_ref,'')); s public.cbt_proctor_sessions%rowtype;
+begin
+ if ref='' or length(ref)>120 then return jsonb_build_object('ok',false,'error','client_ref_required'); end if;
+ select * into e from public.cbt_exams where id=p_exam_id;
+ if not found then return jsonb_build_object('ok',false,'error','exam_not_found'); end if;
+ if coalesce((e.anti_cheat_config->>'camera')::boolean,false) is not true then return jsonb_build_object('ok',false,'error','camera_not_required'); end if;
+ insert into public.cbt_proctor_sessions(exam_id,client_ref,student_id_ref,status,started_at,expires_at)
+ values(p_exam_id,ref,sid,'active',now(),now()+interval '3 hours')
+ on conflict(exam_id,client_ref) do update set student_id_ref=excluded.student_id_ref,status='active',started_at=now(),expires_at=now()+interval '3 hours',consumed_at=null
+ returning * into s;
+ return jsonb_build_object('ok',true,'session_id',s.id,'expires_at',s.expires_at,'exam_id',p_exam_id,'client_ref',ref);
+end$$;
+revoke execute on function public.cbt_proctor_register(uuid,text,text) from public;
+grant execute on function public.cbt_proctor_register(uuid,text,text) to anon,authenticated;
+
+create or replace function public.sc_cbt_require_proctor_before_result()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare required boolean; s public.cbt_proctor_sessions%rowtype;
+begin
+ select coalesce((anti_cheat_config->>'camera')::boolean,false) into required from public.cbt_exams where id=new.exam_id;
+ if required then
+   select * into s from public.cbt_proctor_sessions where exam_id=new.exam_id and client_ref=new.client_ref and status='active' and expires_at>now() for update;
+   if not found then raise exception using errcode='23514',message='proctor_session_required: camera-required exam has no active server proctor session'; end if;
+   update public.cbt_proctor_sessions set status='consumed',consumed_at=now() where id=s.id;
+ end if;
+ return new;
+end$$;
+drop trigger if exists trg_cbt_proctor_required_before_result on public.cbt_results;
+create trigger trg_cbt_proctor_required_before_result before insert on public.cbt_results for each row execute function public.sc_cbt_require_proctor_before_result();
+
+insert into public.sc_install_state(key,details) values ('v12.50-server-proctor-session-gate.sql','{"self":true}') on conflict (key) do nothing;
+notify pgrst,'reload schema';select pg_notify('pgrst','reload schema');
+select 'V12.50 server proctor session gate installed — camera-required CBT submissions need a one-use active server session' as status;
+
+
+-- School Connect V12.51 — Runtime/cache deployment marker.
+-- CBT pages and executable JS now use network-first service-worker fetch with
+-- cached fallback only when offline; a new cache version is required to evict
+-- V12.46 stale CBT scripts currently seen on the live client sites.
+select 'RUNNING: School Connect runtime cache bust V12.51' as running_version;
+insert into public.sc_install_state(key,details) values ('v12.51-runtime-cache-bust.sql','{"self":true,"runtime_cache":"v12.51"}') on conflict (key) do nothing;
+notify pgrst,'reload schema'; select pg_notify('pgrst','reload schema');
+select 'V12.51 runtime cache marker installed' as status;
+
+
 select 'School Connect V5.8 complete cumulative schema installed successfully ✅ — no other production SQL is required'as status;
 
 
