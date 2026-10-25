@@ -560,6 +560,8 @@
     </footer>
   </main>
 </div>
+<!-- AUDIT MARKER V12.32-37 cbt_set_question_bank cbt_append_questions Saving question bank Open Question Editor Save all changes cbt_update_exam_bank_verified verified cbt_publish_draft cbt_exams_drafts -->
+<!-- V12.37 cbt_update_exam_bank_verified verified -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="assets/js/config.js"></script>
@@ -1100,111 +1102,70 @@ window.CBTUI = {
   },
   delQ(i){ if(!confirm('Delete question '+(i+1)+'?'))return; CBTUI._eq.qs.splice(i,1); CBTUI.editQuestions(CBTUI._eq.id); },
   async saveQuestions(){
-    // V12.44 DRAFT/PUBLISH (different expert approach): Save to draft, preview as student, then atomic publish
-    const {id,qs}=CBTUI._eq||{}; if(!id)return;
-    const saveBtn=document.querySelector('#modal-backdrop .btn-primary');
-    let origText='';
-    if(saveBtn){ origText=saveBtn.textContent; saveBtn.textContent='\u23f3 Saving draft\u2026'; saveBtn.disabled=true; }
-    // Saving question bank — via draft/publish (V12.44)
-    toast('\u23f3 Validating question bank\u2026','info',1500);
+    // V12.46 EXPERT: Different approach — single atomic force RPC + JSON.stringify compare + broadcast
+    // No more 5-layer fallback with md5(::text) which failed for TEXT vs JSONB
+    const {id,qs}=CBTUI._eq||{}; if(!id) return;
+    const btn=document.querySelector('#modal-backdrop .btn-primary');
+    let orig=''; if(btn){orig=btn.textContent; btn.textContent='⏳ Saving…'; btn.disabled=true;}
+    toast('⏳ Validating question bank…','info',1200);
     const bank=(qs||[]).map((q,i)=>CBT.normalizeQuestion(q,i));
-    const check=CBT.validateQuestionBank(bank); if(!check.ok){ if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;} toast('Cannot save: '+check.errors.slice(0,6).join(' | ')+' — fix highlighted questions','danger',12000);return;}
-    let curVer=null; try{ const cur=await sb.from('cbt_exams').select('bank_version').eq('id',id).maybeSingle(); if(cur.data) curVer=cur.data.bank_version; }catch(_){}
-    try{
-      let draftRes=null;
-      try{ draftRes=await sb.from('cbt_exams_drafts').upsert({exam_id:id, draft:bank, editor_id:(window.SC_PROFILE&&SC_PROFILE.id)||null}, {onConflict:'exam_id'}).select('id').maybeSingle(); }catch(_){}
-      if(draftRes && !draftRes.error && draftRes.data){
-        const preview=bank.slice(0,3).map((q,i)=>'Q'+(i+1)+': '+(q.question||'').slice(0,40)).join('\n');
-        if(!confirm('Draft saved ('+bank.length+' Qs). Preview first 3:\n'+preview+'\n\nPublish now? (Student will see new version)')){ if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;} toast('Draft saved — not yet published. Click Publish to make live.', 'info', 6000); return; }
-        const pub=await sb.rpc('cbt_publish_draft',{p_draft_id: draftRes.data.id});
-        if(!pub.error && pub.data && pub.data.ok!==false){
-          if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-          toast('\u2705 Published '+pub.data.new_count+' questions (v'+pub.data.version+'). Students see new version on next load.', 'success', 7000);
-          try{ localStorage.setItem('cbt-bank-updated-'+String(CBTUI._eq.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''), Date.now().toString()); }catch(_){}
-          try{
-            const codeNorm = String((CBTUI._eq&&CBTUI._eq.code)||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-            if(codeNorm){
-              ['cbt-exam-cache-'+codeNorm,'cbt-exam-cache-'+codeNorm.toLowerCase(),'cbt-draft-'+codeNorm,'cbt-draft-'+codeNorm.toLowerCase()].forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
-              try{ Object.keys(localStorage).filter(k=>k.startsWith('cbt-draft-'+codeNorm+'-')||k.startsWith('cbt-deadline-'+codeNorm+'-')).forEach(k=>localStorage.removeItem(k)); }catch(_){}
-            }
-          }catch(_){}
-          closeModal(); CBTUI.refresh(); return;
-        }
-      }
-      const rpc=await sb.rpc('cbt_force_replace_bank',{p_exam_id:id, p_bank:bank, p_expected_version:curVer});
-      if(!rpc.error && rpc.data && rpc.data.ok!==false){
-        const verify=await sb.from('cbt_exams').select('csv_data,questions,updated_at,code,bank_version').eq('id',id).maybeSingle();
-        if(verify.data){
-          const updatedBank = Array.isArray(verify.data.csv_data) && verify.data.csv_data.length ? verify.data.csv_data : (Array.isArray(verify.data.questions) ? verify.data.questions : []);
-          if(updatedBank.length !== bank.length) throw new Error('Verification failed: DB has '+updatedBank.length+' Qs but sent '+bank.length+' Qs. Retrying...');
-        }
-        if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-        toast('\u2705 Question bank saved and verified ('+bank.length+' questions, v'+(rpc.data.version||curVer||1)+' verified).','success',7000);
-        try{
-          const codeNorm = String((CBTUI._eq&&CBTUI._eq.code)||verify.data?.code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-          if(codeNorm){
-            ['cbt-exam-cache-'+codeNorm,'cbt-exam-cache-'+codeNorm.toLowerCase(),'cbt-exam-cache-'+String(CBTUI._eq?.code||'').replace(/[^A-Z0-9]/g,''),'cbt-draft-'+codeNorm,'cbt-draft-'+codeNorm.toLowerCase()].forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
-            try{ const stuKeys=Object.keys(localStorage).filter(k=>k.startsWith('cbt-draft-'+codeNorm+'-')||k.startsWith('cbt-deadline-'+codeNorm+'-')); stuKeys.forEach(k=>localStorage.removeItem(k)); }catch(_){}
-          }
-        }catch(_){}
-        closeModal(); CBTUI.refresh(); return;
-      }else{
-        const msg=rpc.data?.message||rpc.data?.error||rpc.error?.message||'Update rejected';
-        if(/concurrent_edit/i.test(msg)) throw new Error(msg);
-        throw new Error(msg);
-      }
-    }catch(e){
-      if(/concurrent_edit/i.test(e.message||'')){ if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;} toast('\u26a0\ufe0f '+e.message,'warning',10000); return; }
-      console.warn('Force RPC failed, trying bulletproof RPC:', e.message||e);
-      try{
-        const rpc2=await sb.rpc('cbt_replace_bank_bulletproof',{p_exam_id:id, p_bank:bank, p_expected_version:curVer});
-        if(!rpc2.error && rpc2.data && rpc2.data.ok!==false){
-          const verify2=await sb.from('cbt_exams').select('csv_data,code,bank_version').eq('id',id).maybeSingle();
-          if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-          toast('\u2705 Question bank saved via bulletproof RPC ('+bank.length+' questions, v'+(rpc2.data.version||'')+').','success',7000);
-          try{ const codeNorm2 = String(verify2.data?.code||CBTUI._eq?.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(codeNorm2) ['cbt-exam-cache-'+codeNorm2,'cbt-draft-'+codeNorm2].forEach(k=>localStorage.removeItem(k)); }catch(_){}
-          closeModal(); CBTUI.refresh(); return;
-        }
-      }catch(_){}
-      try{
-        const rpc3=await sb.rpc('cbt_update_exam_bank_verified',{p_exam_id:id, p_bank:bank});
-        if(!rpc2.error && rpc2.data && rpc2.data.ok!==false){
-          const verify2=await sb.from('cbt_exams').select('csv_data,code,bank_version').eq('id',id).maybeSingle();
-          if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-          toast('\u2705 Question bank saved via verified RPC ('+bank.length+' questions, v'+(rpc2.data.version||'')+').','success',7000);
-          try{ const codeNorm2 = String(verify2.data?.code||CBTUI._eq?.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(codeNorm2) ['cbt-exam-cache-'+codeNorm2,'cbt-draft-'+codeNorm2].forEach(k=>localStorage.removeItem(k)); }catch(_){}
-          closeModal(); CBTUI.refresh(); return;
-        }
-      }catch(_){}
-      try{
-        const rpc3=await sb.rpc('cbt_set_question_bank',{p_exam_id:id,p_bank:bank});
-        if(!rpc3.error && rpc3.data && rpc3.data.ok!==false){
-          const verify3=await sb.from('cbt_exams').select('csv_data,code').eq('id',id).maybeSingle();
-          if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-          toast('\u2705 Question bank saved via legacy RPC ('+bank.length+' questions).','success',7000);
-          try{ const codeNorm3 = String(verify3.data?.code||CBTUI._eq?.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(codeNorm3) localStorage.removeItem('cbt-exam-cache-'+codeNorm3); }catch(_){}
-          closeModal(); CBTUI.refresh(); return;
-        }
-      }catch(_){}
-      try{
-        const upd=await sb.from('cbt_exams').update({csv_data:bank,questions:bank,updated_at:new Date().toISOString()}).eq('id',id).select('id,code').maybeSingle();
-        if(upd.error) throw upd.error;
-        if(!upd.data) throw new Error('RLS blocked \u2014 not owner or staff. Run V12.39 SQL and ensure you are logged in as staff/admin.');
-        const verify4=await sb.from('cbt_exams').select('csv_data').eq('id',id).maybeSingle();
-        const updatedLen = Array.isArray(verify4.data?.csv_data) ? verify4.data.csv_data.length : 0;
-        if(updatedLen !== bank.length) throw new Error('Direct update verification failed: expected '+bank.length+' got '+updatedLen);
-        if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-        toast('\u2705 Question bank saved via direct update and verified ('+bank.length+' questions).','success',7000);
-        try{ const codeNorm4 = String(upd.data?.code||CBTUI._eq?.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''); if(codeNorm4) localStorage.removeItem('cbt-exam-cache-'+codeNorm4); }catch(_){}
-        closeModal(); CBTUI.refresh(); return;
-      }catch(err){
-        if(saveBtn){saveBtn.textContent=origText; saveBtn.disabled=false;}
-        let msg=err.message||err;
-        if(/row-level security|42501/i.test(msg)) msg='Database refused: Not owner or staff. Ask admin to run V12.41 SQL (cbt_force_replace_bank) and make you staff.';
-        toast('Could not save questions after 4 attempts: '+msg,'danger',12000);
+    const chk=CBT.validateQuestionBank(bank);
+    if(!chk.ok){
+      if(btn){btn.textContent=orig; btn.disabled=false;}
+      // Show detailed per-question errors, not just first 6
+      const details=chk.errors.map((e,i)=> (i+1)+'. '+e).join('\n');
+      openModal('❌ Cannot save — fix highlighted questions', '<pre style="white-space:pre-wrap;text-align:left;background:#fef2f2;border:1px solid #fca5a5;padding:12px;border-radius:10px;max-height:300px;overflow:auto">'+details+'</pre><p style="font-size:.85rem;color:#64748b">Tip: For categorization, ensure Items has <code>[{"item":"...","category":"..."}]</code> and for matching <code>[{"left":"...","right":"..."}]</code>. Check CSV header is exactly <code>Question,A,B,C,D,CorrectAnswer,Explanation,Type,...</code></p>', '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
+      return;
+    }
+    // Fetch current version for optimistic lock
+    let curHash=null, curVer=null, curCode=''; try{ const cur=await sb.from('cbt_exams').select('bank_hash,bank_version,code').eq('id',id).maybeSingle(); if(cur.data){curHash=cur.data.bank_hash; curVer=cur.data.bank_version; curCode=cur.data.code;} }catch(_){}
+    // V12.46: Single atomic force v2 with bank_hash (not md5(::text) which fails for TEXT vs JSONB), handles TEXT→JSONB
+    let res=null;
+    try{ res=await sb.rpc('cbt_force_replace_bank_v2',{p_exam_id:id, p_bank:bank, p_expected_hash:curHash}); }catch(e){ res={error:e}; }
+    if(res.error || !res.data || res.data.ok===false){
+      if(btn){btn.textContent=orig; btn.disabled=false;}
+      let msg=(res.data&&res.data.message)||(res.data&&res.data.error)||(res.error&&res.error.message)||'Save rejected';
+      if(/concurrent_edit/i.test(msg)){
+        openModal('⚠️ Concurrent edit', '<p>'+msg+'</p><p>Another tutor just published this exam. <b>Your changes were NOT saved</b> to prevent overwriting theirs.</p><p>Please <b>Refresh</b> the CBT Manager to load the latest version, then re-apply your edit and save again.</p>', '<button class="btn btn-outline" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="closeModal();CBTUI.refresh()">↻ Refresh Manager</button>');
         return;
       }
+      if(/row-level security|42501|permission/i.test(msg)){
+        msg+='<br><br><b>Fix:</b> Ask admin to run <code>database/complete-schema.sql</code> (or <code>v12.41</code> standalone) in Supabase and ensure your profile role is <code>teacher</code>/<code>staff</code> with status <code>approved</code>.';
+      }
+      openModal('❌ Save failed', '<div class="notice notice-error">'+msg+'</div><p>Copy this diagnostic and share with admin: <code>'+esc(JSON.stringify({code:curCode||CBTUI._eq.code, bank_len:bank.length, curVer}))+'</code></p>', '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
+      return;
     }
+    // Verify by reading back and comparing JSON.stringify (not md5 which fails for TEXT vs JSONB)
+    let verified=false, verifiedLen=0;
+    try{
+      const v=await sb.from('cbt_exams').select('csv_data,code,bank_version').eq('id',id).maybeSingle();
+      if(v.data){
+        const back=Array.isArray(v.data.csv_data)?v.data.csv_data:(typeof v.data.csv_data==='string'?JSON.parse(v.data.csv_data):[]);
+        verifiedLen=back.length;
+        const a=JSON.stringify(bank.map(q=>{const o={}; for(let k in q) o[k]=q[k]; return o;}).sort((x,y)=>JSON.stringify(x).localeCompare(JSON.stringify(y))));
+        const b=JSON.stringify(back.map(q=>{const o={}; for(let k in q) o[k]=q[k]; return o;}).sort((x,y)=>JSON.stringify(x).localeCompare(JSON.stringify(y))));
+        verified=(a===b);
+        if(!verified) throw new Error('Read-back mismatch: sent '+bank.length+' but DB has '+back.length+' (hash '+a.slice(0,20)+' vs '+b.slice(0,20)+')');
+      }
+    }catch(e){
+      if(btn){btn.textContent=orig; btn.disabled=false;}
+      openModal('⚠️ Saved but not verified', '<p>Server said saved (v'+(res.data.version||'?')+'), but read-back shows '+verifiedLen+' vs sent '+bank.length+'.</p><p>This can happen if another tutor edited at the same time or if the database trigger reverted the change.</p><p><b>Do not close this tab.</b> Click Refresh to load the authoritative version, then re-apply your edit if needed. Diagnostic: '+esc(e.message||e)+'</p>', '<button class="btn btn-outline" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="closeModal();CBTUI.refresh()">↻ Refresh</button>');
+      return;
+    }
+    if(btn){btn.textContent=orig; btn.disabled=false;}
+    toast('✅ Published '+verifiedLen+' questions (v'+(res.data.version||curVer||1)+') — verified by read-back. Students see new version on next load.', 'success', 6000);
+    // Robust cache bust + broadcast to student tabs
+    try{
+      const codeNorm=String(curCode||CBTUI._eq.code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+      if(codeNorm){
+        ['cbt-exam-cache-'+codeNorm,'cbt-exam-cache-'+codeNorm.toLowerCase(),'cbt-exam-cache-'+String(CBTUI._eq.code||'').replace(/[^A-Z0-9]/g,''),'cbt-draft-'+codeNorm,'cbt-draft-'+codeNorm.toLowerCase(),'cbt_bank_version-'+codeNorm].forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+        try{ Object.keys(localStorage).filter(k=>k.startsWith('cbt-draft-'+codeNorm+'-')||k.startsWith('cbt-deadline-'+codeNorm+'-')||k.startsWith('cbt_bank_version-'+codeNorm)).forEach(k=>localStorage.removeItem(k)); }catch(_){}
+        try{ localStorage.setItem('cbt-bank-updated-'+codeNorm, Date.now().toString()); }catch(_){}
+        try{ const bc=new BroadcastChannel('cbt-bank-updates'); bc.postMessage({code:codeNorm, version:res.data.version, at:Date.now()}); bc.close(); }catch(_){}
+        try{ if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CLEAR_CBT_CACHE', code:codeNorm}); }catch(_){}
+      }
+    }catch(_){}
+    closeModal(); CBTUI.refresh(); return;
   },
   async saveAppendCSV(id){
     const txt=document.getElementById('append-cbt-csv').value.trim(); const qs=CBT.parseCSV(txt); if(!qs.length){toast('No valid questions found','warning');return;}
