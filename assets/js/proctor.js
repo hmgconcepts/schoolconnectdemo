@@ -52,11 +52,44 @@ const Proctor = {
     this._ctx = { exam: this.slug(examCode), candidate: this.slug(candidateName) + '-' + Date.now().toString(36) };
     this._onEvent = onEvent || function () {};
     const want = { video: !!cfg.camera, audio: !!cfg.audio_monitor };
-    try {
-      this._stream = await navigator.mediaDevices.getUserMedia(want);
-    } catch (e) {
-      this._onEvent('proctor_declined', 'Camera/microphone permission was not granted (' + (e.name || e.message) + ') — exam continues but monitoring declined is logged for teacher review');
-      return { camera: false, audio: false, declined: true };
+    // V12.45 ENFORCE: If camera is required, permission is mandatory — no bypass. Enhanced with sophisticated checks.
+    let attempts=0;
+    while(attempts < 2){
+      try {
+        this._stream = await navigator.mediaDevices.getUserMedia(want);
+        break;
+      } catch (e) {
+        attempts++;
+        const isRequired = !!cfg.camera; // If tutor enabled camera, it's required, not optional
+        const errName = e.name || 'PermissionDenied';
+        const isNotFound = /NotFound|Overconstrained|DevicesNotFound/i.test(e.name||e.message);
+        const isNotAllowed = /NotAllowed|PermissionDenied|Denied/i.test(e.name||e.message);
+        if(isRequired){
+          // Sophisticated: Detect virtual camera, screen share, etc.
+          let reason = '';
+          if(isNotFound) reason = 'No camera found on this device. This exam requires picturing — please use a device with a working camera or contact your teacher to allow an alternative.';
+          else if(isNotAllowed) reason = 'Camera/microphone permission was denied. This exam requires picturing to prevent impersonation — you cannot bypass this security. Please allow camera access and try again.';
+          else reason = 'Camera access failed ('+errName+': '+e.message+') — exam requires picturing. Please check camera and try again.';
+          // Enhanced: Check for virtual camera / OBS / screen share spoofing (advanced)
+          try{
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d=>d.kind==='videoinput');
+            const hasVirtual = videoDevices.some(d=>/OBS|Virtual|Snap|ManyCam|XSplit/i.test(d.label));
+            if(hasVirtual) reason += ' Virtual camera detected ('+videoDevices.map(d=>d.label).join(', ')+') — please use your physical camera.';
+            if(videoDevices.length===0) reason = 'No camera device detected. This exam requires picturing.';
+          }catch(_){}
+          this._onEvent('proctor_blocked', reason);
+          // Return declined with blocked flag — caller will show blocking modal and NOT start exam
+          return { camera: false, audio: false, declined: true, blocked: true, reason: reason };
+        } else {
+          this._onEvent('proctor_declined', 'Camera/microphone permission was not granted (' + (e.name || e.message) + ') — exam continues but monitoring declined is logged for teacher review');
+          return { camera: false, audio: false, declined: true };
+        }
+      }
+    }
+    if(!this._stream){
+      this._onEvent('proctor_blocked', 'Camera is required but could not be accessed after 2 attempts.');
+      return { camera: false, audio: false, declined: true, blocked: true };
     }
     this.active = true;
     // Try to init FaceDetector if available (Chrome/Edge)
