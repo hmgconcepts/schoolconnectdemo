@@ -34,3 +34,7 @@ After deployment, create a disposable exam containing a letter key, exact option
 
 ## V5.6.1 open/multi-subject repair
 Open and multi-subject examinations can start without an admission number. The V6 getter returns a null optional candidate instead of dereferencing an unassigned PL/pgSQL record. Registered examinations still require the official admission number and roster.
+
+## Midterm reports (V12.47+)
+
+Midterm tests can have a separate report sheet without changing terminal report cards. Create/push a Midterm test into an assessment column named `Midterm` (or mark its assessment type as `test`), then open **Midterm Reports** and choose class, term and session. Generate a preview, then publish it for parents/students. The separate `midterm_report_cards` table and report RPCs only use Midterm columns; terminal `report_cards` remain independent. Both read the same `report_scores` source, and score changes synchronize the midterm record automatically. Families can view only their own published midterm sheet; tutors/admins can generate, preview, publish or unpublish.

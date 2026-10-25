@@ -1119,9 +1119,9 @@ window.CBTUI = {
     }
     // Fetch current version for optimistic lock
     let curHash=null, curVer=null, curCode=''; try{ const cur=await sb.from('cbt_exams').select('bank_hash,bank_version,code').eq('id',id).maybeSingle(); if(cur.data){curHash=cur.data.bank_hash; curVer=cur.data.bank_version; curCode=cur.data.code;} }catch(_){}
-    // V12.46: Single atomic force v2 with bank_hash (not md5(::text) which fails for TEXT vs JSONB), handles TEXT→JSONB
+    // V12.48: Single atomic force v3 locks row and recomputes canonical old hash from DB (ignores stale legacy bank_hash)
     let res=null;
-    try{ res=await sb.rpc('cbt_force_replace_bank_v2',{p_exam_id:id, p_bank:bank, p_expected_hash:curHash}); }catch(e){ res={error:e}; }
+    try{ res=await sb.rpc('cbt_force_replace_bank_v3',{p_exam_id:id, p_bank:bank, p_expected_version:curVer}); }catch(e){ res={error:e}; }
     if(res.error || !res.data || res.data.ok===false){
       if(btn){btn.textContent=orig; btn.disabled=false;}
       let msg=(res.data&&res.data.message)||(res.data&&res.data.error)||(res.error&&res.error.message)||'Save rejected';
@@ -1135,25 +1135,24 @@ window.CBTUI = {
       openModal('❌ Save failed', '<div class="notice notice-error">'+msg+'</div><p>Copy this diagnostic and share with admin: <code>'+esc(JSON.stringify({code:curCode||CBTUI._eq.code, bank_len:bank.length, curVer}))+'</code></p>', '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
       return;
     }
-    // Verify by reading back and comparing JSON.stringify (not md5 which fails for TEXT vs JSONB)
-    let verified=false, verifiedLen=0;
+    // V12.48: authoritative verification is server-side against canonical JSONB hash.
+    // This avoids false mismatch from object key order, client defaults, TEXT/JSONB serialization.
+    let verify=null;
     try{
-      const v=await sb.from('cbt_exams').select('csv_data,code,bank_version').eq('id',id).maybeSingle();
-      if(v.data){
-        const back=Array.isArray(v.data.csv_data)?v.data.csv_data:(typeof v.data.csv_data==='string'?JSON.parse(v.data.csv_data):[]);
-        verifiedLen=back.length;
-        const a=JSON.stringify(bank.map(q=>{const o={}; for(let k in q) o[k]=q[k]; return o;}).sort((x,y)=>JSON.stringify(x).localeCompare(JSON.stringify(y))));
-        const b=JSON.stringify(back.map(q=>{const o={}; for(let k in q) o[k]=q[k]; return o;}).sort((x,y)=>JSON.stringify(x).localeCompare(JSON.stringify(y))));
-        verified=(a===b);
-        if(!verified) throw new Error('Read-back mismatch: sent '+bank.length+' but DB has '+back.length+' (hash '+a.slice(0,20)+' vs '+b.slice(0,20)+')');
-      }
+      const vr=await sb.rpc('cbt_verify_exam_bank',{p_exam_id:id,p_expected_hash:res.data.hash||null});
+      if(vr.error) throw new Error('Server verify RPC failed: '+vr.error.message);
+      verify=vr.data;
+      if(!verify || verify.ok!==true) throw new Error((verify&&verify.error)||'Server verification failed');
+      if(Number(verify.count)!==bank.length) throw new Error('Count mismatch after commit: sent '+bank.length+', database has '+verify.count+'.');
+      if(verify.verified===false) throw new Error('Canonical bank hash does not match published hash; database reports a concurrent trigger/write. DB '+String(verify.actual_hash||'').slice(0,12)+' vs published '+String(res.data.hash||'').slice(0,12));
     }catch(e){
       if(btn){btn.textContent=orig; btn.disabled=false;}
-      openModal('⚠️ Saved but not verified', '<p>Server said saved (v'+(res.data.version||'?')+'), but read-back shows '+verifiedLen+' vs sent '+bank.length+'.</p><p>This can happen if another tutor edited at the same time or if the database trigger reverted the change.</p><p><b>Do not close this tab.</b> Click Refresh to load the authoritative version, then re-apply your edit if needed. Diagnostic: '+esc(e.message||e)+'</p>', '<button class="btn btn-outline" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="closeModal();CBTUI.refresh()">↻ Refresh</button>');
+      // Crucially, do not claim success if server cannot prove commit. Keep draft available.
+      openModal('⚠️ Saved, verification pending', '<p>The publish RPC returned success, but the independent server-side verification did not complete.</p><p>'+esc(e.message||e)+'</p><p>Your draft is preserved. Do not re-edit blindly: retry <b>Verify / Publish</b> or refresh and compare the question list.</p>', '<button class="btn btn-outline" onclick="closeModal()">Keep draft</button><button class="btn btn-primary" onclick="closeModal();CBTUI.refresh()">Refresh</button>');
       return;
     }
     if(btn){btn.textContent=orig; btn.disabled=false;}
-    toast('✅ Published '+verifiedLen+' questions (v'+(res.data.version||curVer||1)+') — verified by read-back. Students see new version on next load.', 'success', 6000);
+    toast('✅ Published '+Number(verify.count)+' questions (v'+(verify.bank_version||res.data.version||curVer||1)+') — server verified canonical hash. Students see new version on next load.', 'success', 6000);
     // Robust cache bust + broadcast to student tabs
     try{
       const codeNorm=String(curCode||CBTUI._eq.code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -1168,39 +1167,24 @@ window.CBTUI = {
     closeModal(); CBTUI.refresh(); return;
   },
   async saveAppendCSV(id){
-    const txt=document.getElementById('append-cbt-csv').value.trim(); const qs=CBT.parseCSV(txt); if(!qs.length){toast('No valid questions found','warning');return;}
-    const check=CBT.validateQuestionBank(qs);if(!check.ok){toast('Cannot append: '+check.errors.slice(0,5).join(' | '),'danger',12000);return;}
-    toast('\u23f3 Appending '+qs.length+' questions\u2026','info',2000);
+    const txt=(document.getElementById('append-cbt-csv')||{}).value?.trim()||'';
+    const qs=CBT.parseCSV(txt); if(!qs.length){toast('No valid questions found','warning');return;}
+    const check=CBT.validateQuestionBank(qs);if(!check.ok){toast('Cannot append: '+check.errors.map((e,i)=>(i+1)+'. '+e).join(' | '),'danger',12000);return;}
+    const btn=document.querySelector('#modal-backdrop .btn-primary');let original='';if(btn){original=btn.textContent;btn.disabled=true;btn.textContent='⏳ Appending…';}
     try{
-      const rpc=await sb.rpc('cbt_force_append_bank',{p_exam_id:id, p_new_questions:qs});
-      if(!rpc.error && rpc.data && rpc.data.ok!==false){
-        toast('\u2705 Appended '+rpc.data.added+' questions (total '+rpc.data.total+').','success',7000);
-        try{ const v=await sb.from('cbt_exams').select('code').eq('id',id).maybeSingle(); if(v.data?.code) localStorage.removeItem('cbt-exam-cache-'+String(v.data.code).toUpperCase().replace(/[^A-Z0-9]/g,'')); }catch(_){}
-        closeModal(); CBTUI.refresh(); return;
-      }else throw new Error(rpc.data?.message||rpc.error?.message||'Append rejected');
-    }catch(e){ console.warn('Bulletproof append failed, trying verified:', e.message||e);
-      try{
-        const rpc2=await sb.rpc('cbt_insert_questions_bulletproof',{p_exam_id:id, p_new_questions:qs});
-        if(!rpc2.error && rpc2.data && rpc2.data.ok!==false){ toast('\u2705 Appended via bulletproof RPC ('+rpc2.data.added+' added, total '+rpc2.data.total+').','success',7000); closeModal(); CBTUI.refresh(); return; }
-      }catch(_){}
-      try{
-        const rpc3=await sb.rpc('cbt_append_questions_verified',{p_exam_id:id, p_new_questions:qs});
-        if(!rpc2.error && rpc2.data && rpc2.data.ok!==false){ toast('\u2705 Appended via verified RPC ('+rpc2.data.added+' added, total '+rpc2.data.total+').','success',7000); closeModal(); CBTUI.refresh(); return; }
-      }catch(_){}
-      try{
-        const rpc3=await sb.rpc('cbt_append_questions',{p_exam_id:id, p_new_questions:qs});
-        if(!rpc3.error && rpc3.data && rpc3.data.ok!==false){ toast('\u2705 Appended via legacy RPC.','success',7000); closeModal(); CBTUI.refresh(); return; }
-      }catch(_){}
-      try{
-        const cur=await sb.from('cbt_exams').select('csv_data,questions,code,bank_version').eq('id',id).maybeSingle();
-        if(cur.error) throw cur.error;
-        let oldBank = Array.isArray(cur.data?.csv_data) && cur.data.csv_data.length ? cur.data.csv_data : (Array.isArray(cur.data?.questions) ? cur.data.questions : []);
-        if(typeof oldBank==='string'){ try{ oldBank=JSON.parse(oldBank); }catch(_){ oldBank=[]; } }
-        const newBank = oldBank.concat(qs);
-        const rpc4=await sb.rpc('cbt_force_replace_bank',{p_exam_id:id, p_bank:newBank, p_expected_version:cur.data?.bank_version||null});
-        if(!rpc4.error && rpc4.data && rpc4.data.ok!==false){ toast('\u2705 Appended via fallback replace ('+newBank.length+' total).','success',7000); closeModal(); CBTUI.refresh(); return; }
-        throw new Error(rpc4.data?.message||rpc4.error?.message||'Fallback failed');
-      }catch(err){ toast('Append failed: '+(err.message||err),'danger',10000); }
+      const res=await sb.rpc('cbt_force_append_bank_v2',{p_exam_id:id,p_new_questions:qs});
+      if(res.error||!res.data||res.data.ok!==true)throw new Error((res.data&&res.data.message)||(res.data&&res.data.error)||(res.error&&res.error.message)||'Append RPC did not confirm success');
+      const vr=await sb.rpc('cbt_verify_exam_bank',{p_exam_id:id,p_expected_hash:res.data.hash});
+      if(vr.error||!vr.data||vr.data.ok!==true||vr.data.verified!==true||Number(vr.data.count)!==Number(res.data.total))throw new Error((vr.data&&vr.data.error)||(vr.error&&vr.error.message)||'Independent server verification did not match appended question bank');
+      if(btn){btn.disabled=false;btn.textContent=original;}
+      const codeNorm=String(res.data.code||CBTUI._eq?.code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+      try{['cbt-exam-cache-'+codeNorm,'cbt-exam-cache-'+codeNorm.toLowerCase()].forEach(k=>localStorage.removeItem(k));localStorage.setItem('cbt-bank-updated-'+codeNorm,Date.now().toString());}catch(_){}
+      try{const bc=new BroadcastChannel('cbt-bank-updates');bc.postMessage({code:codeNorm,version:res.data.version,at:Date.now()});bc.close();}catch(_){}
+      toast('✅ Attached '+res.data.added+' questions; server independently verified '+vr.data.count+' total (v'+vr.data.bank_version+').','success',7000);
+      closeModal();CBTUI.refresh();
+    }catch(e){
+      if(btn){btn.disabled=false;btn.textContent=original;}
+      openModal('❌ Attach CSV not confirmed','<div class="notice notice-error">'+esc(e.message||e)+'</div><p>No success message was shown. Refresh before retrying to avoid duplicate questions.</p>','<button class="btn btn-outline" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="closeModal();CBTUI.refresh()">Refresh</button>');
     }
   },
   async del(id){if(!sb||!confirm('Delete this exam and all its results?'))return;const r=await SCDelete.byId(sb,'cbt_exams',id);if(!r.ok){toast(r.error,'danger');return;}if(App)App.logActivity('delete','cbt_exam',id);toast('Exam deleted permanently.','success');CBTUI.refresh();},

@@ -684,9 +684,19 @@ textarea.form-input{min-height:80px;resize:vertical}
         }
       }
     } catch(_) {}
+    if (data.instructions) {
+      if (!confirm('Instructions:\n\n' + data.instructions + '\n\nClick OK to begin. You cannot pause the timer once started.')) {
+        this.codeEntry(code);
+        return;
+      }
+    }
+
+    // V12.48: Mandatory proctor permission must finish BEFORE timer/render starts.
+    // If a required camera is denied/unavailable, beginMonitor returns false and exam never begins.
+    const monitoringReady = await this.beginMonitor();
+    if (monitoringReady === false) return;
     this.startTs = Date.now();
-    // V12.33 timer persistence — survive refresh (expert fix 4a)
-    // V12.37: deadline per student AND per attempt (use client_ref for anon to avoid cross-student leakage)
+    // Timer starts only after identity, instructions and required proctor permission are complete.
     const _deadlineKey='cbt-deadline-'+String(data.code||canonicalCode).toUpperCase().replace(/[^A-Z0-9]/g,'')+'-'+String(this.student&&this.student.id_ref||this.clientRef||'anon').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
     const _savedDeadline=Number(localStorage.getItem(_deadlineKey)||0);
     if(_savedDeadline && _savedDeadline>Date.now() && _savedDeadline - Date.now() < (data.duration||45)*60*1000*2){
@@ -697,16 +707,6 @@ textarea.form-input{min-height:80px;resize:vertical}
       try{ localStorage.setItem(_deadlineKey, String(this.deadline)); }catch(_){}
     }
     this.remaining = Math.max(0, Math.ceil((this.deadline - Date.now()) / 1000));
-    // Clear deadline on submit (handled in submit) and on timeup via beforeunload save
-
-    if (data.instructions) {
-      if (!confirm('Instructions:\n\n' + data.instructions + '\n\nClick OK to begin. You cannot pause the timer once started.')) {
-        this.codeEntry(code);
-        return;
-      }
-    }
-
-    this.beginMonitor();
     this.tick();
     this.render();
   };
@@ -730,6 +730,19 @@ textarea.form-input{min-height:80px;resize:vertical}
             if (type === 'proctor_blocked') { /* Handled via proctorRes.blocked below */ }
           } catch (_) {}
         });
+        // V12.50: register one-use server proctor session only AFTER getUserMedia succeeds.
+        // cbt_results BEFORE INSERT trigger rejects camera-required submissions with no active session.
+        if(cfg.camera===true && proctorRes && !proctorRes.blocked && this.data && this.student){
+          let gate=null;
+          try{ gate=await window.sb.rpc('cbt_proctor_register',{p_exam_id:this.data.id,p_client_ref:this.clientRef,p_student_id_ref:this.student.id_ref||''}); }catch(e){ gate={error:e}; }
+          if(!gate || gate.error || !gate.data || gate.data.ok!==true){
+            const why=(gate&&gate.data&&gate.data.error)||(gate&&gate.error&&gate.error.message)||'Proctor registration failed';
+            this.root().innerHTML='<div class="card"><div class="notice notice-error"><h2>📸 Exam security could not be verified</h2><p>'+esc(why)+'</p><p>This camera-required exam has not started and no timer has been used. Retry while online or contact the exam officer.</p><button class="btn btn-primary" onclick="location.reload()">Retry</button></div></div>';
+            try{Proctor.stop();}catch(_){}
+            return false;
+          }
+          this.proctorSessionId=gate.data.session_id;
+        }
         // V12.45 ENFORCE: Block exam if pictoring required but declined/blocked
         if(proctorRes && proctorRes.blocked){
           this._proctorBlocked = true;
@@ -739,9 +752,23 @@ textarea.form-input{min-height:80px;resize:vertical}
           const retryHtml = '<div style=\"text-align:center;padding:20px\"><div style=\"font-size:3rem;margin-bottom:12px\">📸</div><h2 style=\"color:#991b1b\">Camera Required</h2><p style=\"color:#991b1b;font-weight:600\">'+(proctorRes.reason||'Camera is required for this exam.')+'</p><p style=\"font-size:.85rem;color:#64748b\">This exam was set by your tutor to require picturing to prevent impersonation. You cannot bypass this security.</p><div style=\"display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap\"><button class=\"btn btn-primary\" onclick=\"location.reload()\">🔄 Retry Allow Camera</button><button class=\"btn btn-outline\" onclick=\"history.back()\">← Back</button></div><p style=\"font-size:.75rem;color:#64748b;margin-top:12px\">Tip: When browser asks \'Allow camera?\' choose <b>Allow</b>. If using iPhone, use Safari, not Chrome. Ensure no other app is using camera.</p></div>';
           this.root().innerHTML = '<div class="card">'+retryHtml+'</div>';
           if(typeof toast==='function') toast('📸 Camera required — exam blocked. Allow camera to continue.', 'danger', 10000);
-          return; // Do not proceed to startAntiCheat or timer
+          return false; // V12.48 hard block: caller awaits and must not start timer/exam
         }
-      } catch (e) { console.warn('[Proctor] start skipped:', e.message || e); }
+      } catch (e) {
+        console.warn('[Proctor] start failed:', e.message || e);
+        if(cfg.camera===true){
+          this.root().innerHTML='<div class="card"><div class="notice notice-error"><h2>📸 Camera Required</h2><p>Camera permission could not be checked. This exam requires camera access. Check your browser/site camera permission, then retry.</p><button class="btn btn-primary" onclick="location.reload()">Retry</button></div></div>';
+          return false;
+        }
+      }
+      if(cfg.camera===true && (!window.Proctor || !Proctor.active)){
+        this.root().innerHTML='<div class="card"><div class="notice notice-error"><h2>📸 Camera Required</h2><p>Monitoring did not start. This exam requires camera access; the exam has not started and no time has been used.</p><button class="btn btn-primary" onclick="location.reload()">Retry after allowing camera</button></div></div>';
+        return false;
+      }
+    }
+    if(cfg.camera===true && !window.Proctor){
+      this.root().innerHTML='<div class="card"><div class="notice notice-error"><h2>📸 Camera Required</h2><p>The exam requires camera-based proctoring, but the proctoring module did not load. The exam has not started. Refresh the page or contact the exam officer.</p><button class="btn btn-primary" onclick="location.reload()">Retry</button></div></div>';
+      return false;
     }
     if (window.CBT && typeof window.CBT.startAntiCheat === 'function') {
       this.monitor = window.CBT.startAntiCheat(cfg, (type, n) => {
@@ -755,6 +782,7 @@ textarea.form-input{min-height:80px;resize:vertical}
         }
       });
     }
+    return true;
   };
 
   Exam.tick = function(){

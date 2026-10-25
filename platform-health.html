@@ -331,6 +331,10 @@ const PH={
     {file:'v12.44-comprehensive-7-issues.sql', label:'CBT public link Next Student', kind:'col', table:'cbt_exams', col:'show_score_on_submit'},
     {file:'v12.45-edit-draft-publish-privacy.sql', label:'CBT draft/publish + privacy 10s + history', kind:'rpc', fn:'cbt_publish_draft', args:{p_draft_id:'00000000-0000-0000-0000-000000000000'}},
     {file:'v12.46-proctor-enforce-and-cache-bust.sql', label:'Proctor enforce (no bypass) + bank_hash cache-bust', kind:'col', table:'cbt_exams', col:'bank_hash'},
+    {file:'v12.48-cbt-integrity-network-and-midterm-sync.sql', label:'CBT canonical verifier + network-first + midterm auto-sync', kind:'rpc', fn:'cbt_verify_exam_bank', args:{p_exam_id:'00000000-0000-0000-0000-000000000000'}},
+    {file:'v12.49-canonical-edit-append-verify.sql', label:'CBT force v3 + verified attach + bank hash', kind:'rpc', fn:'cbt_force_replace_bank_v3', args:{p_exam_id:'00000000-0000-0000-0000-000000000000',p_bank:[]}},
+    {file:'v12.49-canonical-edit-append-verify.sql', label:'Midterm family privacy & separate reports', kind:'col', table:'midterm_report_cards', col:'published'},
+    {file:'v12.50-server-proctor-session-gate.sql', label:'Server-side required-camera submission gate', kind:'rpc', fn:'cbt_proctor_register', args:{p_exam_id:'00000000-0000-0000-0000-000000000000',p_client_ref:'health-probe'}},
     {file:'v12.33-cbt-comprehensive-fix.sql', label:'CBT attempt limit column', kind:'col', table:'cbt_exams', col:'attempt_limit'}
   ],
 
