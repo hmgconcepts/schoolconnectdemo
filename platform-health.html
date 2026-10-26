@@ -335,6 +335,8 @@ const PH={
     {file:'v12.49-canonical-edit-append-verify.sql', label:'CBT force v3 + verified attach + bank hash', kind:'rpc', fn:'cbt_force_replace_bank_v3', args:{p_exam_id:'00000000-0000-0000-0000-000000000000',p_bank:[]}},
     {file:'v12.49-canonical-edit-append-verify.sql', label:'Midterm family privacy & separate reports', kind:'col', table:'midterm_report_cards', col:'published'},
     {file:'v12.50-server-proctor-session-gate.sql', label:'Server-side required-camera submission gate', kind:'rpc', fn:'cbt_proctor_register', args:{p_exam_id:'00000000-0000-0000-0000-000000000000',p_client_ref:'health-probe'}},
+    {file:'v12.51-runtime-cache-bust.sql', label:'Runtime cache bust marker', kind:'col', table:'sc_install_state', col:'key'},
+    {file:'v12.52-midterm-roster-complete-and-context-sync.sql', label:'Midterm all roster students + old/new context auto-sync', kind:'rpc', fn:'generate_midterm_reports', args:{p_class:'JSS 1',p_term:'First Term',p_session:'2026/2027'}},
     {file:'v12.33-cbt-comprehensive-fix.sql', label:'CBT attempt limit column', kind:'col', table:'cbt_exams', col:'attempt_limit'}
   ],
 
