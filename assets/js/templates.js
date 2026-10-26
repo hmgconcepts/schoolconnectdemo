@@ -25,6 +25,7 @@ const T = {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
+<script>/* School Connect V12.23 pre-paint theme — robust like Fleet Console + Adewale — runs synchronously before CSS to avoid FOUC */(function(){try{var m=null;try{m=localStorage.getItem('sc-theme');}catch(e){}if(!m){try{m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){m='light';}}m=(m==='dark'?'dark':'light');document.documentElement.setAttribute('data-theme',m);document.documentElement.dataset.theme=m;try{var c=JSON.parse(localStorage.getItem('sc-theme-colors')||'null');if(c&&c.primary){var r=document.documentElement.style;r.setProperty('--primary',c.primary);r.setProperty('--sc-primary',c.primary);if(c.accent){r.setProperty('--accent',c.accent);r.setProperty('--sc-accent',c.accent);r.setProperty('--gradient','linear-gradient(135deg,'+c.primary+' 0%,'+c.accent+' 100%)');}}}catch(e){}}catch(e){}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${T.esc(title)} • ${T.esc(config.schoolName)}</title>
@@ -248,7 +249,8 @@ ${T.setupRequiredBanner()}
         ${config.campuses && config.campuses.length > 1 ? T.campusSwitcher(config) : ''}
         <button class="btn btn-sm btn-outline" onclick="if(window.Super)Super.chatbot.explainPage()" title="About this page">ℹ️ Help</button>
         <div class="user-chip" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--gray-200);border-radius:999px;background:var(--white)"><span>👤</span><span><strong id="user-display-name">Connecting…</strong><small id="user-display-role" style="display:block;color:var(--gray-500);line-height:1">restoring session</small></span></div>
-        <button class="btn btn-sm btn-outline" onclick="App.toggleDarkMode()" title="Toggle theme">🌙</button>
+        <button class="btn btn-sm btn-outline" onclick="App.toggleDarkMode()" title="Toggle dark/light — robust like Fleet Console">🌙</button>
+        <button class="btn btn-sm btn-outline" onclick="if(window.ThemeManager)ThemeManager.openPalette()" title="Theme palette — colour themes + dark/light + reset (Ctrl+K)">🎨</button>
         <button class="btn btn-sm btn-outline" onclick="App.signOut()" data-signout style="display:none">Sign out</button>
       </div>
     </header>
@@ -337,7 +339,7 @@ ${T.setupRequiredBanner()}
     const publicPages = 'any all public ' + admin + ' staff teacher parent student';
     const canonical = (x) => {
       const map = {
-        'academic-records':'academic_records', 'admin-data':'admin_data', 'report-cards':'report_cards',
+        'academic-records':'academic_records', 'admin-data':'admin_data', 'report-cards':'report_cards', 'midterm-reports':'midterm_reports',
         'cbt-prompts':'cbt_prompts', 'cbt-exam':'cbt_exam', 'cbt-multi':'cbt_multi', 'change-password':'change_password', 'timetable-generator':'timetable_generator',
         'student-profile':'student_profile', 'profile':'profile', 'change-password':'change_password', 'cbt-multi':'cbt_multi', 'feature-guide':'feature_guide', 'verify-certificate':'verify_certificate'
       };
@@ -355,19 +357,19 @@ ${T.setupRequiredBanner()}
       'cbt','cbt_prompts','entrance','assignments','timetable','timetable_generator','sow',
       'lesson_plans','library','digital_library','eresources','announcements','events','messages','inbox','exam_timetable',
       'complaints','broadcast','diary','checkin','checkin_staff','checkin-staff','punctuality','behaviour','conduct','health','support_plans',
-      'certificates','reports','directory','rubrics','counselling','substitutions','helpdesk','book_request', 'ecosystem_products','hmg_digital_products',
+      'certificates','reports','directory','idcards','rubrics','counselling','substitutions','helpdesk','book_request', 'ecosystem_products','hmg_digital_products',
       /* V6.4 #5: teachers fill domain ratings & report comments for their students */
-      'affective_traits','psychomotor_traits','report_comments'
+      'affective_traits','psychomotor_traits','report_comments','midterm_reports','developer'
     ]);
     const parentSet = new Set([
       'dashboard','profile','change_password','notifications','feature_guide','student_profile','fees','payments_online','results',
-      'report_cards','attendance','assignments','diary','timetable','exam_timetable','announcements','events','messages','inbox',
-      'complaints','eresources','certificates','school_calendar','voting','idcards', 'ecosystem_products','hmg_digital_products'
+      'report_cards','midterm_reports','attendance','assignments','diary','timetable','exam_timetable','announcements','events','messages','inbox',
+      'complaints','eresources','certificates','school_calendar','voting','idcards', 'ecosystem_products','hmg_digital_products','developer'
     ]);
     const studentSet = new Set([
       'dashboard','profile','change_password','notifications','feature_guide','student_profile','cbt_exam','assignments','digital_library',
-      'eresources','timetable','exam_timetable','results','report_cards','attendance','announcements','events','messages','inbox',
-      'complaints','certificates','diary','school_calendar','voting','idcards', 'ecosystem_products','hmg_digital_products'
+      'eresources','timetable','exam_timetable','results','report_cards','midterm_reports','attendance','announcements','events','messages','inbox',
+      'complaints','certificates','diary','school_calendar','voting','idcards', 'ecosystem_products','hmg_digital_products','developer'
     ]);
 
     const roles = [admin];
@@ -936,7 +938,7 @@ ${T.setupRequiredBanner()}
       return T.shell(config, 'Feature Guide', body, { requireRole: 'all', pageId: 'feature-guide', noShell: !!opts.noShell });
     }
     if (moduleId === 'developer') {
-      const body = `<div class="card"><h2 style="margin-top:0">About the Developer</h2><p>This portal was generated with School Connect by HMG Concepts. The platform is designed to run on free-first tools: static hosting plus Supabase, without paid AI API dependency.</p><p><a class="btn btn-primary" href="${T.esc(config.hmgLink || 'https://hmgconcepts.pages.dev/')}" target="_blank" rel="noopener">Visit HMG Concepts</a></p></div>`;
+      const body = `<div class="card" style="background:linear-gradient(135deg,#0f172a,#1e1b4b);color:white"><div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start"><img src="assets/img/founder-adewale.jpg" alt="Adewale Samson Adeagbo — Founder, HMG Concepts" style="width:180px;max-width:40vw;border-radius:16px;border:3px solid rgba(255,255,255,.25)" onerror="this.style.display='none'"><div style="flex:1;min-width:260px"><h2 style="color:white;margin-top:0">👨‍💻 Adewale Samson Adeagbo</h2><p style="opacity:.95;margin:0 0 8px"><strong>Founder &amp; Lead Architect — HMG CONCEPTS (His Marvellous Grace)</strong></p><p style="opacity:.9;margin:0 0 10px">AI-Augmented Solutions Developer · Data Scientist · STEM Educator · EdTech Architect · Lagos, Nigeria</p><p style="opacity:.85;margin:0">Every HMG platform — including this portal — runs on free infrastructure, is rules-based (no paid AI APIs), and is handed over so the school owns its data and site forever. “Recurring payments should not keep your schools from having online presences.”</p><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px"><a class="btn btn-primary" href="https://cssadewale.pages.dev" target="_blank" rel="noopener">🌐 Portfolio</a><a class="btn btn-outline" style="background:white;color:#0f172a" href="${T.esc(config.hmgLink || 'https://hmgconcepts.pages.dev/')}" target="_blank" rel="noopener">HMG Concepts Ecosystem</a><a class="btn btn-outline" style="background:white;color:#0f172a" href="https://wa.me/2348100866322" target="_blank" rel="noopener">💬 WhatsApp</a></div></div></div></div><div class="grid grid-2" style="margin-top:20px"><div class="card"><h3>🎓 HMG Academy</h3><p>Premium STEM, Data Science &amp; exam coaching.</p><a href="https://hmgacademy.pages.dev" target="_blank" rel="noopener">Visit →</a></div><div class="card"><h3>💻 HMG Technologies</h3><p>The engineering arm behind School Connect, Tutoring Connect, DramaConnect and HMG CBT.</p><a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">Visit →</a></div><div class="card"><h3>🎬 HMG Media</h3><p>Media &amp; creative arm.</p><a href="https://hmgmedia.pages.dev" target="_blank" rel="noopener">Visit →</a></div><div class="card"><h3>✝️ HMG Gospel</h3><p>FaithTech tools for gospel outreach.</p><a href="https://hmggospel.pages.dev" target="_blank" rel="noopener">Visit →</a></div></div>`;
       return T.shell(config, 'Developer', body, { requireRole: 'all', pageId: 'developer', noShell: !!opts.noShell });
     }
     // FIX v9: Complete role-based write permissions

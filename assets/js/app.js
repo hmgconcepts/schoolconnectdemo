@@ -626,7 +626,7 @@ const App = {
      hide them from the roles the generator ships. Real operational modules
      stay fully governable by the Access Manager as before. */
   MAP_IMMUNE:new Set(['developer','idcards','profile','change_password','feature_guide',
-    'hmg_digital_products','ecosystem_products','notifications','dashboard','about']),
+    'hmg_digital_products','ecosystem_products','notifications','dashboard','about','midterm_reports','midterm-reports']),
 
   /* Modules that parents/students should NEVER see. The whitelist
      (PARENT_WHITELIST / STUDENT_WHITELIST) handles everything else.
