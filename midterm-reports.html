@@ -17,13 +17,49 @@
 .mr-table th,.mr-table td{border:1px solid #e2e8f0;padding:8px 10px;text-align:left;font-size:.88rem}
 .mr-table th{background:#f8fafc;font-weight:800}
 @media print{.no-print{display:none} .mr-card{break-inside:avoid}}
+/* Standalone page shell: match the portal layout and prevent mobile drawer/content overlap. */
+.mr-sidebar-scrim{display:none}
+.mr-brand-caption,.mr-brand-foot{font-size:.76rem;color:var(--gray-500,#64748b)}
+.mr-brand-foot{margin-top:auto;padding:16px;border-top:1px solid var(--gray-200,#e2e8f0)}
+#mr-app-shell{width:100%;min-width:0}
+#mr-app-shell .app-main{min-width:0;width:calc(100% - 250px)}
+#mr-app-shell .app-content{width:100%;max-width:1280px;margin:0 auto;min-width:0}
+#mr-app-shell .mr-table{min-width:0}
+#mr-app-shell .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+#mr-app-shell .app-topbar{min-width:0}
+@media(max-width:900px){
+  #mr-app-shell .app-main{width:100%;max-width:100%}
+  #mr-app-shell .app-content{padding:14px;width:100%;max-width:100%}
+  #mr-app-shell .grid-3{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+  #mr-app-shell .app-sidebar{transform:translateX(-105%);visibility:hidden;transition:transform .22s ease,visibility .22s ease}
+  #mr-app-shell .app-sidebar.open{transform:translateX(0);visibility:visible}
+  #mr-app-shell .mr-sidebar-scrim.open{display:block;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:90}
+  #mr-app-shell .app-sidebar{z-index:100}
+  #mr-app-shell .app-topbar{position:sticky;top:0;padding:10px 12px;gap:10px}
+  #mr-app-shell .app-page-title{font-size:1.05rem;min-width:0}
+  #mr-app-shell .app-content .card{min-width:0;overflow-wrap:anywhere}
+  #mr-app-shell .mr-table{display:block;overflow-x:auto}
+}
 </style>
 </head>
 <body>
-<div class="app">
-  <nav class="app-sidebar" id="sidebar"></nav>
+<div class="app-layout sidebar" id="mr-app-shell">
+  <div class="mr-sidebar-scrim" id="mr-sidebar-scrim" onclick="MR.closeSidebar()" aria-hidden="true"></div>
+  <aside class="app-sidebar" id="app-sidebar" aria-label="School navigation">
+    <div class="app-brand"><img src="assets/img/logo.svg" alt="School logo" onerror="this.style.display='none'"><div><strong id="mr-school-name">School Connect</strong><div class="mr-brand-caption">School Portal</div></div></div>
+    <nav class="app-nav" aria-label="Main navigation">
+      <a href="dashboard.html" data-module-id="dashboard" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student"><span class="app-nav-icon">🏠</span><span>Dashboard</span></a>
+      <a href="report-cards.html" data-module-id="report-cards" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student"><span class="app-nav-icon">📋</span><span>Terminal Report Cards</span></a>
+      <a href="midterm-reports.html" data-module-id="midterm-reports" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student" class="active"><span class="app-nav-icon">📝</span><span>Midterm Reports</span></a>
+      <a href="cbt.html" data-module-id="cbt" data-role-allow="super_admin admin principal proprietor head_teacher staff teacher"><span class="app-nav-icon">🖥️</span><span>CBT Manager</span></a>
+      <a href="attendance.html" data-module-id="attendance" data-role-allow="super_admin admin principal proprietor head_teacher staff teacher parent student"><span class="app-nav-icon">📅</span><span>Attendance</span></a>
+      <a href="students.html" data-module-id="students" data-role-allow="super_admin admin principal proprietor head_teacher staff teacher"><span class="app-nav-icon">👨‍🎓</span><span>Students</span></a>
+      <a href="profile.html" data-module-id="profile" data-role-allow="super_admin admin principal proprietor head_teacher bursar staff teacher parent student"><span class="app-nav-icon">👤</span><span>My Profile</span></a>
+    </nav>
+    <div class="mr-brand-foot">Powered by HMG Concepts</div>
+  </aside>
   <main class="app-main">
-    <header class="app-topbar"><h1 class="app-page-title">Midterm Reports</h1><div style="margin-left:auto;display:flex;gap:8px"><button class="btn btn-sm btn-outline" onclick="App.toggleDarkMode()">🌙</button><button class="btn btn-sm btn-outline" onclick="App.signOut()" data-signout style="display:none">Sign out</button></div></header>
+    <header class="app-topbar"><button class="mobile-toggle" type="button" aria-label="Open navigation" aria-controls="app-sidebar" aria-expanded="false" onclick="MR.toggleSidebar(this)">☰</button><h1 class="app-page-title">Midterm Reports</h1><div style="margin-left:auto;display:flex;gap:8px"><button class="btn btn-sm btn-outline" onclick="App.toggleDarkMode()">🌙</button><button class="btn btn-sm btn-outline" onclick="App.signOut()" data-signout style="display:none">Sign out</button></div></header>
     <div class="app-content">
       <div class="card" style="background:#eff6ff;border-color:#93c5fd">
         <h3 style="margin-top:0">📝 Midterm Test Reports — Once per term</h3>
@@ -80,7 +116,20 @@
 <script src="assets/js/legibility.js"></script>
 <script>
 const MR = {
+  toggleSidebar(button){
+    const side=document.getElementById('app-sidebar'),scrim=document.getElementById('mr-sidebar-scrim');
+    if(!side)return;
+    const open=!side.classList.contains('open');side.classList.toggle('open',open);if(scrim)scrim.classList.toggle('open',open);
+    if(button)button.setAttribute('aria-expanded',String(open));
+  },
+  closeSidebar(){
+    const side=document.getElementById('app-sidebar'),scrim=document.getElementById('mr-sidebar-scrim'),button=document.querySelector('#mr-app-shell .mobile-toggle');
+    if(side)side.classList.remove('open');if(scrim)scrim.classList.remove('open');if(button)button.setAttribute('aria-expanded','false');
+  },
   async init(){
+    const school=window.SCHOOL||{};const brand=document.getElementById('mr-school-name');if(brand)brand.textContent=school.shortName||school.name||'School Connect';
+    const logo=document.querySelector('#app-sidebar .app-brand img');if(logo&&school.logoExt)logo.src='assets/img/logo.'+String(school.logoExt).replace(/[^a-z0-9]/gi,'');
+    document.querySelectorAll('#app-sidebar .app-nav a').forEach(a=>a.addEventListener('click',()=>MR.closeSidebar()));
     if(!window.sb) { document.getElementById('mr-status').innerHTML='<span style="color:#dc2626">Supabase not configured.</span>'; return; }
     // Load lookups for class/term/session
     try{
@@ -89,10 +138,16 @@ const MR = {
         sb.from('lookups').select('value').eq('kind','term').eq('active',true).order('position'),
         sb.from('lookups').select('value').eq('kind','session').eq('active',true).order('position')
       ]);
-      const fill=(id, rows, key)=>{ const el=document.getElementById(id); if(!el) return; const vals=rows.data||[]; el.innerHTML='<option value="">— select —</option>'+vals.map(r=>'<option>'+(r.name||r.value)+'</option>').join(''); };
+      // Show actionable feedback instead of silently leaving an empty page when
+      // RLS, a missing lookup table, or an expired session blocks a lookup.
+      const lookupErrors=[['classes',cls.error],['terms',terms.error],['sessions',sess.error]].filter(x=>x[1]);
+      const fill=(id, result, key)=>{ const el=document.getElementById(id); if(!el) return; const vals=result.data||[]; el.innerHTML='<option value="">— select —</option>'+vals.map(r=>'<option value="'+MR.esc(r[key]||'')+'">'+MR.esc(r[key]||'')+'</option>').join(''); };
       fill('mr-class', cls, 'name');
       fill('mr-term', terms, 'value');
       fill('mr-session', sess, 'value');
+      const status=document.getElementById('mr-status');
+      if(lookupErrors.length && status) status.innerHTML='<span style="color:#b91c1c"><b>Could not load report selectors.</b> '+MR.esc(lookupErrors.map(x=>x[0]+': '+x[1].message).join(' · '))+' Please sign in again or contact the school administrator.</span>';
+      else if(status) status.innerHTML='<span style="color:#475569">Report tools ready. Choose a class, term and session; reports appear after a staff member generates them.</span>';
       // Also try academic_periods for session/term
       try{
         const ap=await sb.from('academic_periods').select('session,term').eq('is_current',true).limit(1).maybeSingle();
@@ -121,7 +176,11 @@ const MR = {
         fill2(sessions,(await sb.from('lookups').select('value').eq('kind','session').eq('active',true).order('position')).data,'value');
         const currentTerm=document.getElementById('mr-term')?.value||'', currentSession=document.getElementById('mr-session')?.value||''; if(terms) terms.value=currentTerm; if(sessions) sessions.value=currentSession;
       }
-    }catch(e){ console.warn('MR init failed', e.message); }
+    }catch(e){
+      console.warn('MR init failed', e.message);
+      const status=document.getElementById('mr-status');
+      if(status) status.innerHTML='<span style="color:#b91c1c"><b>Midterm reports could not finish loading.</b> '+MR.esc(e.message||'Unexpected error')+' Refresh the page after signing in. If this continues, send this message to the school administrator.</span>';
+    }
   },
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');},
   vals(){ return {c:document.getElementById('mr-class').value.trim(), t:document.getElementById('mr-term').value.trim(), s:document.getElementById('mr-session').value.trim()}; },
