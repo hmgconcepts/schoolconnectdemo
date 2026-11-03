@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/about.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/contact.html</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/apply.html</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/exam-register.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/login.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/feature-guide.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/verify-certificate.html</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/hmg-ecosystem.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/entrance.html</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://REPLACE-WITH-YOUR-DEMO-DOMAIN.example.com/hmg-digital-products.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+</urlset>
