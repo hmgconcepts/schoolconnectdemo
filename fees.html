@@ -540,6 +540,34 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         <div id="rep-out" style="margin-top:12px"></div>
       </div>
 
+
+      <div class="card" style="margin-bottom:16px;border:2px solid #0d9488;background:#f0fdfa" data-admin-only id="fee-invoice-card">
+        <h2 style="margin-top:0">📄 Invoices — record what each learner was billed</h2>
+        <p style="color:var(--gray-700);font-size:.9rem;margin-top:0">
+          A bill only exists once it has been raised. Before V12.67 this page <i>guessed</i> a learner's past bills
+          from the school calendar, which is how a parent who owed nothing came to be shown
+          <b>previous terms owing</b> on the dashboard. Invoices are now a real record: raise them once per term,
+          and the dashboard, this page, the receipts and the parent portal all read that one figure.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:10px">
+          <div class="form-group" style="margin:0;min-width:200px"><label>Class</label>
+            <select class="form-select" id="inv-class"><option value="">ALL classes</option></select></div>
+          <div class="form-group" style="margin:0;min-width:170px"><label>Term</label>
+            <select class="form-select" id="inv-term"><option value="">(current term)</option></select></div>
+          <button class="btn btn-primary" style="background:#0d9488;border-color:#0f766e" onclick="FeeInvoice.raise(false)">📄 Raise invoices for this term</button>
+          <button class="btn btn-outline" onclick="FeeInvoice.raise(true)"
+                  title="Only do this if these learners really were billed for those earlier terms.">📚 Include earlier terms…</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <button class="btn btn-outline" onclick="FeeInvoice.migrate(true)">🔍 Check stored receipt totals</button>
+          <button class="btn btn-outline" style="border-color:#f59e0b;color:#b45309" onclick="FeeInvoice.migrate(false)">🩹 Repair stored receipt totals</button>
+          <button class="btn btn-outline" onclick="FeeInvoice.opening(true)">🔍 Check opening balances</button>
+          <button class="btn btn-outline" style="border-color:#7c3aed;color:#7c3aed" onclick="FeeInvoice.opening(false)">➡️ Convert opening balances to invoices</button>
+          <button class="btn btn-outline" onclick="FeeInvoice.list()">📋 Show invoices</button>
+        </div>
+        <div id="inv-out"></div>
+      </div>
+
       <div class="card" style="margin-bottom:16px;border:2px solid #0ea5e9;background:#f0f9ff" data-admin-only id="fee-truth-card">
         <h2 style="margin-top:0">🧾 Fee Truth Sheet — one student, every number explained</h2>
         <p style="color:var(--gray-700);font-size:.9rem;margin-top:0">
@@ -576,8 +604,21 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
         <div id="fee-doctor-out" style="margin-top:12px"></div>
       </div>
 
+      <div class="card" style="margin-bottom:16px;border:2px solid #fca5a5" data-admin-only><h2 style="margin-top:0">🔎 Bill coverage audit — where does every “Total fees this term” come from? (V12.68)</h2>
+        <p style="color:var(--gray-600);font-size:.9rem">One question, answered for the whole school at once: for the
+        <b>current term</b>, how many learners are billed from the exact term price list, from the “Current Term” label, from
+        another term of the same session, from the latest structure, from an invoice — and how many have <b>no bill at all</b>.
+        A learner with no bill is reported as <b>unknown, never as ₦0</b>, and the audit names the reason and the page that fixes it.
+        This is the check that proves the Round-9 “₦0 total fees” fault is gone for every learner, not just the two reported.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+          <div class="form-group" style="margin:0"><label>Class</label><select class="form-select" id="fba-class"><option value="">ALL classes</option></select></div>
+          <button class="btn btn-primary" onclick="FeeBillAudit.run()">🔎 Run the audit</button>
+        </div>
+        <div id="fba-out" style="margin-top:12px"></div>
+      </div>
+
       <div class="card" style="margin-bottom:16px;border:2px solid #c7d2fe" data-admin-only><h2 style="margin-top:0">📑 Master Financial Records — export by class (V10.1)</h2>
-        <p style="color:var(--gray-600);font-size:.9rem">One row per student: current-term bill, scholarship/aid, paid so far, balance, previous-term arrears and TOTAL outstanding — computed live by the same engine that powers the dashboards. Print/save as PDF or download CSV. Needs <code>database/v10.1-staffpay-attendance-vetting.sql</code>.</p>
+        <p style="color:var(--gray-600);font-size:.9rem">One row per student: current-term bill, scholarship/aid, paid so far, balance, previous-term arrears and TOTAL outstanding — computed live by the same engine that powers the dashboards. Print/save as PDF or download CSV. Needs <code>database/complete-schema.sql</code>.</p>
         <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
           <div class="form-group" style="margin:0"><label>Class</label><select class="form-select" id="fm-class"><option value="">ALL classes</option></select></div>
           <button class="btn btn-primary" onclick="FM.load()">📊 Build master sheet</button>
@@ -679,6 +720,60 @@ document.addEventListener('DOMContentLoaded',()=>FeeDaily.load());
 window.FeeDaily = FeeDaily;
 </script>
 <script>
+/* ===== V12.68 — BILL COVERAGE AUDIT =====
+   The bursar's one-glance answer to "why does this learner show ₦0?".
+   Reads sc_fee_bill_audit, which walks every active learner through the SAME
+   billing engine the dashboard uses — so the audit can never disagree with the
+   screens it is auditing. */
+const FeeBillAudit = {
+  esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));},
+  money(n){return ((window.SCHOOL&&SCHOOL.currency)||'₦')+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});},
+  async fillClasses(){
+    try{const {data}=await sb.from('students').select('class').not('class','is',null).order('class');
+      const set=[...new Set((data||[]).map(x=>x.class).filter(Boolean))];
+      for(const id of ['fba-class']){const el=document.getElementById(id);if(!el)return;
+        set.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;el.appendChild(o);});}
+    }catch(_){}
+  },
+  async run(){
+    const box=document.getElementById('fba-out');if(!box)return;
+    const cls=((document.getElementById('fba-class')||{}).value||'');
+    box.innerHTML='<span class="pulse">Auditing every learner…</span>';
+    const r=await sb.rpc('sc_fee_bill_audit',{p_class:cls||null});
+    if(r.error){box.innerHTML='<div class="notice notice-error">'+this.esc(r.error.message)+'. This needs the V12.68 database pack (database/complete-schema.sql).</div>';return;}
+    const d=r.data||{};
+    if(d.ok===false){box.innerHTML='<div class="notice notice-error">'+this.esc(d.error||'Could not run the audit')+'</div>';return;}
+    const WHY={invoice:['Invoice raised','Authoritative — nothing to do.'],
+      structure:['Class fee structure','Billed from the published price list.'],
+      override:['Personal total','The bursar set this learner’s own total.'],
+      no_structure_this_term:['No structure FOR THIS TERM','The class has fees, but none for this term. Publish it.'],
+      no_structure:['No structure for this CLASS','Check the class spelling on the student record, then publish.'],
+      no_structures_at_all:['NO fee structure AT ALL','Open 💳 Class Fee Structure and enter the fees — once.']};
+    const rows=Object.entries(d.by_status||{}).sort((a,b)=>b[1]-a[1]);
+    const total=Number(d.students||0), unknown=Number(d.bill_unknown||0);
+    let h='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px">'
+      +'<div><div style="font-size:1.5rem;font-weight:900">'+total+'</div><div style="font-size:.7rem;text-transform:uppercase;color:var(--gray-500)">Active learners</div></div>'
+      +'<div><div style="font-size:1.5rem;font-weight:900;color:#15803d">'+Number(d.bill_known||0)+'</div><div style="font-size:.7rem;text-transform:uppercase;color:var(--gray-500)">Billed</div></div>'
+      +'<div><div style="font-size:1.5rem;font-weight:900;color:'+(unknown>0?'#b91c1c':'#15803d')+'">'+unknown+'</div><div style="font-size:.7rem;text-transform:uppercase;color:var(--gray-500)">Bill unknown (not ₦0)</div></div>'
+      +'<div><div style="font-size:1.5rem;font-weight:900">'+this.esc(d.term||'')+'</div><div style="font-size:.7rem;text-transform:uppercase;color:var(--gray-500)">Term · resolved by '+this.esc(d.resolved_by||'—')+'</div></div>'
+      +'</div>';
+    h+='<div class="table-wrap"><table><thead><tr><th style="text-align:left">How the bill was found</th><th>Learners</th><th style="text-align:left">What it means</th></tr></thead><tbody>'
+      +rows.map(([k,v])=>{const w=WHY[k]||[k,''];return '<tr><td style="text-align:left"><b>'+this.esc(w[0])+'</b> <small style="color:var(--gray-500)">'+this.esc(k)+'</small></td><td><b>'+v+'</b></td><td style="text-align:left;font-size:.82rem;color:var(--gray-600)">'+this.esc(w[1])+'</td></tr>';}).join('')
+      +'</tbody></table></div>';
+    const sm=d.samples||[];
+    if(sm.length){
+      h+='<h4 style="margin:12px 0 4px">Learners whose bill is unknown — fix these</h4><div class="table-wrap"><table><thead><tr><th style="text-align:left">Learner</th><th>Class</th><th>Admission no</th><th style="text-align:left">Why</th></tr></thead><tbody>'
+        +sm.map(x=>'<tr><td style="text-align:left"><b>'+this.esc(x.student)+'</b></td><td>'+this.esc(x.class||'')+'</td><td>'+this.esc(x.admission_no||'')+'</td><td style="text-align:left;font-size:.8rem;color:var(--gray-600)">'+this.esc(x.note||x.match_status||'')+'</td></tr>').join('')
+        +'</tbody></table></div>';
+    } else h+='<p style="color:#15803d;font-weight:700;margin:10px 0 0">✅ Every active learner has a bill from a published source. No learner is silently showing ₦0.</p>';
+    box.innerHTML=h;
+  }
+};
+window.FeeBillAudit = FeeBillAudit;
+document.addEventListener('DOMContentLoaded',()=>FeeBillAudit.fillClasses());
+</script>
+
+<script>
 /* ===== FAM — V9.4 (#1): Family fee panel for parents & students =====
    Bold current-term totals per child (sc_student_fee_state), the child's FULL
    payment history, and one-click printable e-receipts. Staff/admin never see
@@ -710,6 +805,21 @@ const FAM={
         h+='<div class="card" style="margin-bottom:14px"><h3 style="margin-top:0">💰 '+this.esc(s.full_name)+' · '+this.esc(s.class||'')+' <small style="color:var(--gray-500)">'+this.esc(s.admission_no||'')+'</small></h3>';
         if(f.ok){
           const owing=Number(f.total_due||0);
+          /* V12.68 (B9) — same provenance sentence as the dashboard card, so a
+             family that compares the two screens never sees a different story. */
+          const mk_=String(f.match_status||''), mb_=String(f.matched_by||''), rb_=String(f.resolved_by||'');
+          const UNK_={no_structures_at_all:'No class fee structure exists on this platform yet — the school must enter it once on 💳 Class Fee Structure.',
+            no_structure_this_term:'This class has a fee structure, but none for '+(f.term||'this term')+'. The bill is unknown, not zero.',
+            no_structure:'No fee structure has ever been published for this class.'};
+          if(f.bill_known===false){
+            h+='<div style="border-left:4px solid #f59e0b;background:#fffbeb;padding:8px 11px;border-radius:8px;font-size:.82rem;color:#78350f">'
+              +'<b>⚠️ '+(UNK_[mk_]||'The bill for this term has not been published yet.')+'</b> The figures below are your payment record, not a statement that nothing is owed.</div>';
+          } else if(mb_ && mb_!=='invoice'){
+            const soft_=(mb_==='session_other_term'||mb_==='latest_structure');
+            const rung_={exact_term:'the fee published for this exact term',current_term_label:'the fee saved as “Current Term”',session_other_term:'another term of the same session',latest_structure:'the most recent published class fee',override:'a personal total set by the bursar'}[mb_]||'';
+            if(rung_) h+='<div style="border-left:4px solid '+(soft_?'#f59e0b':'#16a34a')+';background:'+(soft_?'#fffbeb':'#f0fdf4')+';padding:6px 10px;border-radius:8px;font-size:.78rem;color:#334155">'
+              +(soft_?'⚠️ ':'✅ ')+'Total fees this term comes from '+rung_+'.'+(rb_?' <span style="color:var(--gray-500)">Term resolved by: '+this.esc(rb_)+'</span>':'')+'</div>';
+          }
           h+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 10px">'
             +'<div><div style="font-size:1.6rem;font-weight:900">'+this.money(cur,f.bill)+'</div><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Total fees · '+this.esc(f.term||'')+'</div></div>'
             +'<div><div style="font-size:1.6rem;font-weight:900;color:#15803d">'+this.money(cur,f.paid)+'</div><div style="font-size:.72rem;text-transform:uppercase;color:var(--gray-500)">Paid this term</div></div>'
@@ -874,7 +984,7 @@ const FeeStatement={
       ['#','Student','Adm. No','Class','Bill','Paid','This-term balance','Arrears','TOTAL due'],
       (x,i)=>td(i+1)+td('<b>'+this.esc(x.student)+'</b>')+td(this.esc(x.admission_no||''))+td(this.esc(x.class||''))+
         td(this.money(x.bill),'right')+td(this.money(x.paid),'right')+
-        td(this.money(x.balance),'right')+td(this.money(x.arrears),'right')+
+        td(this.money(x.balance),'right')+td(Number(x.arrears)>0.005?'<b style="color:#b91c1c">'+this.money(x.arrears)+'</b>':'', 'right')+
         td('<b>'+this.money(x.total_due)+'</b>','right'));
 
     const foot='<p style="margin-top:16px;font-size:8pt;color:#475569;border-top:1px solid #cbd5e1;padding-top:6px">'+
@@ -990,7 +1100,7 @@ const FeeRepair={
     }catch(e){
       const msg=String(e.message||e);
       box.innerHTML='<div class="notice notice-error">'+(/sc_fee_repair_all|schema cache|function/i.test(msg)
-        ? 'The one-click repair needs the V12.62 database pack — run <code>database/v12.60-expert-fix-pack.sql</code> in Supabase, then reload.'
+        ? 'The one-click repair needs the V12.62 database pack — run <code>database/complete-schema.sql</code> in Supabase, then reload.'
         : this.esc(msg))+'</div>';
     }
   }
@@ -1035,9 +1145,19 @@ const FeeTruth={
     html+='<p style="margin:0 0 10px;color:var(--gray-600);font-size:.86rem">'+this.esc(per.term||'')+' '+this.esc(per.session||'')
         + ' · generated '+new Date().toLocaleString()+'</p>';
 
+    /* V12.68 — where the term came from and which price list was matched */
+    const pv=d.provenance||{};
+    if(pv.headline){
+      const soft=(pv.tone&&pv.tone!=='ok');
+      html+='<div style="border-left:4px solid '+(pv.tone==='ok'?'#16a34a':(pv.tone==='warn'?'#f59e0b':'#dc2626'))+';background:'
+        +(pv.tone==='ok'?'#f0fdf4':(pv.tone==='warn'?'#fffbeb':'#fef2f2'))+';padding:7px 11px;border-radius:8px;font-size:.8rem;color:#334155;margin-bottom:10px">'
+        +(pv.tone==='ok'?'✅ ':soft?'⚠️ ':'ℹ️ ')+this.esc(pv.headline)
+        +(pv.rung?' <code style="font-size:.74rem;color:#64748b">'+this.esc(pv.rung)+'</code>':'')
+        +(pv.fix?'<div style="margin-top:3px;color:#78350f">'+this.esc(pv.fix)+'</div>':'')+'</div>';
+    }
     /* the five numbers, in the order every screen shows them */
     html+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px">'
-      +[['Total fees this term',m(h.net_bill),'#0f172a'],
+      +[['Total fees this term',(h.bill_known===false?'not published':m(h.net_bill)),(h.bill_known===false?'#b45309':'#0f172a')],
         ['Paid',m(h.paid_this_term),'#15803d'],
         ['Balance this term',m(h.balance_this_term),Number(h.balance_this_term)>0?'#b91c1c':'#15803d'],
         ['Previous terms owing',m(h.arrears),Number(h.arrears)>0?'#b91c1c':'#64748b'],
@@ -1161,7 +1281,7 @@ const FM={rows:[],ctx:{},
     const cls=(document.getElementById('fm-class')||{}).value||'';
     const box=document.getElementById('fm-out');box.innerHTML='<span class="pulse">Computing every student\'s financial state…</span>';
     const r=await sb.rpc('sc_class_fee_master',{p_class:cls});
-    if(r.error){box.innerHTML='<div class="notice notice-error">'+this.esc(/could not find|does not exist|schema cache/i.test(r.error.message||'')?'Run database/v10.1-staffpay-attendance-vetting.sql once, then rebuild.':r.error.message)+'</div>';return;}
+    if(r.error){box.innerHTML='<div class="notice notice-error">'+this.esc(/could not find|does not exist|schema cache/i.test(r.error.message||'')?'Run database/complete-schema.sql once, then rebuild.':r.error.message)+'</div>';return;}
     const d=r.data||{};if(d.ok===false){box.innerHTML='<div class="notice notice-error">'+this.esc(d.error||'Failed')+'</div>';return;}
     this.rows=d.rows||[];this.ctx={cls:cls,term:d.term,session:d.session};
     if(!this.rows.length){box.innerHTML='<p style="color:var(--gray-500)">No students found'+(cls?' in '+this.esc(cls):'')+'.</p>';return;}
@@ -1268,7 +1388,7 @@ const FeeSegment={
           '<td>'+money(x.bill)+'</td>'+
           '<td style="color:#166534;font-weight:700">'+money(x.paid)+'</td>'+
           '<td>'+money(x.balance)+'</td>'+
-          '<td style="color:'+(Number(x.arrears)>0?'#b91c1c':'#475569')+'">'+money(x.arrears)+'</td>'+
+          '<td style="color:#b91c1c;font-weight:'+(Number(x.arrears)>0.005?'800':'400')+'">'+(Number(x.arrears)>0.005?money(x.arrears):'')+'</td>'+
           '<td><b style="color:'+(Number(x.total_due)>0?'#b91c1c':'#166534')+'">'+money(x.total_due)+'</b></td>'+
           '<td>'+this.badge(x.status)+'</td>'+
           '<td>'+(x.portal_locked?'<span style="color:#b91c1c;font-weight:800">🔒 locked</span>':'<span style="color:#166534">open</span>')+'</td>'+
@@ -1277,7 +1397,7 @@ const FeeSegment={
     }catch(e){
       const msg=String(e.message||e);
       box.innerHTML='<div class="notice notice-error">'+(/could not find the function|does not exist|schema cache/i.test(msg)
-        ? 'Run <code>database/v12.60-expert-fix-pack.sql</code> in Supabase to enable fee segmentation.'
+        ? 'Run <code>database/complete-schema.sql</code> in Supabase to enable fee segmentation.'
         : this.esc(msg))+'</div>';
     }
   },
@@ -1346,7 +1466,7 @@ const FeeDoctor={
     const r=await sb.rpc('sc_fee_ledger_doctor',{p_heal:wantFix});
     if(r.error||!r.data||r.data.ok===false){
       const msg=(r.data&&r.data.error)||(r.error&&r.error.message)||'Scan failed';
-      box.innerHTML='<p style="color:#b91c1c">'+(/sc_fee_ledger_doctor|schema cache|function/i.test(String(msg))?'The Fee Doctor needs a one-time database update — run database/v10.9b-fee-doctor.sql (or the latest complete-schema.sql) in Supabase.':this.esc(msg))+'</p>';
+      box.innerHTML='<p style="color:#b91c1c">'+(/sc_fee_ledger_doctor|schema cache|function/i.test(String(msg))?'The Fee Doctor needs a one-time database update — run database/complete-schema.sql (or the latest complete-schema.sql) in Supabase.':this.esc(msg))+'</p>';
       return;
     }
     const d=r.data, issues=d.issues||[];
@@ -1438,6 +1558,124 @@ FeeDoctor.renderV2 = function(d, heal, box){
 
 /* V12.62: inline handlers resolve through window — expose the controller. */
 window.FeeDoctor = FeeDoctor;
+
+/* =====================================================================
+   V12.67 — FeeInvoice: raise invoices, so a bill is RECORDED not inferred.
+   ===================================================================== */
+const FeeInvoice={
+  esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));},
+  money(n){return((window.SCHOOL&&SCHOOL.currency)||'₦')+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});},
+  out(h){const b=document.getElementById('inv-out'); if(b) b.innerHTML=h;},
+  async init(){
+    try{
+      const {data}=await sb.from('students').select('class').limit(20000);
+      const cls=[...new Set((data||[]).map(x=>String(x.class||'').trim()).filter(Boolean))].sort();
+      const el=document.getElementById('inv-class');
+      if(el) cls.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;el.appendChild(o);});
+      const {data:ap}=await sb.from('academic_periods').select('term,session,is_current').limit(200);
+      const tEl=document.getElementById('inv-term');
+      if(tEl) [...new Set((ap||[]).map(x=>x.term).filter(Boolean))].forEach(t=>{
+        const o=document.createElement('option');o.value=t;o.textContent=t;tEl.appendChild(o);});
+    }catch(_){}
+  },
+  async raise(priorTerms){
+    const cls=(document.getElementById('inv-class')||{}).value||'';
+    const term=(document.getElementById('inv-term')||{}).value||'';
+    if(priorTerms && !confirm(
+      'Raise invoices for EARLIER terms as well?\n\n'+
+      'Only continue if these learners really were billed for those terms. '+
+      'Each earlier term becomes a real invoice, which will then appear as previous-terms-owing. '+
+      'If in doubt, cancel: raising this term alone is the safe choice.')) return;
+    this.out('<span class="pulse">Raising invoices…</span>');
+    try{
+      const r=await sb.rpc('sc_fee_invoice_sync_all',{p_class:cls||null,p_term:term||null,p_session:null,p_prior_terms:!!priorTerms});
+      if(r.error) throw r.error;
+      const d=r.data||{}; if(d.ok===false) throw new Error(d.error||'Failed');
+      let h='<div class="notice notice-success"><b>✅ '+Number(d.raised||0)+' invoice(s) raised for '+this.esc(d.term||'')+' '+this.esc(d.session||'')+'.</b><br>'
+        + this.esc(d.message||'')+'</div>';
+      if(Number(d.kept_overrides||0)>0)
+        h+='<div class="notice" style="margin-top:8px">'+Number(d.kept_overrides)+' learner(s) have a figure set by hand for this term; the class structure did not replace it.</div>';
+      if(Number(d.unbilled||0)>0){
+        h+='<div class="notice notice-warning" style="margin-top:8px"><b>'+Number(d.unbilled)+' learner(s) could not be invoiced</b> — no fee structure exists for their class this term, so no bill was invented.<ul style="margin:6px 0 0 18px;font-size:.86rem">'
+          + (d.skipped||[]).slice(0,20).map(x=>'<li><b>'+this.esc(x.student||'')+'</b> · '+this.esc(x.class||'')+' — '+this.esc(x.reason||'')+'</li>').join('')
+          + '</ul></div>';
+      }
+      h+='<p style="font-size:.83rem;color:var(--gray-600);margin-top:10px">The dashboard, this table, every receipt and the parent portal now read these invoices. Re-running is safe — it updates, never duplicates.</p>';
+      this.out(h);
+      try{ FeeSegment.load(); }catch(_){}
+      try{ if(window.App&&App.loadDashFees) App.loadDashFees(); }catch(_){}
+    }catch(e){
+      const m=String(e.message||e);
+      this.out('<div class="notice notice-error">'+(/sc_fee_invoice|schema cache|does not exist/i.test(m)
+        ? 'Invoicing needs the V12.67 database pack — run <code>database/complete-schema.sql</code> in Supabase, then reload.'
+        : this.esc(m))+'</div>');
+    }
+  },
+  async migrate(dry){
+    this.out('<span class="pulse">Reading every stored receipt total…</span>');
+    try{
+      const r=await sb.rpc('sc_fee_truth_migrate',{p_dry_run:!!dry});
+      if(r.error) throw r.error;
+      const d=r.data||{}; if(d.ok===false) throw new Error(d.error||'Failed');
+      let h='<div class="notice '+(Number(d.would_fix||0)>0?'notice-warning':'notice-success')+'"><b>'+this.esc(d.message||'')+'</b><br>'
+        + Number(d.scanned||0)+' receipt row(s) examined.</div>';
+      const s2=d.samples||[];
+      if(s2.length){
+        h+='<div class="table-wrap" style="margin-top:10px"><table style="font-size:.85rem"><thead><tr><th>Student</th><th>Term</th><th>Stored</th><th>Should be</th><th>Overstated by</th></tr></thead><tbody>'
+          + s2.map(x=>'<tr><td>'+this.esc(x.student||'')+'</td><td>'+this.esc((x.term||'')+' '+(x.session||''))+'</td>'
+            +'<td style="color:#b91c1c">'+this.money(x.stored)+'</td><td><b style="color:#15803d">'+this.money(x.correct)+'</b></td>'
+            +'<td>'+this.money(x.difference)+'</td></tr>').join('')
+          + '</tbody></table></div>'
+          + '<p style="font-size:.82rem;color:var(--gray-600);margin-top:8px">This is the compounding fault: each receipt stored the running total instead of the term bill. Repair rewrites each receipt with the bill for its term.</p>';
+      }
+      this.out(h);
+      if(!dry){ try{ FeeSegment.load(); }catch(_){} }
+    }catch(e){
+      this.out('<div class="notice notice-error">'+this.esc(e.message||e)+'</div>');
+    }
+  },
+  async opening(dry){
+    this.out('<span class="pulse">Reading opening balances…</span>');
+    try{
+      const r=await sb.rpc('sc_fee_opening_to_invoice',{p_dry_run:!!dry});
+      if(r.error) throw r.error;
+      const d=r.data||{}; if(d.ok===false) throw new Error(d.error||'Failed');
+      let h='<div class="notice '+(Number(d.count||0)>0?'notice-info':'notice-success')+'"><b>'+this.esc(d.message||'')+'</b></div>';
+      const st=d.students||[];
+      if(st.length){
+        h+='<div class="table-wrap" style="margin-top:10px"><table style="font-size:.85rem"><thead><tr><th>Student</th><th>Balance</th><th>Note</th></tr></thead><tbody>'
+          + st.slice(0,100).map(x=>'<tr><td>'+this.esc(x.student||'')+'</td><td><b>'+this.money(x.amount)+'</b></td><td>'+this.esc(x.note||'')+'</td></tr>').join('')
+          + '</tbody></table></div>';
+      }
+      this.out(h);
+      if(!dry){ try{ FeeSegment.load(); }catch(_){} }
+    }catch(e){
+      this.out('<div class="notice notice-error">'+this.esc(e.message||e)+'</div>');
+    }
+  },
+  async list(){
+    this.out('<span class="pulse">Loading invoices…</span>');
+    try{
+      const cls=(document.getElementById('inv-class')||{}).value||'';
+      let q=sb.from('sc_fee_invoice').select('student_id_ref,class,term,session,amount,aid,net_amount,source,note').order('session').order('term').limit(2000);
+      if(cls) q=q.ilike('class',cls);
+      const {data,error}=await q;
+      if(error) throw error;
+      if(!(data||[]).length){ this.out('<div class="notice">No invoices yet. Press <b>Raise invoices for this term</b>.</div>'); return; }
+      this.out('<div class="table-wrap"><table style="font-size:.85rem"><thead><tr><th>Adm. No</th><th>Class</th><th>Term</th><th>Session</th><th>Billed</th><th>Aid</th><th>Net bill</th><th>Source</th><th>Note</th></tr></thead><tbody>'
+        + data.map(x=>'<tr><td>'+this.esc(x.student_id_ref||'')+'</td><td>'+this.esc(x.class||'')+'</td><td>'+this.esc(x.term||'')+'</td><td>'+this.esc(x.session||'')+'</td>'
+          +'<td>'+this.money(x.amount)+'</td><td>'+(Number(x.aid)>0?'−'+this.money(x.aid):'—')+'</td>'
+          +'<td><b>'+this.money(x.net_amount)+'</b></td><td><span class="badge">'+this.esc(x.source||'')+'</span></td>'
+          +'<td style="font-size:.8rem;color:var(--gray-600)">'+this.esc(x.note||'')+'</td></tr>').join('')
+        + '</tbody></table></div><p style="font-size:.8rem;color:var(--gray-500);margin-top:8px">'+data.length+' invoice(s). One per learner per term.</p>');
+    }catch(e){
+      this.out('<div class="notice notice-error">'+this.esc(e.message||e)+'</div>');
+    }
+  }
+};
+if(document.getElementById('inv-class')) document.addEventListener('DOMContentLoaded',()=>FeeInvoice.init());
+window.FeeInvoice = FeeInvoice;
+
 /* V12.66: the printable fee statement + reconciliation. */
 window.FeeTruth = FeeTruth;
 
