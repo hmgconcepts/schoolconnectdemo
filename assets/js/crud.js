@@ -211,7 +211,7 @@ const CRUD = {
     fees: { table:'fee_payments', title:'Fee payment', help:'V9.4: pick the student and the SYSTEM fills the total due (class fee structure + any previous-term arrears) and computes the balance live as you type the amount paid — no manual maths, no typing errors.', cols:[
       {key:'student_id',label:'Student',type:'ref',refTable:'students',refValue:'full_name',refExtra:['class','admission_no'],refStore:'id',groupBy:'class',searchable:true,required:true,autofill:{student_name:'full_name'}},
       {key:'student_name',label:'Student name (auto)',type:'text',readonly:true},
-      {key:'fee_total',label:'Total due (auto — class fee structure + arrears)',type:'number',readonly:true,help:'Pulled automatically when the student is picked: current-term bill from the Class Fee Structure MINUS what is already paid this term PLUS previous-term arrears (including any manually-entered opening arrears). Admin can still adjust after unlock (double-click).'},
+      {key:'fee_total',label:'Term bill (auto — what this learner was billed this term)',type:'number',readonly:true,help:'V12.67: this is the BILL for this term only — from the invoice if one has been raised, otherwise from the Class Fee Structure. It deliberately does NOT include previous-term arrears or money already paid: those belong to the learner\'s account, not to a single receipt. Writing the running total here is what made the Fees page disagree with the dashboard. Admin can still adjust after unlock (double-click).'},
       {key:'opening_arrears',label:'Opening arrears — debt from BEFORE School Connect (optional)',type:'number',computeOnly:true,help:'V10.7: for schools that adopted School Connect mid-session. Enter the student\'s outstanding balance from previous terms that were never captured here. Saved ON THE STUDENT RECORD (not this payment) and automatically added to every future total-due, dashboard and receipt until cleared. Enter 0 to clear it.'},
       {key:'opening_arrears_note',label:'Opening arrears note (e.g. "2nd Term 2025/2026 balance")',type:'text',computeOnly:true,help:'Shown to the family in the fee breakdown so they know exactly what the old debt covers.'},
       {key:'amount_paid',label:'Amount paid now',type:'number',required:true},
@@ -1913,13 +1913,28 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
               totEl.placeholder = 'No fee structure found — enter manually';
               if (typeof toast === 'function') toast('⚠️ No Class Fee Structure matched ' + (f.class||'this student\'s class') + ' for ' + (f.term||'the current term') + '. Check: (a) a CURRENT-term bill exists for the class on the 💳 Class Fee Structure page, (b) the class name spelling matches the student record, (c) the row is active. You can type the total manually for now.', 'warning', 12000);
             } else {
+              /* V12.67 ROOT-CAUSE FIX —— this used to write f.total_due, which is
+                 the learner's WHOLE outstanding (bill + arrears − everything paid).
+                 Saving that as `fee_total` on a receipt meant the next receipt
+                 started from the already-netted figure and added payments on top,
+                 so the stored "bill" climbed with every payment:
+                     23,100 → 28,100 → 33,100 on three receipts of one 18,100 bill.
+                 The Fees & Payments page printed that column; the dashboard printed
+                 the ledger. They were never going to agree.
+                 A receipt carries the TERM BILL. Nothing else. The arrears and the
+                 already-paid figures are information for the bursar, not a bill. */
               const due = Number(f.total_due || 0);
-              totEl.value = due.toFixed(2);
-              const bits = ['bill ' + (f.currency||'₦') + Number(f.bill||0).toLocaleString()];
+              const termBill = Number(f.bill || 0);
+              totEl.value = termBill.toFixed(2);
+              totEl.dataset.scTermBill = String(termBill);
+              totEl.dataset.scTotalDue = String(due);
+              const bits = ['term bill ' + (f.currency||'₦') + termBill.toLocaleString()];
               if (Number(f.paid||0) > 0) bits.push('already paid ' + (f.currency||'₦') + Number(f.paid).toLocaleString());
               if (Number(f.arrears||0) > 0) bits.push('previous terms owing ' + (f.currency||'₦') + Number(f.arrears).toLocaleString());
               if (Number(f.opening_arrears||0) > 0) bits.push('incl. pre-School-Connect balance ' + (f.currency||'₦') + Number(f.opening_arrears).toLocaleString());
-              if (typeof toast === 'function') toast('💰 Total due auto-filled: ' + (f.currency||'₦') + due.toLocaleString() + ' (' + bits.join(' · ') + '). Double-click the field to override.', 'info', 9000);
+              if (typeof toast === 'function') toast('💰 This receipt records the term bill: ' + (f.currency||'₦') + termBill.toLocaleString()
+                + (due !== termBill ? ' (total outstanding is ' + (f.currency||'₦') + due.toLocaleString() + ' including earlier terms — shown on the dashboard, not stored on this receipt)' : '')
+                + '. Double-click the field to override.', 'info', 11000);
               const tEl = document.getElementById('cf-' + CRUD.fid('term')), sEl = document.getElementById('cf-' + CRUD.fid('session'));
               if (tEl && !tEl.value && f.term) tEl.value = f.term;
               if (sEl && !sEl.value && f.session) sEl.value = f.session;
@@ -2151,7 +2166,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
           if (onEl) patch.opening_arrears_note = onEl.value || '';
           const ur = await this.sb.from('students').update(patch).eq('id', stuId);
           if (ur.error && /opening_arrears/.test(ur.error.message || '')) {
-            toast('Opening-arrears needs a one-time database update — admin: run database/v10.7-fee-locks-arrears.sql. The payment itself still saves.', 'warning', 10000);
+            toast('Opening-arrears needs a one-time database update — admin: run database/complete-schema.sql. The payment itself still saves.', 'warning', 10000);
           } else if (!ur.error && patch.opening_arrears > 0) {
             toast('🧾 Opening arrears of ' + patch.opening_arrears.toLocaleString() + ' saved on the student record — it now joins every total-due computation until cleared (enter 0 to clear).', 'info', 9000);
           }
@@ -2238,7 +2253,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
       const bad = m && (m[1] || m[2] || m[3] || m[4]);
       if (!bad || !(bad in payload)) break;
       if (d.generic || d.table === 'module_records') { payload.data = payload.data || {}; payload.data[bad] = payload[bad]; }
-      console.warn('[CRUD] Column "' + bad + '" missing in DB — retrying without it. Run database/update-v6-schema.sql to add it permanently.');
+      console.warn('[CRUD] Column "' + bad + '" missing in DB — retrying without it. Run database/complete-schema.sql to add it permanently.');
       delete payload[bad]; guard++;
       res = await runSave(payload);
     }
@@ -2480,7 +2495,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     const r = await this.sb.rpc('sc_set_student_locks', { p_student_ids: [studentId], p_kind: kind, p_locked: lock, p_message: message || '' });
     if (r.error || !r.data || r.data.ok === false) {
       const msg = (r.data && r.data.error) || (r.error && r.error.message) || 'Lock update failed';
-      if (/sc_set_student_locks|schema cache|function/i.test(String(msg))) toast('The lock engine is not installed yet — admin: run database/v10.7-fee-locks-arrears.sql once in Supabase.', 'warning', 12000);
+      if (/sc_set_student_locks|schema cache|function/i.test(String(msg))) toast('The lock engine is not installed yet — admin: run database/complete-schema.sql once in Supabase.', 'warning', 12000);
       else toast(msg, 'danger', 9000);
       return;
     }
@@ -2535,7 +2550,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     } catch (e) {
       const msg = String(e.message || e);
       if (/sc_set_student_locks_by_filter|could not find the function|does not exist|schema cache/i.test(msg)) {
-        toast('One-click locking needs the V12.60 pack — run database/v12.60-expert-fix-pack.sql in Supabase.', 'warning', 12000);
+        toast('One-click locking needs the V12.60 pack — run database/complete-schema.sql in Supabase.', 'warning', 12000);
       } else toast('Bulk lock failed: ' + msg, 'danger', 9000);
     }
   },
@@ -2565,7 +2580,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
       const r = await this.sb.rpc('sc_set_student_locks', { p_student_ids: chunk, p_kind: kind, p_locked: lock, p_message: message || '' });
       if (r.error || !r.data || r.data.ok === false) {
         const msg = (r.data && r.data.error) || (r.error && r.error.message) || 'Bulk lock failed';
-        if (/sc_set_student_locks|schema cache|function/i.test(String(msg))) toast('The lock engine is not installed yet — admin: run database/v12.60-expert-fix-pack.sql once in Supabase.', 'warning', 12000);
+        if (/sc_set_student_locks|schema cache|function/i.test(String(msg))) toast('The lock engine is not installed yet — admin: run database/complete-schema.sql once in Supabase.', 'warning', 12000);
         else toast(msg, 'danger', 9000);
         if (updated) { this.invalidateTableCaches('students'); this.renderList('students'); }
         return;
@@ -2609,7 +2624,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
       const { data: msg, error: rpcErr } = await this.sb.rpc('sc_delete_user', { p_user: id });
       if (rpcErr) {
         if (/could not find|does not exist|schema cache/i.test(rpcErr.message || '')) {
-          toast('Database update needed: run database/v9.0-user-lifecycle.sql (or complete-schema.sql) in the Supabase SQL Editor, then retry.', 'danger', 10000);
+          toast('Database update needed: run database/complete-schema.sql (or complete-schema.sql) in the Supabase SQL Editor, then retry.', 'danger', 10000);
         } else { toast(rpcErr.message, 'danger', 8000); }
         return;
       }
@@ -2652,7 +2667,7 @@ if(['class','student_class','candidate_class','last_class'].includes(k))Object.a
     try {
       const r = await this.sb.rpc('sc_recompute_fee_rows', { p_student: studentId, p_term: term || '', p_session: session || '' });
       if (r.error) {
-        if (/sc_recompute_fee_rows|schema cache|function/i.test(String(r.error.message||''))) toast('Ledger self-healing needs a one-time database update — admin: run database/v10.8-fee-recompute.sql in Supabase. Until then, re-check this student\'s other payment rows manually.', 'warning', 12000);
+        if (/sc_recompute_fee_rows|schema cache|function/i.test(String(r.error.message||''))) toast('Ledger self-healing needs a one-time database update — admin: run database/complete-schema.sql in Supabase. Until then, re-check this student\'s other payment rows manually.', 'warning', 12000);
         else toast(r.error.message, 'warning', 8000);
         return null;
       }

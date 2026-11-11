@@ -44,7 +44,7 @@ const Super = {
        optional page link (p) and optional follow-up chips (chips). */
     KB: [
       { m: ['exam registration page','waec registration','neco registration','nabteb registration','ncee registration','jamb registration'], r: 'The **Public Examination Registration** page is for collecting candidate details for WAEC, NECO, NABTEB, NCEE, UTME/JAMB, GCE, IGCSE and other exams. Applicants fill biodata, exam type/year/series, subjects, centre preferences and documents; the school examination officer reviews and processes the registration.', p: 'exam-register.html' },
-      { m: ['v12 voting repair','invalid input syntax uuid','invalid input syntax for type uuid','cannot create poll','cannot close poll','cannot vote'], r: 'Voting has been repaired in V12. Admin/staff can create, edit, close and re-open polls. Students/parents can vote on open polls. If your Supabase project was created before V12, run `database/update-v12-schema.sql` after the main schemas so `poll_votes.candidate_id` is converted to text and the open-poll policies are installed.', p: 'voting.html', chips: ['Create a poll', 'Student voting', 'Run V12 SQL'] },
+      { m: ['v12 voting repair','invalid input syntax uuid','invalid input syntax for type uuid','cannot create poll','cannot close poll','cannot vote'], r: 'Voting has been repaired in V12. Admin/staff can create, edit, close and re-open polls. Students/parents can vote on open polls. If your Supabase project was created before V12, run `database/complete-schema.sql` after the main schemas so `poll_votes.candidate_id` is converted to text and the open-poll policies are installed.', p: 'voting.html', chips: ['Create a poll', 'Student voting', 'Run V12 SQL'] },
       { m: ['notification disappears','notification flashes','bell closes','parent notifications','student notifications'], r: 'V12 notifications now stay in the bell, the Notifications page, and a persistent live notification tray. If a toast appears, it no longer disappears as the only copy; open the bell or Notifications page to review it again.', p: 'notifications.html' },
       { m: ['teacher ownership','cannot edit another teacher','read only record','health clinic ownership','helpdesk ownership','counselling ownership'], r: 'V12 enforces creator/owner editing. Teachers may read relevant records for coordination, but only the creator/assigned owner or an admin can edit/delete exams, results, helpdesk, health/clinic, counselling and reports. Admins retain full oversight.', p: 'teacher-overview.html' },
       { m: ['staff geofence','school location','staff attendance location','outside premises','gps attendance'], r: 'Admins set the school GPS point in Settings → Staff Attendance Geofence. Staff check-in requires browser GPS and must be inside the configured radius, preventing attendance from outside the premises.', p: 'settings.html' },
@@ -124,7 +124,7 @@ const Super = {
       { m: ['promote class', 'move students', 'next class', 'end of session', 'session promotion', 'apply promotion'], r: '**One-click session promotion:** ① end of third term, open **Promotion** → ⚙ Auto-promote (by exam) — set the pass benchmark and graduating class; the system drafts promote/repeat/graduate for every student. ② Review/adjust drafts. ③ Click **✅ Apply promotions** — a full preview shows the per-class movements; on OK, promoted students MOVE to their new classes automatically (results, attendance, fees, timetable all follow instantly), graduates become alumni-ready, and every report card prints the decision (PROMOTED TO…, REPEAT, GRADUATED).', p: 'promotion.html' },
       { m: ['column read only', 'teacher columns', 'cannot add column'], r: 'Teachers see the report-card columns as a **read-only list** — the add/edit/delete controls only exist for administrators, and the database rejects any non-admin column change outright. Teachers\' job is entering scores in the Subject Broadsheet grid.', p: 'report-cards.html' },
       { m: ['sample data', 'demo data', 'fill demo', 'empty pages', 'no records yet'], r: 'Admins: open **Admin Data → 🎬 One-Click Demo Sample Data** and press the button — payroll, inventory, application links, messages, assignments, behaviour points, support plans, library books, help-desk tickets, house points, cafeteria menus, lost & found and PTA meetings are all filled with believable rows in seconds. Idempotent: tables that already have data are skipped. Guaranteed alternative: paste database/demo-sample-data.sql in the Supabase SQL Editor once. On demo deployments the pack also loads itself automatically each day.', p: 'admin-data.html' },
-      { m: ['signature', 'draw signature', 'sign pad', 'principal signature', 'stamp upload'], r: 'On **Settings**, draw the signature on the pad and click **☁️ Save signature to School Storage** — one click stores the tiny PNG (~5–20 KB) in the school\'s 1 GB File Storage (public branding bucket), sets it as the official signature, and it prints on report cards, e-receipts and certificates immediately. No Google Drive round-trip needed (Drive links still work too). Older databases: run database/branding-bucket.sql once.', p: 'settings.html' },
+      { m: ['signature', 'draw signature', 'sign pad', 'principal signature', 'stamp upload'], r: 'On **Settings**, draw the signature on the pad and click **☁️ Save signature to School Storage** — one click stores the tiny PNG (~5–20 KB) in the school\'s 1 GB File Storage (public branding bucket), sets it as the official signature, and it prints on report cards, e-receipts and certificates immediately. No Google Drive round-trip needed (Drive links still work too). Older databases: run database/complete-schema.sql once.', p: 'settings.html' },
       { m: ['deleted student still', 'ghost report', 'old report sheet', 'wrong column report', 'stale scores'], r: 'Two clean-up tools: ① deleting a student now auto-archives their full record (Activity/Admin Data → student_archive) and removes their loose score rows, freeing the admission number for reuse; ② on **Report Cards**, admins click **🧹 Sweep Ghost Report Sheets** to purge leftovers from deleted/re-created columns or deleted students — then regenerate and only current data prints.', p: 'report-cards.html' },
       { m: ['same name students', 'admission number report', 'duplicate name'], r: 'Report generation is admission-number aware: the student box on **Report Cards** now offers "ADM/NO — Name (Class)" suggestions; type either the name or the admission number. Two students sharing a name can never be confused, and class/term/session pickers let you generate PREVIOUS terms too.', p: 'report-cards.html' },
       { m: ['seo', 'google search', 'searchable', 'bing', 'index my site', 'search engine'], r: 'Every site ships crawl-ready (robots.txt, sitemap, meta tags, School structured-data with HMG ecosystem links). To appear on Google/Bing: follow **docs/SEO-AND-LEAD-GENERATION-GUIDE.md** — verify the domain in Google Search Console (HTML tag method), submit sitemap.xml, request indexing, then import into Bing Webmaster Tools. ~20 minutes per school.' },
@@ -667,7 +667,7 @@ const Super = {
     },
     /* Contact strip used by the new templates (#10: address + phone + email). */
     contactStrip(s, dark) {
-      const bits = [s.address ? '📍 ' + Super.esc(s.address) : '', s.phone ? '📞 ' + Super.esc(s.phone) : '', s.email ? '✉️ ' + Super.esc(s.email) : ''].filter(Boolean).join(' · ');
+      const bits = [s.address ? 'Address: ' + Super.esc(s.address) : '', s.phone ? 'Tel: ' + Super.esc(s.phone) : '', s.email ? 'Email: ' + Super.esc(s.email) : ''].filter(Boolean).join(' · ');
       return bits ? '<div style="font-size:.58rem;color:' + (dark ? '#94a3b8' : '#475569') + ';text-align:center;padding:5px 10px;line-height:1.5">' + bits + '</div>' : '';
     },
     /* V11.6 LIFETIME CARD helpers: the physical card serves the student for
@@ -718,8 +718,8 @@ const Super = {
       const tpl = person.template || 'horizontal';
       const logo = 'assets/img/logo.' + (s.logoExt || 'svg');
       const contactFooter = '<div style="background:#f1f5f9;padding:7px 14px;font-size:.62rem;color:#475569;text-align:center;line-height:1.5">' +
-        (s.address ? '📍 ' + Super.esc(s.address) + '<br>' : '') +
-        [s.phone ? '📞 ' + Super.esc(s.phone) : '', s.email ? '✉️ ' + Super.esc(s.email) : ''].filter(Boolean).join(' · ') +
+        (s.address ? Super.esc(s.address) + '<br>' : '') +
+        [s.phone ? 'Tel: ' + Super.esc(s.phone) : '', s.email ? Super.esc(s.email) : ''].filter(Boolean).join(' · ') +
         (s.motto ? '<br><em style="color:#64748b">"' + Super.esc(s.motto) + '"</em>' : '') + '</div>';
       const credit = '<div style="background:#0f172a;color:#94a3b8;font-size:.56rem;text-align:center;padding:3px 0">If found, please return to the school office · Powered by HMG Concepts</div>';
       const bigPhoto = photo
@@ -933,7 +933,7 @@ const Super = {
         'Report loss or damage to the class teacher or school office immediately.',
         'Surrender this card to the school office on graduation or withdrawal.'
       ];
-      const contact = [s.address ? '📍 ' + Super.esc(s.address) : '', s.phone ? '📞 ' + Super.esc(s.phone) : '', s.email ? '✉️ ' + Super.esc(s.email) : ''].filter(Boolean).join('<br>');
+      const contact = [s.address ? Super.esc(s.address) : '', s.phone ? 'Tel: ' + Super.esc(s.phone) : '', s.email ? Super.esc(s.email) : ''].filter(Boolean).join('<br>');
       return '<div class="sc-idcard sc-idcard-back" style="width:340px;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.12);background:#fff;display:flex;flex-direction:column">' +
         // magnetic-stripe band (classic card realism)
         '<div style="height:34px;background:#1f2937;margin-top:14px"></div>' +
@@ -1140,7 +1140,7 @@ const Super = {
       const s = Super.school || {};
       const logo = `assets/img/logo.${(s.logoExt || 'svg')}`;
       const bullets = (o.bullets || []).map(b => `<p style="margin:7px 0;display:flex;align-items:flex-start;gap:8px"><span style="color:${o.ac};font-weight:900">✓</span><span>${Super.esc(b)}</span></p>`).join('');
-      const contact = o.contactBar !== false ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.25)"><p style="font-weight:700;margin:4px 0">📞 ${Super.esc(s.phone || '')} &nbsp; ✉️ ${Super.esc(s.email || '')}</p><p style="font-size:.78rem;opacity:.9;margin:0">📍 ${Super.esc(s.address || '')}</p></div>` : '';
+      const contact = o.contactBar !== false ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.25)"><p style="font-weight:700;margin:4px 0">Tel: ${Super.esc(s.phone || '')} &nbsp; ✉️ ${Super.esc(s.email || '')}</p><p style="font-size:.78rem;opacity:.9;margin:0">📍 ${Super.esc(s.address || '')}</p></div>` : '';
       const credit = '<p style="margin-top:14px;font-size:.68rem;opacity:.75">Powered by HMG Concepts</p>';
       const sz = this.SIZES[o.size] || this.SIZES.a4portrait;
       // professional decorations
@@ -1174,7 +1174,7 @@ const Super = {
             <h2 style="letter-spacing:2px;color:${o.pc};margin:8px 0 16px">${Super.esc(o.headline)}</h2>
             <div style="text-align:left;max-width:400px;margin:0 auto;color:#1f2937">${bullets}</div>
             <p style="font-weight:800;margin:18px 0;color:${o.pc};font-size:1.1rem">${Super.esc(o.cta)}</p>
-            <div style="border-top:1px solid #e7e2d0;padding-top:12px;color:#6b7280;font-size:.8rem">📞 ${Super.esc(s.phone || '')} · ✉️ ${Super.esc(s.email || '')}<br>📍 ${Super.esc(s.address || '')}</div>
+            <div style="border-top:1px solid #e7e2d0;padding-top:12px;color:#6b7280;font-size:.8rem">Tel: ${Super.esc(s.phone || '')} · Email: ${Super.esc(s.email || '')}<br>${Super.esc(s.address || '')}</div>
           </div></div>`;
       }
       if (o.layout === 'minimal') {

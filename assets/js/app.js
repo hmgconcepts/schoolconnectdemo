@@ -1523,7 +1523,7 @@ const App = {
            the SAME engine's aggregates (sc_fee_overview) so both pages agree. */
         const ovr = await sb.rpc('sc_fee_overview', { p_class: null, p_term: null, p_session: null });
         if (ovr.error || !ovr.data) {
-          paint('<p style="color:var(--gray-500);font-size:.85rem">School-wide fee summary needs the V12.60 database pack (database/v12.60-expert-fix-pack.sql).</p>');
+          paint('<p style="color:var(--gray-500);font-size:.85rem">School-wide fee summary needs the V12.60 database pack (database/complete-schema.sql).</p>');
           return;
         }
         const o = ovr.data || {};
@@ -1568,11 +1568,46 @@ const App = {
       let h = '';
       for (const s of studs) {
         const r = await sb.rpc('sc_student_fee_state', { p_student: s.id });
-        if (r.error) { h += '<p style="color:var(--gray-500);font-size:.85rem">💤 Fee totals need a one-time database update (admin: run database/v9.4-fees-and-exams.sql). Payment history is on the <a href="fees.html">Fees page</a>.</p>'; break; }
+        /* ================================================================
+           V12.68 — STOP LYING ABOUT THE REASON.
+           This branch used to print "run database/complete-schema.sql" for
+           ANY error, which sent the school chasing a file that had been
+           superseded four releases earlier. The fee engine is in the complete
+           schema; the only thing that can genuinely be missing now is a stale
+           PostgREST catalogue. So: name the real cause, keep the technical
+           detail visible for support, and gain a retry that re-reads the cache
+           before giving up.
+           ================================================================ */
+        if (r.error) {
+          const msg = String(r.error.message || r.error || '');
+          const missing = /could not find|does not exist|schema cache|PGRST202|PGRST204|404/i.test(msg);
+          h += '<div class="notice notice-warning" style="font-size:.84rem;margin-top:8px">'
+            + '<b>⚠️ ' + (missing
+                ? 'The fee engine is not visible to the API yet.'
+                : 'The fee summary could not be loaded.') + '</b><br>'
+            + (missing
+                ? 'The database has the fee engine; the API has not noticed it yet. This is a '
+                  + '<b>cache</b> problem, not a missing update — do <b>not</b> run any other SQL. '
+                  + 'Press <b>Retry</b>. If it persists, wait one minute: Supabase reloads the API '
+                  + 'catalogue automatically.'
+                : 'Your payment history is safe. Press <b>Retry</b>.')
+            + '<div style="margin-top:6px;font-size:.74rem;color:var(--gray-500)">'
+            + 'Technical detail: <code>' + esc(msg.slice(0, 220)) + '</code></div>'
+            + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
+            + '<button class="btn btn-sm btn-primary" onclick="App.loadDashFees()">🔄 Retry</button>'
+            + '<a class="btn btn-sm btn-outline" href="fees.html">🧾 Payment history</a>'
+            + '</div></div>';
+          break;
+        }
         const f = r.data || {};
         if (f.ok === false) continue;
         const cur = f.currency || '₦';
-        const owingNow = Number(f.balance || 0), arrears = Number(f.arrears || 0), totalDue = Number(f.total_due || 0);
+        /* V12.67 — arrears are unpaid PRIOR INVOICES. Absent an invoice there is
+           nothing owed, so `has_arrears` (server-side) is authoritative and the
+           figure is rendered as blank rather than ₦0. */
+        const owingNow = Number(f.balance || 0);
+        const arrears = (f.has_arrears === false) ? 0 : Number(f.arrears || 0);
+        const totalDue = Number(f.total_due != null ? f.total_due : (owingNow + arrears));
         h += '<div style="border:2px solid ' + (totalDue > 0 ? '#fca5a5' : '#86efac') + ';border-radius:14px;padding:14px;margin-bottom:12px;background:' + (totalDue > 0 ? '#fef2f2' : '#f0fdf4') + '">' +
           '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">' +
           '<b style="font-size:1.02rem">' + esc(s.full_name) + (f.class ? ' · ' + esc(f.class) : '') + '</b>' +
@@ -1596,11 +1631,56 @@ const App = {
         const ar = f.arrears_rows || [];
         const paidPct = Number(f.paid_percent || 0);
 
+        /* ================================================================
+           V12.68 (B9) — PROVENANCE ON THE CARD.
+           Round 9 reported "Total fees this term" showing ₦0. A card that
+           prints a number without its source cannot be trusted or challenged,
+           so every card now states, in words, how the figure was arrived at:
+             • where the term came from (calendar / flag / fallback),
+             • which price list matched (exact term, "Current Term", another
+               term of the session, the latest one, or the invoice),
+             • and, when there is no bill at all, WHICH of the three reasons
+               applies — because "no fee structure exists anywhere", "this
+               class has none for this term" and "this class has none at all"
+               need three different actions from the bursar.
+           Nothing about the money changes here; this is the same engine.
+           ================================================================ */
+        const mStatus = String(f.match_status || '');
+        const mBy = String(f.matched_by || '');
+        const rBy = String(f.resolved_by || '');
+        const rungText = {
+          invoice: 'from the invoice raised for this term',
+          exact_term: 'from the class fee structure published for this exact term',
+          current_term_label: 'from the class fee structure saved as “Current Term”',
+          session_other_term: 'from another term of the same session — no structure names this term',
+          latest_structure: 'from the most recent class fee structure — nothing matches this term',
+          override: 'from a personal total set by the bursar'
+        }[mBy] || '';
         if (f.bill_known === false) {
-          h += '<div class="notice notice-warning" style="margin-top:10px;font-size:.83rem">'
-            + '<b>⚠️ The bill for this term has not been published yet.</b><br>'
-            + esc(f.match_note || 'The school has not set the class fee for this term.')
-            + ' What you see below is your payment record — not a statement that nothing is owed.</div>';
+          const unknownWhy = {
+            no_structures_at_all: ['⚠️ No class fee structure exists on this platform yet.',
+              'Open 💳 Class Fee Structure and enter the fees for each class once. Every dashboard then fills itself in — no student record needs editing.'],
+            no_structure_this_term: ['⚠️ This class has a fee structure, but none for ' + (f.term || 'this term') + '.',
+              'Publish the fee for ' + (f.term || 'this term') + (f.session ? ' · ' + f.session : '') + ' on the 💳 Class Fee Structure page. The bill is unknown — not zero.'],
+            no_structure: ['⚠️ No fee structure has ever been published for this learner’s class.',
+              'Check the spelling of the class on the student record against the 💳 Class Fee Structure page, then publish it.']
+          }[mStatus] || ['⚠️ The bill for this term has not been published yet.',
+            'Open the 💳 Class Fee Structure page and publish the fee for this class.'];
+          h += '<div style="margin-top:10px;border-left:4px solid #f59e0b;background:#fffbeb;padding:9px 12px;border-radius:8px;font-size:.83rem">'
+            + '<b>' + unknownWhy[0] + '</b><br>' + unknownWhy[1]
+            + '<div style="margin-top:5px;color:#78350f;font-size:.78rem">'
+            + 'The figures below are your payment record — they are <b>not</b> a statement that nothing is owed.'
+            + (rBy ? ' Term resolved by: <code>' + esc(rBy) + '</code>.' : '') + '</div></div>';
+        } else if (rungText) {
+          /* a bill exists — say where it came from, and warn when the rung is a fallback */
+          const soft = (mBy === 'session_other_term' || mBy === 'latest_structure');
+          h += '<div style="margin-top:10px;border-left:4px solid ' + (soft ? '#f59e0b' : '#16a34a') + ';'
+            + 'background:' + (soft ? '#fffbeb' : '#f0fdf4') + ';padding:7px 11px;border-radius:8px;font-size:.79rem;color:#334155">'
+            + (soft ? '⚠️ ' : '✅ ') + 'This bill is ' + esc(rungText) + '.'
+            + (soft ? ' <b>Publish the fee for ' + esc(f.term || 'this term') + ' so the amount is exact.</b>' : '')
+            + (f.term ? ' <span style="color:var(--gray-500)">Term: ' + esc(f.term) + (f.session ? ' · ' + esc(f.session) : '')
+              + (rBy && rBy !== 'is_current' ? ' (' + esc(rBy) + ')' : '') + '</span>' : '')
+            + '</div>';
         }
         h += '<div style="margin-top:10px;border:1px solid var(--gray-300);border-radius:10px;overflow:hidden">' +
              '<div style="background:var(--gray-100);padding:6px 10px;font-size:.8rem;font-weight:800;color:var(--gray-700)">How this balance is calculated</div>' +
@@ -1669,8 +1749,30 @@ const App = {
         h += '<div style="font-size:.74rem;color:var(--gray-500);margin-top:8px">Every figure above is the same one the Fees page prints — both read one server-side engine.</div>';
         h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><a class="btn btn-sm btn-outline" href="fees.html#fee-truth-card">🧾 Full fee statement</a><a class="btn btn-sm btn-outline" href="fees.html">🧾 Receipts &amp; e-receipts</a>' + (role === 'parent' ? '<a class="btn btn-sm btn-outline" href="payments_online.html">💳 Pay online</a>' : '') + '<button class="btn btn-sm btn-outline" onclick="App.loadDashFees()">🔄 Refresh</button></div></div>';
       }
-      paint(h || '<div style="color:var(--gray-500);font-size:.85rem"><p>💤 No fee structure has been published for the class yet.</p><p>Once the school saves the Class Fee Structure (admin: 💰 School Fee Structure page) and runs the v9.4 database update, the full bill, payments and balance appear here automatically.</p><button class="btn btn-sm btn-outline" onclick="App.loadDashFees()">🔄 Refresh</button></div>');
-    } catch (e) { paint('<p style="color:var(--gray-500);font-size:.85rem">Fee summary could not load. <button class="btn btn-sm btn-outline" onclick="App.loadDashFees()">🔄 Retry</button></p>'); }
+      /* V12.68 — an EMPTY card is itself a finding. If every learner was skipped
+         (engine returned ok=false, or a record had no id) the old fallback blamed
+         "no fee structure" and told the school to run a superseded SQL file.
+         Say what is actually true and give the next step. */
+      paint(h || ('<div style="color:var(--gray-600);font-size:.85rem">'
+        + '<p><b>No fee figures were returned for ' + studs.length + ' linked learner(s).</b></p>'
+        + '<p style="font-size:.8rem">The bill comes from the class fee structure. Check that the '
+        + 'learner’s <b>class</b> on their student record matches a class on the '
+        + '<a href="school-fees.html">💰 Class Fee Structure</a> page — a typo in the class '
+        + 'is the usual cause — then press Refresh.</p>'
+        + '<p style="font-size:.74rem;color:var(--gray-500)">Every fee figure is computed by '
+        + 'database/complete-schema.sql; no other SQL file is needed.</p>'
+        + '<button class="btn btn-sm btn-outline" onclick="App.loadDashFees()">🔄 Refresh</button></div>'));
+    } catch (e) {
+      /* V12.68 — an unexpected exception must never hide what it was. A bursar
+         can copy this line to support; a developer gets the real cause. */
+      console.error('[dash-fees]', e);
+      paint('<div style="font-size:.85rem;color:var(--gray-600)">'
+        + '<b>⚠️ The fee summary could not be built.</b><br>'
+        + '<span style="font-size:.78rem">Your payment records are safe. Try again; if it repeats, send this line to support.</span>'
+        + '<div style="margin-top:5px;font-size:.74rem;color:var(--gray-500)">'
+        + '<code>' + esc(String(e && e.message || e).slice(0, 200)) + '</code></div>'
+        + '<button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="App.loadDashFees()">🔄 Retry</button></div>');
+    }
   },
   /* V10 (#3): MY PAY & BENEFITS — every staff member sees their own payslips,
      loans/advances (with balance) and bonuses on the dashboard, newest first.
@@ -1689,7 +1791,7 @@ const App = {
          fee card. */
       const r = await sb.rpc('sc_staff_pay_state');
       if (r.error) {
-        if (/could not find|does not exist|schema cache/i.test(r.error.message||'')) { box.innerHTML = '<p style="color:var(--gray-500);font-size:.85rem">💤 Pay summary needs a one-time database update — admin: run <code>database/v10.1-staffpay-attendance-vetting.sql</code>.</p>'; return; }
+        if (/could not find|does not exist|schema cache/i.test(r.error.message||'')) { box.innerHTML = '<p style="color:var(--gray-500);font-size:.85rem">💤 Pay summary needs a one-time database update — admin: run <code>database/complete-schema.sql</code>.</p>'; return; }
         box.innerHTML=''; return;
       }
       const f = r.data || {};
@@ -1764,7 +1866,7 @@ const App = {
       let q = sb.from('exam_timetable').select('*').gte('exam_date', new Date().toISOString().slice(0, 10)).order('exam_date').order('start_time').limit(60);
       if (classes.length) q = q.in('class', classes);
       const r = await q;
-      if (r.error) { paint('<p style="color:var(--gray-500);font-size:.85rem">💤 The exam timetable appears here after a one-time database update (admin: run database/v9.4-fees-and-exams.sql or complete-schema.sql).</p>'); return; }
+      if (r.error) { paint('<p style="color:var(--gray-500);font-size:.85rem">💤 The exam timetable appears here after a one-time database update (admin: run database/complete-schema.sql or complete-schema.sql).</p>'); return; }
       const rows = r.data || [];
       if (!rows.length) { paint('<p style="color:var(--gray-500);font-size:.85rem">📭 No upcoming exam papers scheduled' + (classes.length ? ' for ' + classes.join(', ') : '') + ' yet — new papers appear here the moment the school publishes them. <a href="exam-timetable.html">Open the Exam Timetable →</a></p>'); return; }
       let h = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Time</th>' + (classes.length === 1 ? '' : '<th>Class</th>') + '<th>Subject</th><th>Venue</th></tr></thead><tbody>';
@@ -2292,7 +2394,7 @@ else App.init();
     window.sb.rpc('sc_keep_alive',{src:'site-visit'}).then(function(r){
       if(!r.error){ localStorage.setItem(KEY,String(Date.now()));
         console.log('[School Connect] Supabase keep-alive heartbeat ok.'); }
-      else console.warn('[School Connect] keep-alive RPC missing — run database/keep-alive.sql:',r.error.message);
+      else console.warn('[School Connect] keep-alive RPC missing — run database/complete-schema.sql:',r.error.message);
     }).catch(function(){});
   }catch(_){/* never break the page for a heartbeat */}
 })();
