@@ -21,19 +21,31 @@
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'fs';
 import path from 'path';
+import { schemaText } from './verification/schema-loader.mjs';
 
 const HERE = new URL('.', import.meta.url).pathname;
 const ROOT = path.resolve(HERE, '..');
 const BOOT = path.join(HERE, 'verification', 'pglite-boot.sql');
 const BUILT = path.join(ROOT, 'database', 'complete-schema.sql');
-const RAW = process.argv[2] || process.env.SC_RAW || '/tmp/complete-schema.raw.sql';
+/* V12.67 — the raw source now has a canonical home inside the workspace. The
+   old default (/tmp) silently compared against a stale copy and reported
+   phantom drift, so resolve the persistent location first and fail loudly
+   rather than comparing against nothing. */
+const RAW = process.argv[2] || process.env.SC_RAW
+  || (fs.existsSync('/home/user/work/schema/complete-schema.raw.sql')
+        ? '/home/user/work/schema/complete-schema.raw.sql'
+        : '/tmp/complete-schema.raw.sql');
 
 const LIMIT = 1_000_000;
 let failures = 0;
 const ok = (c, msg) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${msg}`); if (!c) failures++; };
 
 function load(p) {
-  return fs.readFileSync(p, 'utf8').replace(/create extension[^;]*;/gi, 'select 1;');
+  /* V12.68 — shared loader. It neutralises only TOP-LEVEL create-extension
+     statements; the schema also has one inside a PL/pgSQL block (pg_cron),
+     where a bare SELECT is a syntax error and the block's own text gets
+     corrupted. See tools/verification/schema-loader.mjs. */
+  return schemaText(p);
 }
 
 async function build(p) {

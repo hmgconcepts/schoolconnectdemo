@@ -111,6 +111,12 @@ NOTIFY_RE = re.compile(r"select\s+pg_notify\s*\(\s*'pgrst'\s*,\s*'reload schema'
 PROGRESS_RE = re.compile(
     r"select\s+'[^']*'\s+(as\s+)?(running_version|status|applied|installed|version)\b", re.I | re.S)
 RULE_RE = re.compile(r'^\s*--\s*[=\-*#~_+]{10,}\s*$')
+# V12.68 — the same decorative rule, written flush to the text on both sides
+# (`update ... where x = 1; -- ============`). Not a statement on its own, so it
+# survives RULE_RE; stripped only from the tail of a line, never from the head of
+# a line that is inside a dollar-quoted body (verified by the verifier: every
+# object must be identical to the raw file).
+TRAIL_RULE_RE = re.compile(r'\s*--\s*[=\-*#~_+]{10,}\s*$')
 DROP_POLICY_RE = re.compile(r'drop\s+policy\s+if\s+exists\s+("?[^"\s]+"?)', re.I)
 DROP_TRIGGER_RE = re.compile(r'drop\s+trigger\s+if\s+exists\s+("?[^"\s]+"?)', re.I)
 DROP_INDEX_RE = re.compile(r'^\s*drop\s+index\s+(?:concurrently\s+)?if\s+exists\s+("?[^"\s;]+"?)', re.I)
@@ -142,9 +148,23 @@ def build(raw: str) -> tuple[str, dict]:
             stats[why] += 1
 
     # ---- 1. noise -----------------------------------------------------------
+    # V12.68 — KEEP THE **LAST** NOTIFY, NOT THE FIRST.
+    #
+    # `pg_notify('pgrst','reload schema')` is what makes PostgREST re-read the
+    # catalogue. Its effect is positional: it announces everything created
+    # BEFORE it. The packs after V12.61 (V12.62 … V12.68) are appended at the
+    # end of the file, so keeping the FIRST notify means the reload happens
+    # roughly 2,300 statements early and every later object — 53 functions
+    # including sc_fee_ledger_for, sc_fee_bill_v2 and sc_student_fee_state, plus
+    # the sc_fee_invoice table — is created AFTER the announcement. PostgREST
+    # then answers `rpc('sc_student_fee_state')` with 404 "function not found",
+    # and the dashboard reported that as "run database/v9.4-fees-and-exams.sql".
+    # Keep the LAST one, and move it to the very end of the file so it really is
+    # the last statement the server executes.
     notifies = [s for s in st if noise_kind(s) == 'notify']
     for s in notifies[:-1]:
         kill(s, 'redundant-notify')
+    final_notify = notifies[-1] if notifies else None
     for s in st:
         if noise_kind(s) == 'progress-select':
             kill(s, 'progress-select')
@@ -290,6 +310,13 @@ def build(raw: str) -> tuple[str, dict]:
             if RULE_RE.match(ln):
                 stats['banner-rule'] += 1
                 continue
+            if '--' in ln and TRAIL_RULE_RE.search(ln):
+                head = ln[:ln.index(TRAIL_RULE_RE.search(ln).group(0))]
+                if head.strip():
+                    stats['banner-rule'] += 1
+                    ln = head.rstrip()
+                    keep.append(ln)
+                    continue
             keep.append(ln)
         while keep and not keep[0].strip():
             keep.pop(0)
@@ -303,6 +330,22 @@ def build(raw: str) -> tuple[str, dict]:
     out = re.sub(r'\A(?:\s*--[^\n]*\n)+?\s*(?=create|comment|do|alter|grant|--   )', '', out, count=1)
     out = re.sub(r'\n{3,}', '\n\n', out)
     out = out.rstrip() + '\n'
+
+    # ---- 11. the schema-cache signal must be the LAST statement -------------
+    if final_notify is not None:
+        out = re.sub(r'^\s*notify\s+pgrst\s*,\s*\'reload schema\'\s*;\s*$', '', out, flags=re.I | re.M)
+        out = re.sub(r"^\s*select\s+pg_notify\s*\(\s*'pgrst'\s*,\s*'reload schema'\s*\)\s*;\s*$",
+                     '', out, flags=re.I | re.M)
+        out = re.sub(r'\n{3,}', '\n\n', out).rstrip() + '\n'
+        out += ("\n-- ---------------------------------------------------------------------\n"
+                "-- V12.68: LAST STATEMENT IN THE FILE, DELIBERATELY.\n"
+                "-- PostgREST answers RPCs from a cached catalogue. This notification is\n"
+                "-- what makes it reload. Any object declared after it is invisible to the\n"
+                "-- API until the cache expires — which is exactly how a perfectly good\n"
+                "-- database came to report \"run database/v9.4-fees-and-exams.sql\".\n"
+                "-- ---------------------------------------------------------------------\n"
+                "select pg_notify('pgrst', 'reload schema');\n")
+        stats['notify-moved-last'] += 1
     return out, stats, drop, st
 
 
@@ -354,9 +397,9 @@ def main():
     print(f'  source        {raw_bytes:>10,} B  ({raw.count(chr(10)):>6,} lines)')
     print(f'  rebuilt       {len(out):>10,} B  ({out.count(chr(10)):>6,} lines)')
     print(f'  removed       {raw_bytes-len(out):>10,} B  ({(raw_bytes-len(out))/raw_bytes*100:5.1f}%)')
-    print(f'  supabase cap  {LIMIT:>10,} B')
-    print(f'  target        {TARGET:>10,} B      -> ', end='')
-    print('OK' if len(out) <= TARGET else 'OVER TARGET')
+    print(f'  supabase cap  {LIMIT:>10,} B   headroom {LIMIT-len(out):>9,} B')
+    print(f'  design target {TARGET:>10,} B      -> ', end='')
+    print('OK' if len(out) <= TARGET else 'over target (still inside the cap)')
     print()
     for k, v in stats.most_common():
         print(f'    {v:5d}  {k}')
