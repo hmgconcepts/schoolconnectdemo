@@ -596,6 +596,7 @@ const App = {
       'academic-records':'academic_records', 'academic_records':'academic_records',
       'admin-data':'admin_data', 'admin_data':'admin_data',
       'report-cards':'report_cards', 'report_cards':'report_cards', 'midterm-reports':'midterm_reports', 'midterm_reports':'midterm_reports',
+      'prep-exam-reports':'prep_exam_reports', 'prep_exam_reports':'prep_exam_reports',
       'cbt-prompts':'cbt_prompts', 'cbt_prompts':'cbt_prompts',
       'cbt-exam':'cbt_exam', 'cbt_exam':'cbt_exam',
       'timetable-generator':'timetable_generator', 'timetable_generator':'timetable_generator',
@@ -708,7 +709,7 @@ const App = {
   STUDENT_WHITELIST: new Set([
     'dashboard','profile','change-password','notifications',
     'student-profile','student_profile',
-    'results','report-cards','report_cards','midterm-reports','midterm_reports',
+    'results','report-cards','report_cards','midterm-reports','midterm_reports','prep-exam-reports','prep_exam_reports',
     'attendance','timetable','assignments','idcards','inbox','complaints','eresources','digital_library','digital-library','e-resources','certificates',
     'fees','idcards',
     'voting',
@@ -733,7 +734,7 @@ const App = {
     'dashboard','profile','change-password','notifications',
     'student-profile','student_profile',
     'fees','idcards',
-    'results','report-cards','report_cards','midterm-reports','midterm_reports',
+    'results','report-cards','report_cards','midterm-reports','midterm_reports','prep-exam-reports','prep_exam_reports',
     'attendance','assignments','timetable','idcards','inbox','complaints','eresources','e-resources','certificates',
     'announcements','events','school_calendar','school-calendar',
     'gallery','helpdesk','lost_found','lost-found',
@@ -1015,7 +1016,7 @@ const App = {
   /* =================================================================
      NAVIGATION
      ================================================================= */
-  NAV_ORDER: ['dashboard','profile','student-profile','change-password','notifications','academic_setup','students','staff','parents','classes','subjects','departments','attendance','timetable','timetable-generator','sow','lesson_plans','results','report-cards','midterm-reports','affective_traits','psychomotor_traits','report_comments','academic-records','transcripts','rubrics','cbt','cbt-prompts','cbt-multi','cbt-exam','entrance','assignments','digital_library','library','book_request','eresources','lms','announcements','events','school_calendar','messages','inbox','broadcast','complaints','voting','surveys','gallery','birthdays','fees','school-fees','school-products','payment-history','payments_online','finance','financial_aid','donations','hr','payroll','staff_loans','staff_bonus','appraisals','leave','substitutions','admissions','exam_registrations','promotion','alumni','certificates','transfer_cert','idcards','flyer','document_builder','conduct','behaviour','health','counselling','support_plans','diary','gamification','hostel','cafeteria','menu','transport','fleet_tracking','visitors','checkin','front_desk','lost_found','parent_meeting','facility_booking','library_borrowers','career_counseling','helpdesk','directory','reports','analytics','inventory','storage','compliance','activity_log','admin-data','approvals','settings','teacher-overview','feature-guide','hmg-digital-products','status-manager','developer'],
+  NAV_ORDER: ['dashboard','profile','student-profile','change-password','notifications','academic_setup','students','staff','parents','classes','subjects','departments','attendance','timetable','timetable-generator','sow','lesson_plans','results','report-cards','midterm-reports','prep-exam-reports','affective_traits','psychomotor_traits','report_comments','academic-records','transcripts','rubrics','cbt','cbt-prompts','cbt-multi','cbt-exam','entrance','assignments','digital_library','library','book_request','eresources','lms','announcements','events','school_calendar','messages','inbox','broadcast','complaints','voting','surveys','gallery','birthdays','fees','school-fees','school-products','payment-history','payments_online','finance','financial_aid','donations','hr','payroll','staff_loans','staff_bonus','appraisals','leave','substitutions','admissions','exam_registrations','promotion','alumni','certificates','transfer_cert','idcards','flyer','document_builder','conduct','behaviour','health','counselling','support_plans','diary','gamification','hostel','cafeteria','menu','transport','fleet_tracking','visitors','checkin','front_desk','lost_found','parent_meeting','facility_booking','library_borrowers','career_counseling','helpdesk','directory','reports','analytics','inventory','storage','compliance','activity_log','admin-data','approvals','settings','teacher-overview','feature-guide','hmg-digital-products','status-manager','developer'],
 
   // v2 NAV-01: Pages may be generated from older static templates whose
   // hand-written sidebars do not contain later modules. Inject these canonical
@@ -1524,7 +1525,7 @@ const App = {
        the FIRST (the parent's, display:none for a student), so the loader
        filled an invisible div while the student stared at "Loading fee
        summary…" forever. Now every container is filled. */
-    const boxes = [...document.querySelectorAll('[id="dash-fees"]')];
+    const boxes = [...document.querySelectorAll('[id="dash-fees"],[id="dash-fees-student"]')];
     const box = boxes[0];
     const paint = (html) => boxes.forEach(b => { b.innerHTML = html; });
     if (!box || !window.sb) return;
@@ -1857,7 +1858,7 @@ const App = {
     /* V10.2 (#1): the card exists in BOTH the parent and student sections →
        duplicate id. getElementById filled only the FIRST (hidden) one — the
        V9.5 lesson applied again: paint EVERY container. */
-    const boxes = [...document.querySelectorAll('[id="dash-products"]')];
+    const boxes = [...document.querySelectorAll('[id="dash-products"],[id="dash-products-student"]')];
     const box = boxes[0];
     const paint = (html) => boxes.forEach(b => { b.innerHTML = html; });
     if (!box || !window.sb) return;
@@ -1880,7 +1881,7 @@ const App = {
      #dash-exam-tt container on the page; silently skips when absent. */
   async loadDashExamTT() {
     /* V9.5: same duplicate-id fix as loadDashFees (parent + student sections). */
-    const boxes = [...document.querySelectorAll('[id="dash-exam-tt"]')];
+    const boxes = [...document.querySelectorAll('[id="dash-exam-tt"],[id="dash-exam-tt-student"]')];
     const box = boxes[0];
     const paint = (html) => boxes.forEach(b => { b.innerHTML = html; });
     if (!box || !window.sb) return;
@@ -2333,13 +2334,39 @@ const App = {
    and stale session-cache resurrection. */
 window.SCDelete={async byId(client,table,id){if(!client)return{ok:false,error:'Database not configured'};const{data,error}=await client.from(table).delete().eq('id',id).select('id');if(error)return{ok:false,error:error.message||String(error)};if(!data||!data.length)return{ok:false,error:'No row was deleted. It may already be removed or your role lacks permission.'};try{Object.keys(sessionStorage).filter(k=>k.startsWith('sc-table-cache:')).forEach(k=>sessionStorage.removeItem(k));}catch(_){}const v=await client.from(table).select('id').eq('id',id).maybeSingle();return v.data?{ok:false,error:'Delete verification failed; the row still exists.'}:{ok:true,deleted:data.length};}};
 
-/* ----- Modal helpers ----- */
+/* ----- Modal helpers -----
+   V12.71 (round-15 item 3) — openModal() USED TO FAIL SILENTLY.
+   It began `const b = document.getElementById('modal-backdrop'); if (!b) return;`
+   so on a page that had no modal markup every call did nothing at all: the
+   school pressed a button, the database was updated, and NOTHING appeared on
+   screen — no dialog, no error, no clue. Five pages were in that state
+   (profile, payment-history, midterm-reports, checkin-staff, cbt-multi), and
+   midterm-reports' "Publish all classes" summary was among the casualties.
+   Those pages now carry the markup, and this function no longer depends on
+   them: if the container is missing it BUILDS one, so a future page cannot
+   reintroduce the same silent failure. */
+function scEnsureModal(){
+  let b = document.getElementById('modal-backdrop');
+  if (b) return b;
+  b = document.createElement('div');
+  b.id = 'modal-backdrop';
+  b.className = 'modal-backdrop';
+  b.setAttribute('onclick', 'if(event.target===this)closeModal()');
+  b.innerHTML = '<div class="modal" onclick="event.stopPropagation()">'
+    + '<div class="modal-header"><h2 id="modal-title">Modal</h2>'
+    + '<button class="modal-close" onclick="closeModal()">\u00d7</button></div>'
+    + '<div id="modal-body" class="modal-body"></div>'
+    + '<div id="modal-footer" class="modal-footer"></div></div>';
+  document.body.appendChild(b);
+  return b;
+}
 function openModal(title, body, footer) {
-  const b = document.getElementById('modal-backdrop');
+  const b = scEnsureModal();
   if (!b) return;
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML = body;
-  document.getElementById('modal-footer').innerHTML = footer || '<button class="btn btn-outline" onclick="closeModal()">Close</button>';
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  set('modal-title', el => el.textContent = title);
+  set('modal-body', el => el.innerHTML = body);
+  set('modal-footer', el => el.innerHTML = footer || '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
   b.classList.add('show');
   try { if (window.App) App.dedupeAllSelects(); } catch (_) {}
 }

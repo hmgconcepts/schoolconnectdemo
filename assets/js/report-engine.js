@@ -13,8 +13,14 @@ const ReportEngine = {
   sb: null,
   init(supabaseClient) { this.sb = supabaseClient || (typeof sb !== 'undefined' ? sb : null); },
   esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); },
-  n(v){ v=Number(v); return isNaN(v)?0:v; },
-  fmt(v, d=2){ v=this.n(v); return Number.isInteger(v)?String(v):v.toFixed(d).replace(/\.00$/,''); },
+  /* V12.71 (round-15 item 4) — `n` guarded only against NaN, so Infinity
+     passed straight through. Nothing in a school produces Infinity by intent,
+     but a division by a zero weight, a JSON body of 1e999, or a numeric column
+     holding 'Infinity' all do — and the card then printed the WORD "Infinity"
+     in a mark cell and handed an 'A' to an infinite score. A number that is not
+     finite is not a mark; treat it exactly like a missing one. */
+  n(v){ v=Number(v); return Number.isFinite(v)?v:0; },
+  fmt(v, d=2){ v=this.n(v); if(!Number.isFinite(v)) v=0; return Number.isInteger(v)?String(v):v.toFixed(d).replace(/\.00$/,''); },
   scoreCell(row,field){ return row&&row._assessmentPresent&&!row._assessmentPresent[field]?'—':this.fmt(row?row[field]:null); },
   ordinal(n){ n=Number(n)||0; const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); },
   fmtDMY(v){ if(!v)return ''; const d=new Date(String(v).length===10?String(v)+'T00:00:00':v); return isNaN(d)?String(v):String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); },
@@ -365,12 +371,31 @@ const ReportEngine = {
     const expected = this.expectedLoad(rows, knownSubjects);
     const perSubjectMax = expected.perSubjectMax;
 
-    /* fold each learner's rows into one record, measured against the load */
+    /* fold each learner's rows into one record, measured against the load.
+       V12.71 (round-15 item 4) — KEYED BY IDENTITY, NOT BY NAME.
+       Two children in one class can genuinely share a name (siblings named
+       after a grandparent are common in the schools this serves). Keying on
+       student_name silently ADDED THEIR MARKS TOGETHER: two "Ada Obi" rows of
+       90 and 40 became one learner on 130, and both families received the wrong
+       position. Rows carry a student id whenever the query supplies one, so
+       prefer it; fall back to the name ONLY when no id exists, which is the
+       shape of the offline/preview path. */
+    const idOf = (r) => {
+      const id = r.student_id != null ? String(r.student_id).trim() : '';
+      return id || '';
+    };
+    const keyOf = (r) => {
+      const id = idOf(r);
+      const nm = String(r.student_name || r.full_name || '').trim();
+      if (id) return 'id:' + id;
+      return nm ? 'nm:' + nm : '';
+    };
     const people = new Map();
     (rows||[]).forEach(r=>{
-      const key = String(r.student_name||'').trim();
+      const key = keyOf(r);
       if (!key) return;
-      if (!people.has(key)) people.set(key, { name:key, total:0, expected:0, subjects:new Set(), maxSubjects:new Set() });
+      if (!people.has(key)) people.set(key, { name:String(r.student_name||r.full_name||'').trim(), id:idOf(r),
+                                              total:0, expected:0, subjects:new Set(), maxSubjects:new Set() });
       const p = people.get(key);
       p.total += this.n(r.total);
       /* the denominator is the COHORT's max for this subject, never this
@@ -394,11 +419,16 @@ const ReportEngine = {
       const sat = p.subjects.size;
       const exp = expected.subjectCount || p.maxSubjects.size || sat;
       const ratio = exp > 0 ? sat / exp : 0;
-      return { name:p.name, total:p.total, expected:expectedTotal,
-               percentage: Math.round(pct*100)/100,
+      /* V12.71 — a cohort whose subjects all carry max = 0 has NO obtainable
+         total, so every percentage is meaningless. Such a learner was reported
+         as complete:true, rankable:true, position 1 — first place in a class
+         where nobody could score. Require a real denominator. */
+      const hasDenominator = expectedTotal > 0;
+      return { name:p.name, studentId:p.id, total:p.total, expected:expectedTotal,
+               percentage: hasDenominator ? Math.round(pct*100)/100 : null,
                subjectsSat:sat, subjectsExpected:exp,
-               complete: exp > 0 && sat >= exp && p.total > 0,
-               rankable: p.total > 0 && exp > 0 && ratio >= this.MIN_PARTICIPATION };
+               complete: hasDenominator && exp > 0 && sat >= exp && p.total > 0,
+               rankable: hasDenominator && p.total > 0 && exp > 0 && ratio >= this.MIN_PARTICIPATION };
     });
 
     /* competition ranking on percentage ONLY, so a genuine tie is a tie */
@@ -413,8 +443,8 @@ const ReportEngine = {
       x.position = pos; lastPos = pos; lastPct = x.percentage;
       x.cohortSize = cohortSize;
       x.basis = x.complete
-        ? 'Ranked ' + pos + ' of ' + cohortSize + ' on ' + x.percentage.toFixed(2) + '% of the full ' + x.subjectsExpected + '-subject load.'
-        : 'Ranked ' + pos + ' of ' + cohortSize + ' on ' + x.percentage.toFixed(2) + '% of the full load, but only '
+        ? 'Ranked ' + pos + ' of ' + cohortSize + ' on ' + this.n(x.percentage).toFixed(2) + '% of the full ' + x.subjectsExpected + '-subject load.'
+        : 'Ranked ' + pos + ' of ' + cohortSize + ' on ' + this.n(x.percentage).toFixed(2) + '% of the full load, but only '
           + x.subjectsSat + ' of ' + x.subjectsExpected + ' subjects sat — provisional.';
     });
     list.forEach(x=>{
@@ -426,8 +456,17 @@ const ReportEngine = {
         : 'No marks recorded — not ranked.';
     });
 
-    const byName = {}; list.forEach(x=>{ byName[x.name] = x; });
-    return { byName, expected, cohortSize, list };
+    const byName = {};
+    list.forEach(x=>{
+      /* byName stays the name map every caller already uses, but when two
+         learners share a name the FIRST one wins deterministically and the
+         other is reachable through list/byId — never a silent overwrite that
+         gives one child another child's position. */
+      if (!Object.prototype.hasOwnProperty.call(byName, x.name)) byName[x.name] = x;
+    });
+    const byId = {};
+    list.forEach(x=>{ if (x.studentId) byId[x.studentId] = x; });
+    return { byName, byId, expected, cohortSize, list };
   },
 
   /* V12.66 — report presentation policy. The school decides, per term and per
@@ -901,13 +940,62 @@ const ReportEngine = {
       (cellMap[key]=cellMap[key]||[]).push(e.code||e.id);
     });
     const clashes=Object.keys(cellMap).filter(k=>cellMap[k].length>1).map(k=>cellMap[k]);
+    /* V12.71 (round-15 item 11) — A REFUSAL WITHOUT A WAY OUT IS A DEAD END.
+       The batch RPC is right to refuse two exams for one cell: report_scores
+       holds one mark per (column,student,subject), so merging would silently
+       discard marks. But the school was then stuck — told what was wrong and
+       left to hand-edit each CBT one at a time. The preview now names every
+       clashing group AND offers the one click that fixes it by giving each exam
+       its own column, which is exactly what the server asks for. */
+    this._bulkCBT.clashes=clashes;
     const clashNote=clashes.length
-      ? '<div class="notice notice-error" style="margin:8px 0"><b>'+clashes.length+' group(s) of exams share one report cell.</b><br>'
-        +clashes.map(g=>g.join(' + ')).join('; ')
-        +'<br>A report column is a single cell, so pushing these together would keep only one mark per student. '
-        +'Give each exam its own <b>Report column</b> in the CBT editor, or push them separately to different columns.</div>'
+      ? '<div class="notice notice-error" style="margin:8px 0"><b>'+clashes.length+' group(s) of exams are aimed at the same report cell.</b>'
+        +'<div style="margin:6px 0 4px">'+clashes.map(g=>'<code>'+this.esc(g.join('  +  '))+'</code>').join('<br>')+'</div>'
+        +'A report column is ONE cell, so pushing these together would keep only one mark per student and silently discard the rest. '
+        +'The server refuses the batch rather than lose marks — that is why the push failed.'
+        +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
+        +'<button class="btn btn-sm btn-primary" onclick="ReportEngine.splitClashingColumns()">🔧 Give each exam its own column (fixes all '+clashes.length+' group(s))</button>'
+        +'<button class="btn btn-sm btn-outline" onclick="ReportEngine.previewBulkCBTPush&&ReportEngine.previewBulkCBTPush()">↻ Re-check</button>'
+        +'</div></div>'
       : '';
     host.innerHTML=clashNote+'<div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0"><b>'+filtered.length+' exam(s) match · '+(this._bulkCBT.countsUnknown?'server will validate result counts':filtered.reduce((a,e)=>a+(this._bulkCBT.counts[e.id]||0),0)+' result row(s)')+'</b><label><input type="checkbox" checked onchange="document.querySelectorAll(\'.be-exam:not(:disabled)\').forEach(x=>x.checked=this.checked)"> Select all</label></div><div class="table-wrap"><table><thead><tr><th>Push</th><th>Exam / purpose</th><th>Class</th><th>Subject(s)</th><th>Term / Session</th><th>Attempts</th><th>Destination</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">No exams match these filters.</td></tr>')+'</tbody></table></div><p style="font-size:.8rem;color:#64748b">One verified score per student + subject + destination is pushed. Multiple attempts use the policy chosen above. The server creates columns and writes scores under an authorized, audited transaction; duplicate rows and browser-side RLS failures are prevented.</p>';
+  },
+
+  /* Assign a distinct report_column to every exam inside a clashing group, so
+     the batch can be pushed without losing a single mark. The FIRST exam in
+     each group keeps the shared column (it already owns those marks); the rest
+     get "<column> · <code>", which is unambiguous for the school and unique for
+     the database. Nothing is pushed here — the bursar still reviews and presses
+     Push, so this cannot commit a mark on its own. */
+  async splitClashingColumns(){
+    const self=this; const clashes=(this._bulkCBT&&this._bulkCBT.clashes)||[];
+    if(!clashes.length){ toast('Nothing to split.','info'); return; }
+    const sb2=this.sb||window.sb||(typeof sb!=='undefined'?sb:null);
+    if(!sb2){ toast('Database not configured','warning'); return; }
+    if(!confirm('Give each exam its own report column?\n\nThis only renames the destination column on the exams below; it does not push any mark. The first exam in each group keeps the column it already uses.')) return;
+    const exams=(this._bulkCBT.filtered||[]);
+    let changed=0; const problems=[];
+    for(const group of clashes){
+      for(let i=1;i<group.length;i++){
+        const code=group[i];
+        const exam=exams.find(e=>String(e.code||e.id)===String(code));
+        if(!exam){ problems.push(code+': not in the current list'); continue; }
+        const base=(exam.report_column||'CBT / Online Exam').split(' · ')[0];
+        const target=base+' · '+String(code);
+        const r=await sb2.from('cbt_exams').update({report_column:target}).eq('id',exam.id).select('id');
+        if(r.error||!r.data||!r.data.length){ problems.push(code+': '+(r.error?r.error.message:'not saved (permission?)')); continue; }
+        exam.report_column=target; changed++;
+      }
+    }
+    if(changed){ toast('🔧 '+changed+' exam(s) now have their own report column. Review the list, then push.','success',9000); }
+    if(problems.length){
+      openModal('Some exams could not be re-columned',
+        '<div class="notice notice-error"><b>'+problems.length+' exam(s) were not changed.</b></div>'
+        +'<ul style="font-size:.85rem">'+problems.map(p=>'<li>'+this.esc(p)+'</li>').join('')+'</ul>'
+        +'<p style="font-size:.82rem;color:#475569">Open those CBTs in the editor and set a Report column by hand, or push them individually.</p>',
+        '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
+    }
+    try{ this.previewBulkCBTPush(); }catch(_){}
   },
 
   async pushOneCBTExam(exam,targetName,opts){
@@ -950,7 +1038,19 @@ const ReportEngine = {
     }catch(e){
       if(btn){btn.disabled=false;btn.textContent='Push selected exams now';}
       // The batch RPC is transaction-scoped: an error means no part of this batch committed.
-      openModal('❌ Bulk push not committed','<div class="notice notice-error"><b>No scores from this batch were committed.</b><br>'+this.esc(e.message||e)+'</div><p>Correct the destination, role or eligible-result issue and retry. Existing CBT attempts and report rows are preserved.</p>','<button class="btn btn-outline" onclick="closeModal()">Close</button>');
+      {
+        const msg=String(e.message||e);
+        const isConflict=/destination_conflict|single cell|same report column|keep only ONE/i.test(msg)||/would keep only one of the marks/i.test(msg);
+        openModal('❌ Bulk push not committed',
+          '<div class="notice notice-error"><b>Nothing was written — your existing marks are untouched.</b><br>'+this.esc(msg)+'</div>'
+          +(isConflict
+            ? '<p style="font-size:.86rem">Two or more of the exams you selected are aimed at <b>one</b> report column. That column holds one mark per pupil, so they cannot be pushed together without discarding marks — the server refused the whole batch rather than lose them.</p>'
+              +'<p style="font-size:.86rem"><b>One click fixes it:</b> each exam gets its own column, then you push again.</p>'
+            : '<p style="font-size:.86rem">Correct the destination, role or eligible-result issue and retry. Existing CBT attempts and report rows are preserved.</p>'),
+          (isConflict
+            ? '<button class="btn btn-outline" onclick="closeModal()">Close</button> <button class="btn btn-primary" onclick="closeModal();ReportEngine.splitClashingColumns()">🔧 Give each exam its own column</button>'
+            : '<button class="btn btn-outline" onclick="closeModal()">Close</button>'));
+      }
     }
   },
 
