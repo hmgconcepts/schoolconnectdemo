@@ -63,8 +63,13 @@ const Q = {
   columns: `select table_name||'.'||column_name as k, data_type, udt_name,
                    is_nullable, coalesce(column_default,'') as def, coalesce(character_maximum_length::text,'') as len
             from information_schema.columns where table_schema='public' order by 1`,
+  /* V12.72 — hash the function body with WHITESPACE NORMALISED.
+     The build de-indents SQL to fit Supabase's 1 MB limit; that changes
+     pg_get_functiondef() byte-for-byte while the function stays identical.
+     Comparing raw whitespace would fail on a purely cosmetic difference and
+     hide a real one, so the comparison is made on the tokens. */
   functions: `select p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' as sig,
-                     md5(pg_get_functiondef(p.oid)) as body
+                     pg_get_functiondef(p.oid) as body
               from pg_proc p join pg_namespace n on n.oid=p.pronamespace
               where n.nspname='public' order by 1`,
   views: `select viewname as name from pg_views where schemaname='public' order by 1`,
@@ -93,7 +98,28 @@ async function dump(db) {
   for (const [k, sql] of Object.entries(Q)) {
     try {
       const r = await db.query(sql);
-      out[k] = r.rows.map(row => JSON.stringify(row));
+      out[k] = r.rows.map(row => {
+        /* V12.72 — the build de-indents SQL to fit Supabase's 1 MB editor
+           limit, which changes pg_get_functiondef() formatting while every
+           function stays identical. Compare FUNCTIONS on their tokens, not
+           on their leading spaces, so a cosmetic difference cannot mask a
+           real one and cannot fail the gate either. */
+        if (k === 'functions' && row.body) {
+          /* V12.73 — the build also shortens long COMMENT blocks inside a
+             function body to stay under the 1 MB cap. A comment is not a schema
+             object: Postgres stores the body text verbatim, and no query result
+             can differ because a `-- ...` line is shorter. Strip comment lines
+             before comparing so the gate measures behaviour, not prose. */
+          const code = String(row.body)
+            .split('\n')
+            .filter(ln => !ln.trim().startsWith('--'))
+            .join('\n')
+            .replace(/\s+/g, ' ')
+            .trim();
+          row = { ...row, body: code };
+        }
+        return JSON.stringify(row);
+      });
     } catch (e) {
       out[k] = ['ERR:' + e.message];
     }
