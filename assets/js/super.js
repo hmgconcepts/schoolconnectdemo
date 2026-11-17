@@ -703,9 +703,185 @@ const Super = {
     faceBox(opts){
       const mmW=Number(opts&&opts.widthMm), mmH=Number(opts&&opts.heightMm),
             pxW=Number(opts&&opts.widthPx), pxH=Number(opts&&opts.heightPx);
-      if(mmW>0&&mmH>0) return {w:Math.round(mmW*96/25.4)+'px',h:Math.round(mmH*96/25.4)+'px',k:Math.min(mmW*96/25.4/340,mmH*96/25.4/220)};
-      if(pxW>0&&pxH>0) return {w:Math.round(pxW)+'px',h:Math.round(pxH)+'px',k:Math.min(pxW/340,pxH/220)};
+      if(mmW>0&&mmH>0){const w=Math.round(mmW*96/25.4),h=Math.round(mmH*96/25.4);
+        return {w:w+'px',h:h+'px',pxW:w,pxH:h,k:Math.min(w/340,h/220)};}
+      if(pxW>0&&pxH>0){const w=Math.round(pxW),h=Math.round(pxH);
+        return {w:w+'px',h:h+'px',pxW:w,pxH:h,k:Math.min(w/340,h/220)};}
       return null; /* no size supplied: the template keeps its own width */
+    },
+    /* ================================================================
+       V12.75 (round-19 items 1 & 2) — A FACE MUST FIT ITS BOX.
+       ----------------------------------------------------------------
+       pairHtml() gave each face the right OUTER box but never scaled the
+       CONTENT, so every template kept drawing on its own design canvas
+       inside a smaller box: the front was clipped, the QR slid over the
+       initial-letter tile, names ghosted behind rows and the two faces
+       still looked like different shapes even though their boxes matched.
+       (Measured before the fix: premium landscape ran 274px past the
+       bottom of a 204px face; premium portrait overran by 139px across.)
+       fitFace() renders the front on a canvas that is first RETUNED to the
+       card's own aspect ratio, then scales that canvas - uniformly, never
+       cropped, never distorted - into the exact box the back is drawn in.
+       One function serves the preview, the HTML print path and the proof
+       sheet, so all three can never disagree again.
+       ================================================================ */
+    _fitCache: {},
+    _hash(str){
+      let h=5381; const s=String(str);
+      for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; }
+      return (h>>>0).toString(36)+'-'+s.length;
+    },
+    /* force the outer card element to an exact design width */
+    cardAt(html, w){
+      const px=Math.max(80,Math.round(Number(w)||0));
+      return String(html).replace(/(<div class="sc-idcard"[^>]*?style=")([^"]*)(")/, function(all,a,style,b){
+        let st=/width:/.test(style) ? style.replace(/(^|;)\s*width:[^;]*/, '$1width:'+px+'px')
+                                    : style+';width:'+px+'px';
+        return a+st+b;
+      });
+    },
+    _probeHost(){
+      if(typeof document==='undefined'||!document.body) return null;
+      let host=document.getElementById('sc-idcard-fit-probe');
+      if(!host){
+        host=document.createElement('div'); host.id='sc-idcard-fit-probe';
+        host.setAttribute('aria-hidden','true');
+        host.style.cssText='position:absolute!important;left:-100000px!important;top:0!important;'
+          +'width:2000px;height:0;overflow:visible;visibility:hidden;pointer-events:none;z-index:-1';
+        document.body.appendChild(host);
+      }
+      return host;
+    },
+    /* V12.75 — a self-contained stylesheet carried BY THE FACE ITSELF.
+       It travels with the markup into the print window and the PDF preview,
+       so it can never be "forgotten" by a page. Every rule is scoped to
+       .sc-idcard-face. Its job: make card text wrap instead of pushing rows
+       out of a narrow (portrait) card, which is what clipped "ADMITTED 2020"
+       and "BLOOD GROUP" against the right edge. */
+    faceCss(){
+      return '<style>'
+        +'.sc-idcard-face,.sc-idcard-face *{box-sizing:border-box}'
+        +'.sc-idcard-face table{width:100%;table-layout:fixed;border-collapse:collapse}'
+        +'.sc-idcard-face td,.sc-idcard-face th{white-space:normal!important;overflow-wrap:anywhere;word-break:break-word}'
+        +'.sc-idcard-face img{max-width:100%}'
+        /* V12.75 — on a NARROW canvas (a portrait card) a row of fixed-size
+           blocks - photo, detail table, QR - used to punch straight through
+           the right edge. Letting the card's own flex rows wrap reflows the
+           design into the space it has instead of clipping it. On a wide
+           canvas nothing wraps, because nothing needs to. */
+        +'.sc-idcard-face .sc-idcard div[style*="flex"]{flex-wrap:wrap}'
+        +'.sc-idcard-face .sc-idcard div{min-width:0}'
+        +'.sc-idcard-face .sc-idcard-scale{contain:paint}'
+        +'</style>';
+    },
+    /* natural (unscaled) size of a front template at a given canvas width */
+    measureCard(html, w){
+      const host=this._probeHost(); if(!host) return null;
+      try{
+        /* V12.75 — the probe MUST live inside a real .sc-idcard-face, because
+           faceCss() scopes the card's reflow rules (flex-wrap) to that class.
+           Measuring outside it produced a short card while the rendered one
+           wrapped and grew - the canvas was then far too small and the card
+           spilled 400px out of the bottom of a portrait face. */
+        host.innerHTML=this.faceCss()
+          +'<div class="sc-idcard-face" style="width:2000px;height:auto;min-width:0;min-height:0;max-width:none;max-height:none;overflow:visible;position:relative">'
+          +(w>0?this.cardAt(html,w):html)+'</div>';
+        const c=host.querySelector('.sc-idcard'); if(!c) return null;
+        c.style.setProperty('max-width','none','important');
+        c.style.setProperty('margin','0','important');
+        const r=c.getBoundingClientRect();
+        /* the OUTER box is what the eye sees, but `width:` in the template's
+           style is the CONTENT box for most templates (2px borders, padding).
+           Keep the difference so the scaled canvas cannot come out a few
+           pixels wider than the face and clip its own border. */
+        const pad=Math.max(0, Math.round(r.width - (w>0?w:Math.round(r.width))));
+        /* horizontal overflow = content wider than the card at this width.
+           A width that clips is never an acceptable canvas. */
+        const over=Math.max(0, Math.round(c.scrollWidth-c.clientWidth));
+        const out={w:Math.round(r.width),h:Math.round(r.height),pad:pad,over:over};
+        return (out.w>0&&out.h>0)?out:null;
+      }finally{ host.innerHTML=''; }
+    },
+    /* the design canvas the template needs so its own proportions match the card */
+    fitCanvas(html, aspect){
+      const key=this._hash(html)+'@'+aspect.toFixed(4);
+      if(this._fitCache[key]) return this._fitCache[key];
+      let m=this.measureCard(html,0);
+      if(!m) return null;
+      /* V12.75 — A DESIGN IS WIDENED, NEVER SQUEEZED.
+         Widening a flex layout to match a wide card is free: the rows simply
+         have more room. Narrowing one below the width it was drawn for makes
+         its photo, table and QR fight for space, and the result reads as a
+         mangled card even when nothing technically overflows. So the canvas
+         may only grow past its natural width; when the card is the other way
+         round the design keeps its own width and sits centred inside the card,
+         which the page explains in words and offers to fix in one click. */
+      const naturalW=m.w;
+      let W=m.w, H=m.h, best={W:W,H:H,pad:m.pad||0,over:m.over||0,err:Math.abs(H*aspect-W)};
+      for(let i=0;i<4;i++){
+        let target=Math.max(naturalW,Math.min(1600,Math.round(H*aspect)));
+        if(Math.abs(target-W)<=1) break;
+        let n=this.measureCard(html,target); if(!n) break;
+        /* a canvas narrower than the design can fold is a canvas that clips:
+           widen until nothing sticks out, or give up on narrowing. */
+        let guard=0;
+        while(n.over>1 && guard++<6){
+          target=Math.round(target*1.15);
+          const wider=this.measureCard(html,target); if(!wider) break;
+          n=wider;
+          if(n.over<=1) break;
+        }
+        W=n.w; H=n.h;
+        const err=Math.abs(H*aspect-W);
+        if(n.over<=1 && err<best.err) best={W:W,H:H,pad:n.pad||0,over:n.over,err:err};
+        if(n.over<=1 && err<=1) break;
+      }
+      /* keep the cache small: the preview re-renders on every keystroke */
+      const keys=Object.keys(this._fitCache);
+      if(keys.length>60) delete this._fitCache[keys[0]];
+      this._fitCache[key]=best;
+      return best;
+    },
+    /* scale one finished face into exactly `box` without cropping it */
+    fitFace(html, box, faceName){
+      const FACE=faceName||'front';
+      if(!box||!(box.pxW>0)||!(box.pxH>0)) return html;
+      const canvas=this.fitCanvas(html, box.pxW/box.pxH);
+      if(!canvas||!canvas.W||!canvas.H){
+        /* cannot measure (no DOM yet): still never overflow the box */
+        return this.faceCss()+'<div class="sc-idcard-face" data-face="'+FACE+'" style="width:'+box.w+';height:'+box.h+
+          ';position:relative;overflow:hidden;background:#fff;box-sizing:border-box">'+html+'</div>';
+      }
+      /* 0.998 absorbs sub-pixel rounding: a tenth of a percent of inset is
+         invisible, a clipped border is not. */
+      const s=Math.min(box.pxW/canvas.W, box.pxH/canvas.H)*0.998;
+      const cw=Math.round(canvas.W*s), ch=Math.round(canvas.H*s);
+      /* V12.75 — the page can read this to TELL the user when a design cannot
+         fill the chosen card shape. A card that is silently 40% empty is a
+         silent failure; a card that says why is not. */
+      if(FACE==='front') this.lastFit={fillW:+(cw/box.pxW).toFixed(3), fillH:+(ch/box.pxH).toFixed(3),
+                    canvasW:canvas.W, canvasH:canvas.H, box:box};
+      const left=Math.round((box.pxW-cw)/2), top=Math.round((box.pxH-ch)/2);
+      /* set the CONTENT width so the card's OUTER box is exactly canvas.W */
+      const contentW=Math.max(80, Math.round(canvas.W-(canvas.pad||0)));
+      /* the letterbox (if the design simply cannot match the card shape)
+         takes the card's own background colour, so it reads as margin */
+      const rootStyle=(String(html).match(/<div class="sc-idcard"[^>]*?style="([^"]*)"/)||[])[1]||'';
+      const bg=(rootStyle.match(/(?:^|;)\s*background(?:-color)?:\s*([^;]+)/)||[])[1]||'#fff';
+      const radius=(rootStyle.match(/(?:^|;)\s*border-radius:\s*([^;]+)/)||[])[1]||'0';
+      return this.faceCss()+'<div class="sc-idcard-face" data-face="'+FACE+'" style="width:'+box.w+';height:'+box.h+
+        ';min-width:'+box.w+';min-height:'+box.h+';max-width:'+box.w+';max-height:'+box.h+
+        ';position:relative;overflow:hidden;background:'+bg.trim()+';border-radius:'+radius.trim()+
+        ';box-sizing:border-box">'
+        +'<div class="sc-idcard-scale" style="position:absolute;left:'+left+'px;top:'+top+'px;width:'+canvas.W+
+        'px;height:'+canvas.H+'px;transform:scale('+s.toFixed(5)+');transform-origin:top left">'
+        +this.cardAt(html,contentW)+'</div></div>';
+    },
+    /* the ONE front-face renderer used by the preview, print and PDF screens */
+    frontFace(person, opts){
+      const box=this.faceBox(opts);
+      const natural=this.html(person||{},{}); /* design canvas, no forced box */
+      return this.fitFace(natural, box);
     },
     html(person, opts) {
       const s = Super.school || {};
@@ -771,11 +947,11 @@ const Super = {
         const photoBig = photo
           ? '<img src="' + Super.esc(photo) + '" referrerpolicy="no-referrer" style="width:132px;height:150px;border-radius:14px;object-fit:cover;background:#e2e8f0" data-alt="' + Super.esc(altPhoto) + '" onerror="if(this.dataset.alt&&this.src!==this.dataset.alt){this.src=this.dataset.alt;this.dataset.alt=\'\';}else{this.onerror=null;this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';}"><div style="display:none;width:132px;height:150px;border-radius:14px;background:' + navy + ';color:#fff;align-items:center;justify-content:center;font-weight:900;font-size:3rem">' + initial + '</div>'
           : '<div style="width:132px;height:150px;border-radius:14px;background:' + navy + ';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:3rem">' + initial + '</div>';
-        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'520px')+';'+(_fit?('height:'+_fit.h+';'):'max-width:96vw;')+'border-radius:22px;overflow:hidden;background:#f4f6fb;box-shadow:0 14px 40px rgba(15,23,42,.25);font-family:\'Segoe UI\',Arial,sans-serif;border:1px solid #d8dee9">' +
+        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'520px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'max-width:96vw;')+'border-radius:22px;overflow:hidden;background:#f4f6fb;box-shadow:0 14px 40px rgba(15,23,42,.25);font-family:\'Segoe UI\',Arial,sans-serif;border:1px solid #d8dee9">' +
           '<div style="background:' + navy + ';color:#fff;display:flex;align-items:center;gap:14px;padding:16px 22px">' +
             '<img src="' + logo + '" style="width:52px;height:52px;object-fit:contain;background:#fff;border-radius:12px;padding:4px" onerror="this.style.display=\'none\'">' +
             '<div style="flex:1;min-width:0"><div style="font-weight:900;font-size:1.02rem;letter-spacing:.4px;line-height:1.15">' + Super.esc((s.name || 'SCHOOL').toUpperCase()) + '</div><div style="font-size:.66rem;opacity:.85">' + Super.esc(s.motto || '') + '</div></div>' +
-            '<div style="text-align:right"><div style="font-weight:900;font-size:1.05rem;letter-spacing:.6px">' + Super.esc((s.shortName || s.name || 'SCHOOL').toUpperCase()) + '</div><div style="font-size:.78rem;letter-spacing:2.5px;opacity:.92">' + (isStaff ? 'STAFF ID CARD' : 'STUDENT ID CARD') + '</div></div></div>' +
+            '<div style="text-align:right"><div style="font-weight:900;font-size:1.05rem;letter-spacing:.6px">' + Super.esc((s.shortName || s.name || 'SCHOOL').toUpperCase()) + '</div><div style="font-size:.78rem;letter-spacing:2.5px;opacity:.92">' + tag + '</div></div></div>' +
           '<div style="display:flex;gap:18px;padding:20px 22px;background:#fdfdfd;align-items:flex-start">' +
             '<div style="flex-shrink:0">' + photoBig + '</div>' +
             '<div style="flex:1;min-width:0;padding-top:4px">' +
@@ -808,7 +984,7 @@ const Super = {
 
       // 1) EXECUTIVE — gold-trimmed dark green, embassy style
       if (tpl === 'executive') {
-        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'420px')+';'+(_fit?('height:'+_fit.h+';'):'')+'border-radius:16px;overflow:hidden;background:#0b3d2e;color:#f8fafc;font-family:Georgia,serif;box-shadow:0 12px 30px rgba(0,0,0,.3);border:2px solid #c9a227">' +
+        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'420px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'')+'border-radius:16px;overflow:hidden;background:#0b3d2e;color:#f8fafc;font-family:Georgia,serif;box-shadow:0 12px 30px rgba(0,0,0,.3);border:2px solid #c9a227">' +
           '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:2px solid #c9a227"><img src="' + logo + '" style="width:42px;height:42px;border-radius:8px;background:#fff;padding:3px;object-fit:contain" onerror="this.style.display=\'none\'"><div><strong style="font-size:.95rem;letter-spacing:.5px">' + Super.esc((s.name||'SCHOOL').toUpperCase()) + '</strong><div style="font-size:.6rem;color:#c9a227;letter-spacing:2px">' + tag + '</div></div></div>' +
           '<div style="display:flex;gap:14px;padding:14px 16px;align-items:center">' + miniPhoto(96,112,10) +
           '<div style="flex:1"><div style="font-weight:800;font-size:1.05rem;color:#fff">' + Super.esc(person.full_name||'') + '</div><table style="font-size:.72rem;margin-top:5px;border-collapse:collapse;color:#d1fae5">' + detailRows.replace(/#64748b/g,'#a7f3d0') + '</table></div>' +
@@ -818,7 +994,7 @@ const Super = {
       }
       // 2) MINIMAL — clean white, thin accent line, Swiss typography
       if (tpl === 'minimal') {
-        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'400px')+';'+(_fit?('height:'+_fit.h+';'):'')+'border-radius:14px;overflow:hidden;background:#fff;border:1px solid #e2e8f0;font-family:Helvetica,Arial,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.08)">' +
+        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'400px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'')+'border-radius:14px;overflow:hidden;background:#fff;border:1px solid #e2e8f0;font-family:Helvetica,Arial,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.08)">' +
           '<div style="height:6px;background:' + pc + '"></div>' +
           '<div style="padding:16px 18px;display:flex;gap:14px;align-items:flex-start">' + miniPhoto(84,100,8) +
           '<div style="flex:1;min-width:0"><div style="font-size:.6rem;letter-spacing:2.5px;color:' + pc + ';font-weight:700">' + Super.esc((s.name||'SCHOOL').toUpperCase()) + ' · ' + tag + '</div>' +
@@ -829,7 +1005,7 @@ const Super = {
       }
       // 3) GRADIENT — vibrant diagonal gradient, modern student card
       if (tpl === 'gradient') {
-        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'400px')+';'+(_fit?('height:'+_fit.h+';'):'')+'border-radius:18px;overflow:hidden;background:linear-gradient(120deg,' + pc + ' 0%,' + ac + ' 100%);color:#fff;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 12px 28px rgba(0,0,0,.25)">' +
+        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'400px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'')+'border-radius:18px;overflow:hidden;background:linear-gradient(120deg,' + pc + ' 0%,' + ac + ' 100%);color:#fff;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 12px 28px rgba(0,0,0,.25)">' +
           '<div style="display:flex;align-items:center;gap:10px;padding:14px 16px"><img src="' + logo + '" style="width:40px;height:40px;border-radius:10px;background:#fff;padding:3px;object-fit:contain" onerror="this.style.display=\'none\'"><div style="flex:1"><strong>' + Super.esc(s.name||'School') + '</strong><div style="font-size:.62rem;opacity:.9;letter-spacing:1.5px">' + tag + '</div></div></div>' +
           '<div style="background:rgba(255,255,255,.94);color:#0f172a;margin:0 12px;border-radius:14px;padding:12px;display:flex;gap:12px;align-items:center">' + miniPhoto(80,96,10) +
           '<div style="flex:1"><div style="font-weight:800;font-size:1.05rem">' + Super.esc(person.full_name||'') + '</div><table style="font-size:.72rem;border-collapse:collapse">' + detailRows + '</table></div>' + qrImg(58) + '</div>' +
@@ -838,7 +1014,10 @@ const Super = {
       }
       // 4) BADGE — conference-style portrait badge with big name
       if (tpl === 'badge') {
-        return '<div class="sc-idcard" style="width:280px;border-radius:16px;overflow:hidden;background:#fff;border:1px solid #e2e8f0;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 10px 26px rgba(0,0,0,.16);text-align:center">' +
+        /* V12.74 FIX (ID-03): badge used to hardcode width:280px, so it
+           ignored the finished card size entirely and a badge-style front
+           could never match its back. It now fills the box it is given. */
+        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'280px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'')+'border-radius:16px;overflow:hidden;background:#fff;border:1px solid #e2e8f0;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 10px 26px rgba(0,0,0,.16);text-align:center">' +
           '<div style="background:' + pc + ';color:#fff;padding:10px"><img src="' + logo + '" style="width:36px;height:36px;border-radius:8px;background:#fff;padding:2px;object-fit:contain" onerror="this.style.display=\'none\'"><div style="font-weight:800;font-size:.8rem;margin-top:3px">' + Super.esc((s.name||'SCHOOL').toUpperCase()) + '</div></div>' +
           '<div style="margin:-1px auto 0;background:' + ac + ';color:#fff;font-size:.58rem;letter-spacing:2px;padding:3px 0;font-weight:700">' + tag + '</div>' +
           '<div style="padding:14px 12px 6px;display:flex;flex-direction:column;align-items:center">' + miniPhoto(110,110,999) +
@@ -850,7 +1029,7 @@ const Super = {
       }
       // 5) SMART — fintech-style card with chip + wave pattern
       if (tpl === 'smart') {
-        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'400px')+';'+(_fit?('height:'+_fit.h+';'):'')+'border-radius:20px;overflow:hidden;position:relative;background:#111827;color:#e5e7eb;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 14px 34px rgba(0,0,0,.35)">' +
+        return '<div class="sc-idcard" style="width:'+(_fit?_fit.w:'400px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'')+'border-radius:20px;overflow:hidden;position:relative;background:#111827;color:#e5e7eb;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 14px 34px rgba(0,0,0,.35)">' +
           '<div style="position:absolute;inset:0;background:radial-gradient(circle at 85% 15%,' + ac + '33,transparent 45%),radial-gradient(circle at 10% 90%,' + pc + '44,transparent 50%)"></div>' +
           '<div style="position:relative;padding:16px 18px">' +
           '<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;gap:8px;align-items:center"><img src="' + logo + '" style="width:34px;height:34px;border-radius:8px;background:#fff;padding:2px;object-fit:contain" onerror="this.style.display=\'none\'"><strong style="font-size:.85rem">' + Super.esc(s.name||'School') + '</strong></div><span style="font-size:.55rem;letter-spacing:2px;color:' + ac + ';font-weight:800">' + tag + '</span></div>' +
@@ -874,7 +1053,9 @@ const Super = {
 
       // VERTICAL (portrait, lanyard-style) professional template (issue 3)
       if (tpl === 'vertical') {
-        return '<div class="sc-idcard" style="position:relative;width:300px;border-radius:18px;overflow:hidden;border:1px solid #e2e8f0;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.18);background:#fff">' +
+        /* V12.74 FIX (ID-03): vertical used to hardcode width:300px, so it
+           ignored the finished card size and could never match its back. */
+        return '<div class="sc-idcard" style="position:relative;width:'+(_fit?_fit.w:'300px')+';'+(_fit?('height:'+_fit.h+';box-sizing:border-box;'):'')+'border-radius:18px;overflow:hidden;border:1px solid #e2e8f0;font-family:\'Segoe UI\',Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.18);background:#fff">' +
           '<div style="height:14px;background:linear-gradient(90deg,' + pc + ',' + ac + ')"></div>' +
           '<div style="text-align:center;padding:14px 14px 0"><img src="' + logo + '" style="width:46px;height:46px;border-radius:10px;object-fit:contain" onerror="this.style.display=\'none\'">' +
           '<div style="font-weight:800;color:#0f172a;margin-top:4px;line-height:1.15">' + Super.esc(s.name || 'School') + '</div>' +
@@ -1202,22 +1383,52 @@ const Super = {
       }
       return inner;
     },
-    /* Front + back pair, laid side-by-side for printing & cutting (or duplex). */
-    pairHtml(person) {
-      return '<div style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;justify-content:center">' +
-        '<div>' + this.html(person) + '</div>' +
-        '<div style="display:flex;align-items:stretch">' + this.backHtml(person) + '</div></div>';
+    /* Front + back pair, laid side-by-side for printing & cutting (or duplex).
+       V12.74 FIX (ID-01): this used to declare (person) only, so every caller
+       that passed the finished card size — e.g. ICUI.render() calling
+       pairHtml(p, faceOpts()) — had its opts silently discarded by
+       JavaScript. The front then fell back to its historic auto width and
+       the back to its own 340x214 default, so one card printed in two
+       different shapes. opts is now carried into BOTH faces, which is the
+       only way they can be guaranteed identical. */
+    pairHtml(person, opts) {
+      opts = opts || {};
+      /* V12.74 FIX (ID-04): if no size is supplied at all, still produce one
+         box for both faces, so a caller that forgets opts cannot get an
+         auto-height front beside a fixed-ratio back. */
+      if (!this.faceBox(opts)) {
+        const portrait = this.backAspect(opts) === 'portrait';
+        opts = Object.assign({}, opts, {
+          widthMm: portrait ? 53.98 : 85.6,
+          heightMm: portrait ? 85.6 : 53.98
+        });
+      }
+      const box = this.faceBox(opts);
+      /* V12.75 (round-19 item 1): BOTH faces are now built by a renderer that
+         owns the physical box. The front is fitted (never clipped) and the back
+         draws itself into the same box, so orientation and size are identical
+         by construction rather than by hope. */
+      const front = this.fitFace(this.html(person, {}), box, 'front');
+      const back  = this.fitFace(this.backHtml(person, opts), box, 'back');
+      return '<div class="sc-idcard-pair" style="display:flex;gap:14px;align-items:stretch;flex-wrap:wrap;justify-content:center">' +
+        '<div style="display:flex;align-items:stretch">' + front + '</div>' +
+        '<div style="display:flex;align-items:stretch">' + back + '</div></div>';
     },
     print(person) {
       // Route direct callers through the fixed-mm one-student pipeline whenever
       // the ID Cards UI exists; retain a standard ID-1 fallback for other pages.
       person=person||{};if(!person.full_name&&!person.name)person.full_name='Sample Student';if(!person.admission_no&&!person.staff_no&&!person.id)person.admission_no='SAMPLE-ID';
       if(window.ICUI&&typeof window.ICUI.printCards==='function')return window.ICUI.printCards([person],'ID Card');
-      const front=this.html(person),back=this.backHtml(person),w=window.open('','_blank');
+      /* V12.74 FIX (ID-01): the print pair must use the SAME finished size as
+         the on-screen pair, otherwise the printed card disagrees with the
+         preview. Prefer the explicit mm the page knows about. */
+      const _po=(window.ICUI&&typeof window.ICUI.faceOpts==='function')?window.ICUI.faceOpts():{};
+      const _pbox=this.faceBox(_po)||{w:'324px',h:'204px'};
+      const front=this.frontFace(person,_po),back=this.backHtml(person,_po),w=window.open('','_blank');
       if(!w){if(typeof toast==='function')toast('Popup blocked. Allow pop-ups to print ID cards.','warning');return;}
       const base=document.baseURI?document.baseURI.replace(/[^/]*$/,''):'';const closeScript='</'+'script>';
       const js='window.addEventListener("load",function(){var imgs=[...document.images],wait=Promise.all(imgs.map(function(i){return i.complete?Promise.resolve():new Promise(function(r){i.onload=r;i.onerror=r})}));wait.then(function(){document.querySelectorAll(".face").forEach(function(f){var c=f.querySelector(".sc-idcard"),b=f.querySelector(".inner");if(!c||!b)return;c.style.maxWidth="none";var r=c.getBoundingClientRect(),scale=Math.min(f.clientWidth/r.width,f.clientHeight/r.height);b.style.width=r.width+"px";b.style.height=r.height+"px";b.style.transform="scale("+scale+")";b.style.left=((f.clientWidth-r.width*scale)/2)+"px";b.style.top=((f.clientHeight-r.height*scale)/2)+"px"});setTimeout(function(){window.print()},300)});setTimeout(function(){window.print()},4500)});';
-      w.document.open();w.document.write('<!doctype html><html><head><title>ID Card</title><base href="'+base+'"><style>@page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0}.sheet{width:190mm;height:277mm;display:flex;align-items:center;justify-content:center;break-after:page}.pair{display:flex;gap:4mm}.face{width:85.6mm;height:53.98mm;position:relative;overflow:hidden;border-radius:3.18mm;background:#fff}.inner{position:absolute;transform-origin:top left}.inner>.sc-idcard{max-width:none!important;margin:0!important;box-shadow:none!important}</style></head><body><section class="sheet"><div class="pair"><div class="face"><div class="inner">'+front+'</div></div><div class="face"><div class="inner">'+back+'</div></div></div></section><script>'+js+closeScript+'</body></html>');w.document.close();
+      w.document.open();w.document.write('<!doctype html><html><head><title>ID Card</title><base href="'+base+'"><style>@page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0}.sheet{width:190mm;height:277mm;display:flex;align-items:center;justify-content:center;break-after:page}.pair{display:flex;gap:4mm}.face{width:'+_po.widthMm+'mm;height:'+_po.heightMm+'mm;position:relative;overflow:hidden;border-radius:3.18mm;background:#fff}.inner{position:absolute;transform-origin:top left}.inner>.sc-idcard{max-width:none!important;margin:0!important;box-shadow:none!important}</style></head><body><section class="sheet"><div class="pair"><div class="face"><div class="inner">'+front+'</div></div><div class="face"><div class="inner">'+back+'</div></div></div></section><script>'+js+closeScript+'</body></html>');w.document.close();
     }
   },
 
