@@ -4,9 +4,9 @@
 <script>/* School Connect V12.23 pre-paint theme — robust like Fleet Console + Adewale — runs synchronously before CSS to avoid FOUC */(function(){try{var m=null;try{m=localStorage.getItem('sc-theme');}catch(e){}if(!m){try{m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){m='light';}}m=(m==='dark'?'dark':'light');document.documentElement.setAttribute('data-theme',m);document.documentElement.dataset.theme=m;try{var c=JSON.parse(localStorage.getItem('sc-theme-colors')||'null');if(c&&c.primary){var r=document.documentElement.style;r.setProperty('--primary',c.primary);r.setProperty('--sc-primary',c.primary);if(c.accent){r.setProperty('--accent',c.accent);r.setProperty('--sc-accent',c.accent);r.setProperty('--gradient','linear-gradient(135deg,'+c.primary+' 0%,'+c.accent+' 100%)');}}}catch(e){}}catch(e){}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Sign in • School Connect Demonstration College</title>
-<meta name="description" content="School Connect Demonstration College — Sign in. Comprehensive school management platform.">
-<meta name="keywords" content="School Connect Demonstration College, school management, SCD, HMG Concepts">
+<title>Sign in • God of Seed Academy</title>
+<meta name="description" content="God of Seed Academy — Sign in. Comprehensive school management platform.">
+<meta name="keywords" content="God of Seed Academy, school management, GoSA, HMG Concepts">
 <meta name="theme-color" content="#0506ae">
 <link rel="canonical" href="./login.html">
 <meta property="og:url" content="./login.html">
@@ -18,8 +18,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-<meta property="og:title" content="Sign in • School Connect Demonstration College">
-<meta property="og:description" content="School Connect Demonstration College — Free school management by HMG Concepts">
+<meta property="og:title" content="Sign in • God of Seed Academy">
+<meta property="og:description" content="God of Seed Academy — Free school management by HMG Concepts">
 <meta property="og:image" content="assets/img/logo-512.jpg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -67,7 +67,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
     <meta name="author" content="HMG Concepts">
 </head>
-<body data-theme="theme15" data-school="School Connect Demonstration College" data-font="plusjakarta">
+<body data-theme="theme15" data-school="God of Seed Academy" data-font="plusjakarta">
 
 <div id="notif-bell" class="notif-bell" title="Notifications" data-chatbot>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -85,7 +85,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
   <div class="pwa-install-header">
     <img src="assets/img/logo-512.png" alt="" class="pwa-install-icon">
     <div style="flex:1">
-      <div class="pwa-install-title">📲 Install SCD</div>
+      <div class="pwa-install-title">📲 Install GoSA</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
     </div>
     <button class="modal-close" data-pwa-action="dismiss" title="Dismiss">×</button>
@@ -110,16 +110,16 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 <div class="login-shell" style="min-height:100vh;background:var(--gradient);display:flex;align-items:center;justify-content:center;padding:40px 20px">
   <div class="login-card" style="background:white;padding:40px;border-radius:24px;box-shadow:var(--shadow-xl);max-width:440px;width:100%">
     <div style="text-align:center;margin-bottom:32px">
-      <img src="assets/img/logo-512.png" alt="School Connect Demonstration College logo" style="width:64px;height:64px;margin:0 auto 16px;border-radius:14px;object-fit:contain">
-      <h1 style="font-size:1.8rem;font-weight:900;color:var(--dark);margin-bottom:4px">School Connect Demonstration College</h1>
-      <p style="color:var(--gray-600);font-size:0.95rem">A fully simulated school — explore every feature</p>
+      <img src="assets/img/logo-512.png" alt="God of Seed Academy logo" style="width:64px;height:64px;margin:0 auto 16px;border-radius:14px;object-fit:contain">
+      <h1 style="font-size:1.8rem;font-weight:900;color:var(--dark);margin-bottom:4px">God of Seed Academy</h1>
+      <p style="color:var(--gray-600);font-size:0.95rem">Excellence in Learning and Character</p>
     </div>
     <div id="auth-tabs" style="display:flex;gap:8px;background:var(--gray-100);padding:4px;border-radius:12px;margin-bottom:24px">
       <button class="btn btn-primary" id="tab-signin" onclick="App.switchAuthTab('signin')" style="flex:1">Sign in</button>
       <button class="btn btn-outline" id="tab-signup" onclick="App.switchAuthTab('signup')" style="flex:1">Request access</button>
     </div>
     <form id="signin-form" onsubmit="App.handleSignIn(event)" class="form">
-      <div class="form-group"><label>Email or Student/Staff ID</label><input class="form-input" type="text" name="email" placeholder="you@example.com or SCD/2026/0001" autocapitalize="none" required></div>
+      <div class="form-group"><label>Email or Student/Staff ID</label><input class="form-input" type="text" name="email" placeholder="you@example.com or GoSA/2026/0001" autocapitalize="none" required></div>
       <div class="form-group"><label>Password</label><input class="form-input" type="password" name="password" required minlength="8"></div>
       <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
       <p style="text-align:right;margin:10px 0 0"><a href="forgot-password.html">Forgot password?</a></p>
@@ -137,7 +137,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
           <option value="admin">Admin</option>
         </select>
       </div>
-      <div class="form-group" id="su-adm-wrap" style="display:none"><label>Admission No (if student — for automatic re-link after disaster recovery)</label><input class="form-input" name="admission_no" placeholder="e.g. SCD/2024/001"><small style="color:var(--gray-500)">V12.6: if you are an existing student whose school recovered from Drive, enter your admission number — your old results, fees and ID photo will re-link automatically when you sign up.</small></div>
+      <div class="form-group" id="su-adm-wrap" style="display:none"><label>Admission No (if student — for automatic re-link after disaster recovery)</label><input class="form-input" name="admission_no" placeholder="e.g. GoSA/2024/001"><small style="color:var(--gray-500)">V12.6: if you are an existing student whose school recovered from Drive, enter your admission number — your old results, fees and ID photo will re-link automatically when you sign up.</small></div>
       <div class="form-group" id="su-staff-wrap" style="display:none"><label>Staff No (if staff — for automatic re-link)</label><input class="form-input" name="staff_no" placeholder="e.g. STF/2024/012"><small style="color:var(--gray-500)">V12.6: existing staff enter staff number for automatic re-link.</small></div>
       <button type="submit" class="btn btn-primary" style="width:100%">Request access</button>
       <p style="margin-top:12px;font-size:0.82rem;color:var(--gray-500);text-align:center">Your account will be reviewed by the school admin before sign-in is enabled.</p>

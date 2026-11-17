@@ -81,7 +81,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     <meta property="og:description" content="Take an online CBT exam. Multi-subject support with subject tabs, anti-cheat monitoring, automatic grading, and printable certificates.">
     <meta property="og:url" content="./cbt-exam.html">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="School Connect v5 — School Connect Demonstration College">
+    <meta property="og:site_name" content="School Connect v5 — God of Seed Academy">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Take Exam • School Portal">
     <meta name="twitter:description" content="Take an online CBT exam. Multi-subject support with subject tabs, anti-cheat monitoring, automatic grading, and printable certificates.">
@@ -93,7 +93,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     <header class="card hero-card" aria-label="School examination identity">
       <div class="exam-school-name-banner" id="exam-school-name-banner">School</div>
       <div class="exam-school-head">
-        <img id="exam-school-logo" src="assets/img/logo.svg" alt="School logo">
+        <img id="exam-school-logo" src="assets/img/logo.png" alt="School logo">
         <div>
           <h1 id="exam-school-name">School</h1>
           <p class="exam-school-motto" id="exam-school-motto">Excellence in Education</p>
@@ -180,7 +180,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     set('exam-school-contact', contact || 'Official school CBT examination portal');
     const logo=$('exam-school-logo');
     if(logo){
-      logo.onerror=function(){ if(!this.dataset.fallback){this.dataset.fallback='1';this.src='assets/img/logo.svg';}else{this.style.display='none';} };
+      logo.onerror=function(){ if(!this.dataset.fallback){this.dataset.fallback='1';this.src='assets/img/logo.png';}else{this.style.display='none';} };
       logo.src=school.logo;
       logo.alt=school.name+' logo';
     }
@@ -625,7 +625,7 @@ textarea.form-input{min-height:80px;resize:vertical}
     $('e-start').addEventListener('click',()=>Exam.load(false));
   };
   Exam.identityEntry=function(data,code,message){this._pendingCode=code;this._identityReady=true;applySchoolIdentity(data&&data.school||null);const registered=String(data&&data.exam_mode||data&&data.identity_mode||'').toLowerCase()==='registered';
-    this.root().innerHTML='<div class="card"><h2>'+(registered?'🪪 Registered student verification':'🌐 Open examination identity')+'</h2><p><b>'+esc(data&&data.title||'Examination')+'</b> · '+esc(data&&data.class||'')+' · '+esc(data&&data.term||'')+' '+esc(data&&data.session||'')+'</p>'+(message?'<div class="notice notice-error">'+esc(message)+(data.error==='wrong_class'?' <br><small>Your class: '+esc(data.student_class||'')+' · Exam class: '+esc(data.exam_class||'')+'</small>':'')+'</div>':'')+(data.error==='wrong_class'?'<div class="notice" style="background:#fef3c7;border-color:#fcd34d;color:#92400e;margin-top:8px"><b>🚫 Class-restricted exam:</b> Registered CBTs can only be taken by students in the assigned class. This attempt is blocked on the server — roster, retake or resitting will not bypass it. Contact your teacher if your class is incorrect.</div>':'')+(registered?'<div class="notice" style="background:#eff6ff;border-color:#93c5fd;color:#1e3a8a">Enter only your admission number. Your official name and class will be loaded from the school register; there is no editable name field.</div><div class="form-group"><label>Admission number *</label><input class="form-input" id="e-admission" placeholder="e.g. SCD/2024/001" autofocus></div><button class="btn btn-primary" id="e-identity-start">Verify and start exam</button>':'<p>Registered students may enter an admission number to load their official identity. Other candidates can enter a display name.</p><div class="form-group"><label>Admission number (optional)</label><input class="form-input" id="e-admission" placeholder="Registered students only"></div><div class="form-group"><label>Candidate name *</label><input class="form-input" id="e-open-name" placeholder="Your full name"></div><div class="form-group"><label>Class / category (optional)</label><input class="form-input" id="e-open-class" placeholder="e.g. JSS 1A or External"></div><button class="btn btn-primary" id="e-identity-start">Start open exam</button> <button class="btn btn-outline" id="e-guest">Continue anonymously</button>')+' <button class="btn btn-outline" id="e-back-code">Change code</button></div>';
+    this.root().innerHTML='<div class="card"><h2>'+(registered?'🪪 Registered student verification':'🌐 Open examination identity')+'</h2><p><b>'+esc(data&&data.title||'Examination')+'</b> · '+esc(data&&data.class||'')+' · '+esc(data&&data.term||'')+' '+esc(data&&data.session||'')+'</p>'+(message?'<div class="notice notice-error">'+esc(message)+(data.error==='wrong_class'?' <br><small>Your class: '+esc(data.student_class||'')+' · Exam class: '+esc(data.exam_class||'')+'</small>':'')+'</div>':'')+(data.error==='wrong_class'?'<div class="notice" style="background:#fef3c7;border-color:#fcd34d;color:#92400e;margin-top:8px"><b>🚫 Class-restricted exam:</b> Registered CBTs can only be taken by students in the assigned class. This attempt is blocked on the server — roster, retake or resitting will not bypass it. Contact your teacher if your class is incorrect.</div>':'')+(registered?'<div class="notice" style="background:#eff6ff;border-color:#93c5fd;color:#1e3a8a">Enter only your admission number. Your official name and class will be loaded from the school register; there is no editable name field.</div><div class="form-group"><label>Admission number *</label><input class="form-input" id="e-admission" placeholder="e.g. GoSA/2024/001" autofocus></div><button class="btn btn-primary" id="e-identity-start">Verify and start exam</button>':'<p>Registered students may enter an admission number to load their official identity. Other candidates can enter a display name.</p><div class="form-group"><label>Admission number (optional)</label><input class="form-input" id="e-admission" placeholder="Registered students only"></div><div class="form-group"><label>Candidate name *</label><input class="form-input" id="e-open-name" placeholder="Your full name"></div><div class="form-group"><label>Class / category (optional)</label><input class="form-input" id="e-open-class" placeholder="e.g. JSS 1A or External"></div><button class="btn btn-primary" id="e-identity-start">Start open exam</button> <button class="btn btn-outline" id="e-guest">Continue anonymously</button>')+' <button class="btn btn-outline" id="e-back-code">Change code</button></div>';
     $('e-identity-start').addEventListener('click',()=>Exam.load(false));if($('e-guest'))$('e-guest').addEventListener('click',()=>Exam.load(true));$('e-back-code').addEventListener('click',()=>Exam.codeEntry(code));
   };
 
