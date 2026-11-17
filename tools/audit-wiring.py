@@ -107,6 +107,21 @@ def check_repo(repo):
             if c in NATIVE or c in defs:
                 continue
             findings.append(f"{f.name}: handler {c}() has no definition in any script the page loads")
+        # V12.74 (round-18 item 10) — the GUARDED call idiom.
+        #   onclick="CBTUI.flushServer&&CBTUI.flushServer()"
+        # The loop above only ever captured the first identifier (CBTUI), so a
+        # button whose method was never written passed this audit, shipped, and
+        # did absolutely nothing when clicked. Every NAMESPACE.member used inside
+        # a handler is now checked against the scripts the page actually loads.
+        for m in re.finditer(r'on(?:click|change|input|submit)\s*=\s*"([^"]*)"', html):
+            for g in re.finditer(r'\b([A-Z][A-Za-z0-9_]*)\.([A-Za-z_$][\w$]*)\s*(?:\(|&&|\|\|)', m.group(1)):
+                ns, meth = g.group(1), g.group(2)
+                if meth in defs or ns in NATIVE:
+                    continue
+                if any(re.search(rf'\b{ns}\.{meth}\s*=', t) for t in texts):
+                    continue
+                findings.append(
+                    f"{f.name}: handler calls {ns}.{meth}() but no script the page loads defines it")
         # 2. ids used by scripts vs ids present
         present = set(re.findall(r'\sid="([^"]+)"', html))
         # ids created dynamically count too
