@@ -60,7 +60,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
     <meta property="og:description" content="Build printable termly report cards. Custom columns (CA1, CA2, Assignment, Project, Exam). Family-safe: parents and students see only their own.">
     <meta property="og:url" content="./report-cards.html">
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="School Connect v5 — God of Seed Academy">
+    <meta property="og:site_name" content="School Connect v5 — School Connect Demonstration College">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Report Cards • School Portal">
     <meta name="twitter:description" content="Build printable termly report cards. Custom columns (CA1, CA2, Assignment, Project, Exam). Family-safe: parents and students see only their own.">
@@ -84,7 +84,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
   <div class="pwa-install-header">
     <img src="assets/img/logo-512.png" alt="" class="pwa-install-icon">
     <div style="flex:1">
-      <div class="pwa-install-title">📲 Install GoSA</div>
+      <div class="pwa-install-title">📲 Install SCD</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
     </div>
     <button class="modal-close" data-pwa-action="dismiss" title="Dismiss">×</button>
@@ -519,6 +519,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
             <select class="form-select" id="pol-session"><option value="">All sessions</option></select></div>
           <button class="btn btn-primary" onclick="ReportPolicy.load()">Load current setting</button>
         </div>
+        <div id="pol-kind-note" style="font-size:.82rem;color:var(--gray-600);margin-bottom:6px">Editing: <b>Terminal report card</b></div>
         <div id="pol-body"><span style="color:var(--gray-500);font-size:.88rem">Choose a report type and press <b>Load current setting</b>.</span></div>
         <div id="pol-preview" style="margin-top:12px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
