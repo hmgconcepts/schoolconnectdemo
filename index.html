@@ -4,9 +4,9 @@
 <script>/* School Connect V12.23 pre-paint theme — robust like Fleet Console + Adewale — runs synchronously before CSS to avoid FOUC */(function(){try{var m=null;try{m=localStorage.getItem('sc-theme');}catch(e){}if(!m){try{m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){m='light';}}m=(m==='dark'?'dark':'light');document.documentElement.setAttribute('data-theme',m);document.documentElement.dataset.theme=m;try{var c=JSON.parse(localStorage.getItem('sc-theme-colors')||'null');if(c&&c.primary){var r=document.documentElement.style;r.setProperty('--primary',c.primary);r.setProperty('--sc-primary',c.primary);if(c.accent){r.setProperty('--accent',c.accent);r.setProperty('--sc-accent',c.accent);r.setProperty('--gradient','linear-gradient(135deg,'+c.primary+' 0%,'+c.accent+' 100%)');}}}catch(e){}}catch(e){}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>God of Seed Academy — School Portal</title>
-<meta name="description" content="God of Seed Academy — Excellence in Learning and Character. Official school portal: admissions, results, CBT exams, fees and more.">
-<meta name="keywords" content="God of Seed Academy, school management, GoSA, HMG Concepts">
+<title>School Connect Demonstration College — School Portal</title>
+<meta name="description" content="School Connect Demonstration College — A fully simulated school — explore every feature. Official school portal: admissions, results, CBT exams, fees and more.">
+<meta name="keywords" content="School Connect Demonstration College, school management, SCD, HMG Concepts">
 <meta name="theme-color" content="#0506ae">
 <link rel="canonical" href="./">
 <meta property="og:url" content="./">
@@ -18,8 +18,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-<meta property="og:title" content="God of Seed Academy — School Portal">
-<meta property="og:description" content="God of Seed Academy — Comprehensive school management platform">
+<meta property="og:title" content="School Connect Demonstration College — School Portal">
+<meta property="og:description" content="School Connect Demonstration College — Comprehensive school management platform">
 <meta property="og:image" content="assets/img/logo-512.jpg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -70,16 +70,16 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
 {
   "@context": "https://schema.org",
   "@type": "School",
-  "name": "God of Seed Academy",
+  "name": "School Connect Demonstration College",
   "url": "https://schoolconnect.example/",
-  "slogan": "Excellence in Learning and Character",
+  "slogan": "A fully simulated school — explore every feature",
   "description": "School portal — admissions, results, CBT and school management, powered by the HMG Concepts School Connect platform.",
   "sameAs": ["https://hmgconcepts.pages.dev/","https://hmgtechnologies.pages.dev/","https://whatsapp.com/channel/0029Vb7kGoN2ER6feTzs8q2f"],
   "provider": {"@type": "Organization","name": "HMG Concepts","url": "https://hmgconcepts.pages.dev/","sameAs": ["https://hmgtechnologies.pages.dev/","https://whatsapp.com/channel/0029Vb7kGoN2ER6feTzs8q2f"]}
 }
 </script>
 </head>
-<body data-theme="theme15" data-school="God of Seed Academy" data-font="plusjakarta">
+<body data-theme="theme15" data-school="School Connect Demonstration College" data-font="plusjakarta">
 <div id="notif-bell" class="notif-bell" title="Notifications" data-chatbot>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
   <span id="notif-badge" class="notif-badge" style="display:none">0</span>
@@ -96,7 +96,7 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
   <div class="pwa-install-header">
     <img src="assets/img/logo-512.png" alt="" class="pwa-install-icon">
     <div style="flex:1">
-      <div class="pwa-install-title">📲 Install GoSA</div>
+      <div class="pwa-install-title">📲 Install SCD</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
     </div>
     <button class="modal-close" data-pwa-action="dismiss" title="Dismiss">×</button>
@@ -138,8 +138,8 @@ body:not([data-role-ready="1"]) .app-nav a[data-role-allow]{visibility:visible!i
   <div style="display:inline-flex;align-items:center;background:rgba(255,255,255,0.2);padding:6px 16px;border-radius:20px;font-size:0.9rem;font-weight:600;margin-bottom:24px;">
     <span style="margin-right:8px">🎓</span> Official School Portal
   </div>
-  <h1>Welcome to God of Seed Academy</h1>
-  <p>Excellence in Learning and Character</p>
+  <h1>Welcome to School Connect Demonstration College</h1>
+  <p>A fully simulated school — explore every feature</p>
   <div class="btn-group">
     <a href="login.html" class="btn-white">Sign in to Portal</a>
     <a href="about.html" class="btn-outline-white">Learn More</a>

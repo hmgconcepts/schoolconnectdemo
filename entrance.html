@@ -4,17 +4,17 @@
 <script>/* School Connect V12.23 pre-paint theme — robust like Fleet Console + Adewale — runs synchronously before CSS to avoid FOUC */(function(){try{var m=null;try{m=localStorage.getItem('sc-theme');}catch(e){}if(!m){try{m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){m='light';}}m=(m==='dark'?'dark':'light');document.documentElement.setAttribute('data-theme',m);document.documentElement.dataset.theme=m;try{var c=JSON.parse(localStorage.getItem('sc-theme-colors')||'null');if(c&&c.primary){var r=document.documentElement.style;r.setProperty('--primary',c.primary);r.setProperty('--sc-primary',c.primary);if(c.accent){r.setProperty('--accent',c.accent);r.setProperty('--sc-accent',c.accent);r.setProperty('--gradient','linear-gradient(135deg,'+c.primary+' 0%,'+c.accent+' 100%)');}}}catch(e){}}catch(e){}})();</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Entrance &amp; Assessments • God of Seed Academy</title>
-<meta name="description" content="God of Seed Academy — Entrance &amp; Assessments. Comprehensive school management platform.">
-<meta name="keywords" content="God of Seed Academy, school management, GoSA, HMG Concepts">
+<title>Entrance &amp; Assessments • School Connect Demonstration College</title>
+<meta name="description" content="School Connect Demonstration College — Entrance &amp; Assessments. Comprehensive school management platform.">
+<meta name="keywords" content="School Connect Demonstration College, school management, SCD, HMG Concepts">
 <meta name="theme-color" content="#1c72e7">
-<link rel="icon" type="image/png" href="assets/img/logo.png">
+<link rel="icon" type="image/png" href="assets/img/logo.svg">
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-<meta property="og:title" content="Entrance &amp; Assessments • God of Seed Academy">
-<meta property="og:description" content="God of Seed Academy — Free school management by HMG Concepts">
+<meta property="og:title" content="Entrance &amp; Assessments • School Connect Demonstration College">
+<meta property="og:description" content="School Connect Demonstration College — Free school management by HMG Concepts">
 <meta property="og:image" content="assets/img/og-cover.svg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -58,7 +58,7 @@
 .app-nav a.active span:first-child,.app-nav a.active .app-nav-icon{background:rgba(255,255,255,.22)!important;color:#fff!important}
 </style>
 </head>
-<body data-theme="theme2" data-school="God of Seed Academy" data-font="raleway">
+<body data-theme="theme2" data-school="School Connect Demonstration College" data-font="raleway">
 
 <div id="notif-bell" class="notif-bell" title="Notifications" data-chatbot>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -74,9 +74,9 @@
 
 <div id="pwa-install-banner" class="pwa-install">
   <div class="pwa-install-header">
-    <img src="assets/img/logo.png" alt="" class="pwa-install-icon">
+    <img src="assets/img/logo.svg" alt="" class="pwa-install-icon">
     <div style="flex:1">
-      <div class="pwa-install-title">📲 Install GoSA</div>
+      <div class="pwa-install-title">📲 Install SCD</div>
       <div class="pwa-install-msg">Get push notifications for messages, broadcasts, polls and result slips — even when the app is closed.</div>
     </div>
     <button class="modal-close" data-pwa-action="dismiss" title="Dismiss">×</button>
@@ -101,10 +101,10 @@
 <div class="app-layout sidebar" data-require-role="super_admin admin principal proprietor head_teacher bursar staff teacher">
   <aside class="app-sidebar" id="app-sidebar">
       <div class="app-brand">
-        <img src="assets/img/logo.png" alt="God of Seed Academy" style="object-fit:contain" onerror="this.onerror=null;this.src='assets/img/logo.png'">
+        <img src="assets/img/logo.svg" alt="School Connect Demonstration College" style="object-fit:contain" onerror="this.onerror=null;this.src='assets/img/logo.svg'">
         <div>
-          <strong>God of Seed Academy</strong>
-          <div style="font-size:0.7rem;color:var(--gray-500)">GoSA</div>
+          <strong>School Connect Demonstration College</strong>
+          <div style="font-size:0.7rem;color:var(--gray-500)">SCD</div>
         </div>
       </div>
       <nav class="app-nav">
@@ -492,7 +492,7 @@
       <div id="en-list"><p style="color:var(--gray-500)">Select an assessment to see candidate results.</p></div>
     </div>
     <footer style="padding:20px 28px;border-top:1px solid var(--gray-200);font-size:0.82rem;color:var(--gray-500);text-align:center">
-      © 2026 God of Seed Academy · Licensed by <a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">HMG Technologies</a> · <a href="https://whatsapp.com/channel/0029Vb7kGoN2ER6feTzs8q2f" target="_blank" rel="noopener" title="Product news, tips and updates">📢 HMG Channel</a>
+      © 2026 School Connect Demonstration College · Licensed by <a href="https://hmgtechnologies.pages.dev" target="_blank" rel="noopener">HMG Technologies</a> · <a href="https://whatsapp.com/channel/0029Vb7kGoN2ER6feTzs8q2f" target="_blank" rel="noopener" title="Product news, tips and updates">📢 HMG Channel</a>
     </footer>
   </main>
 </div>
@@ -538,7 +538,7 @@ const EN={ rows:[], exam:null,
   decision(r){ var pass=Number(document.getElementById('en-pass').value||50); return Number(r.percent)>=pass?'admitted':'not_admitted'; },
   slipHTML(r){ var sc=(window.SCHOOL||{}); var pass=Number(document.getElementById('en-pass').value||50); var ok=Number(r.percent)>=pass;
     return '<div style="width:700px;max-width:96vw;border:2px solid '+(sc.primary||'#4f46e5')+';padding:30px;font-family:Arial,sans-serif">'+
-      '<div style="text-align:center"><img src="assets/img/logo.png" style="width:60px;height:60px;object-fit:contain" onerror="this.style.display=\'none\'"><h2 style="margin:6px 0;color:'+(sc.primary||'#4f46e5')+'">'+esc(sc.name||'School')+'</h2><p style="margin:0;color:#64748b">'+esc(sc.motto||'')+'</p><h3 style="margin:14px 0">ASSESSMENT RESULT SLIP</h3></div>'+
+      '<div style="text-align:center"><img src="assets/img/logo.svg" style="width:60px;height:60px;object-fit:contain" onerror="this.style.display=\'none\'"><h2 style="margin:6px 0;color:'+(sc.primary||'#4f46e5')+'">'+esc(sc.name||'School')+'</h2><p style="margin:0;color:#64748b">'+esc(sc.motto||'')+'</p><h3 style="margin:14px 0">ASSESSMENT RESULT SLIP</h3></div>'+
       '<table style="width:100%;font-size:.95rem;line-height:1.9"><tr><td><b>Candidate:</b></td><td>'+esc(r.student_name)+'</td><td><b>Class:</b></td><td>'+esc(r.student_class||'-')+'</td></tr>'+
       '<tr><td><b>Assessment:</b></td><td colspan=3>'+esc((EN.exam&&EN.exam.title)||'')+'</td></tr>'+
       '<tr><td><b>Score:</b></td><td>'+r.score+' / '+r.total+'</td><td><b>Percentage:</b></td><td>'+Number(r.percent).toFixed(1)+'%</td></tr>'+
@@ -597,7 +597,7 @@ const EN={ rows:[], exam:null,
   },
   letterHTML(r){ var sc=(window.SCHOOL||{}); var ok=this.decision(r)==='admitted'; var ses=document.getElementById('en-session').value||''; var tmpl=localStorage.getItem('sc-admission-letter-template')||''; if(tmpl){ tmpl=tmpl.replace(/{{student}}/g,r.student_name||'').replace(/{{class}}/g,r.student_class||'').replace(/{{school}}/g,sc.name||'School').replace(/{{session}}/g,ses).replace(/{{score}}/g,Number(r.percent||0).toFixed(1)); return '<div style="width:720px;max-width:96vw;padding:40px;font-family:Georgia,serif;line-height:1.7"><div style="border-bottom:3px solid '+(sc.primary||'#4f46e5')+';padding-bottom:10px"><h2 style="margin:0;color:'+(sc.primary||'#4f46e5')+'">'+esc(sc.name||'School')+'</h2><div style="font-size:.8rem;color:#64748b">'+esc(sc.address||'')+' · '+esc(sc.phone||'')+'</div></div>'+tmpl.split('\n').map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>'; }
     return '<div style="width:720px;max-width:96vw;padding:40px;font-family:Georgia,serif;line-height:1.7">'+
-      '<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid '+(sc.primary||'#4f46e5')+';padding-bottom:10px"><img src="assets/img/logo.png" style="width:56px;height:56px;object-fit:contain" onerror="this.style.display=\'none\'"><div><h2 style="margin:0;color:'+(sc.primary||'#4f46e5')+'">'+esc(sc.name||'School')+'</h2><div style="font-size:.8rem;color:#64748b">'+esc(sc.address||'')+' · '+esc(sc.phone||'')+' · '+esc(sc.email||'')+'</div></div></div>'+
+      '<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid '+(sc.primary||'#4f46e5')+';padding-bottom:10px"><img src="assets/img/logo.svg" style="width:56px;height:56px;object-fit:contain" onerror="this.style.display=\'none\'"><div><h2 style="margin:0;color:'+(sc.primary||'#4f46e5')+'">'+esc(sc.name||'School')+'</h2><div style="font-size:.8rem;color:#64748b">'+esc(sc.address||'')+' · '+esc(sc.phone||'')+' · '+esc(sc.email||'')+'</div></div></div>'+
       '<p style="text-align:right;margin:16px 0 0">'+(function(){var d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();})()+'</p>'+
       '<p style="margin:6px 0"><b>'+esc(r.student_name)+'</b></p>'+
       '<h3 style="text-align:center;text-decoration:underline;margin:18px 0">'+(ok?'LETTER OF ADMISSION':'NOTIFICATION OF ASSESSMENT OUTCOME')+'</h3>'+
