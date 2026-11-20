@@ -1,6 +1,6 @@
 # School Connect — Deployment Guide
 
-**Version 12.78 · 8 November 2026**
+**Version 12.79 · 8 November 2026**
 
 This guide takes a school from "nothing" to "a live, branded school platform with its own data" using **only free tools**. Follow it in order. Every step states exactly what to click or paste, what you should see when it worked, and what to do when it did not.
 
@@ -231,6 +231,8 @@ In the browser:
 When a new release ZIP arrives:
 
 1. **Database first.** Paste the new `database/complete-schema.sql` into the SQL Editor and Run. It is idempotent; existing data is untouched. Wait for the final "reload schema" row.
+
+   This file is written to **upgrade a database that already has an older School Connect**, not only to create a new one. Functions whose returned column list grew (for example `sc_my_prep_exams`, which gained two columns in V12.79) are dropped and re-created automatically before the rest of the script runs — Postgres cannot change a function's return type in place, so the file does the drop for you. **You never have to drop a function by hand.** You may see notices such as `School Connect: public.sc_my_prep_exams(text,text) kept in place`; they mean a dependent object held that one function and the script carried on safely.
 2. **Then the files.** Upload the new folder over the old one on your host (Netlify: drag the folder onto the existing site → *Deploys*; Vercel/Cloudflare: same idea).
 3. **Then let the devices catch up.** Open the site on a phone. A bar appears: **"New version available"** → press **Update now**. The page reloads on the new version, and **the bar does not come back** — the applied version is recorded per device.
 
@@ -251,11 +253,22 @@ A restore is: create a new project, paste the schema, then import the export.
 
 ## 12. Troubleshooting
 
+> **"The download page keeps saying *Updating…*" / "the ZIP button does nothing."**
+> Two different things, neither of them a broken file. The workspace file viewer
+> publishes the whole workspace (~75 MB) before it hands over any file — that is
+> the spinner. And an in-app preview panel is a sandboxed frame, which browsers
+> forbid from starting a download. Use the download shelf instead
+> (`python3 /home/user/work/downloads.py`, port 8080): open it in its **own tab**
+> (the ⤢ control), where a click downloads immediately, or press **Copy link** on
+> the file you want and paste that address into a normal browser tab. The shelf
+> prints each ZIP's size and SHA-256 so you can confirm the download finished.
+
 | Symptom | Cause | Fix |
 |---|---|---|
 | Every page says **"Database not configured"** | keys not pasted | redo step 4; ensure the file is `assets/js/config.js` at the site root's `assets/js/` |
 | Dashboard is empty but the login works | role not set, or no data yet | `select role from public.profiles where email='…';` then complete step 7 |
 | "Could not find the function …" in the console | the database predates the page | re-run `database/complete-schema.sql` (step 10.1) |
+| `ERROR: 42P13: cannot change return type of existing function` | you are pasting an **older** ZIP's schema into a database created by a newer one — `create or replace function` cannot change a returned column list | download the current ZIP and paste the schema from it; the current file drops those functions itself. Never drop a function by hand |
 | A page renders unstyled | the folder was uploaded flat | re-upload so that `index.html`, `assets/`, and the pages sit at the same level |
 | "Mark X is above the maximum Y" | correct, by design | lower the mark, or raise the column maximum in *Report Cards → Settings* |
 | ID card back looks a different shape | a cached old `super.js` | hard-reload (`Ctrl+Shift+R`), then press **Update now** on any other device |
@@ -292,7 +305,7 @@ A single school of 1,000 learners fits comfortably inside the free tiers.
 
 ---
 
-## 15. What is new in V12.78, and the four checks that prove it installed
+## 15. What is new in V12.79, and the four checks that prove it installed
 
 If you are upgrading from V12.77 the procedure is the same four steps as §4 —
 back up, run `database/complete-schema.sql` once, upload the files, hard-reload.
@@ -303,7 +316,7 @@ and the three new functions live there, and the pages degrade politely (they say
 After the pack has run you should see this line among the results:
 
 ```
-V12.78 installed — a prep exam set for a class is a timetable sitting, and every learner can find it
+V12.79 installed — a prep exam set for a class is a timetable sitting, and every learner can find it
 ```
 
 Then confirm each of these on the live site:
@@ -330,13 +343,13 @@ Then confirm each of these on the live site:
    type and class controls are still staff-only.
 
 **Rolling back.** Restore the backup taken in step 1 and redeploy the previous
-ZIP. V12.78 only *adds* objects (one column on `cbt_exams`, three on
+ZIP. V12.79 only *adds* objects (one column on `cbt_exams`, three on
 `exam_timetable`, one unique index, three functions, one trigger) and changes no
 column type, so a file-only rollback is safe for readers; the database rollback
 needs the backup.
 
 > **Note for the next release (schema budget).** The pack is now 999,867 bytes
-> against Supabase's 1,000,000-byte limit for a pasted script. V12.78 fit by
+> against Supabase's 1,000,000-byte limit for a pasted script. V12.79 fit by
 > trimming its own comments; the next round must reclaim space from older,
 > superseded narrative before adding objects.
 
